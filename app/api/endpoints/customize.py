@@ -11,7 +11,7 @@ from app.services.claude_service import customize_resume
 router = APIRouter()
 
 
-@router.post("/resume", response_model=ResumeCustomizationResponse)
+@router.post("/", response_model=ResumeCustomizationResponse)
 async def customize_resume_endpoint(
     customization_request: ResumeCustomizationRequest,
     db: Session = Depends(get_db)

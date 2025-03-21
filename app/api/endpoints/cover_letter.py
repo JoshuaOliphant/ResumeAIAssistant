@@ -10,7 +10,7 @@ from app.services.claude_service import generate_cover_letter
 router = APIRouter()
 
 
-@router.post("/generate", response_model=CoverLetterResponse)
+@router.post("/", response_model=CoverLetterResponse)
 async def generate_cover_letter_endpoint(
     cover_letter_request: CoverLetterRequest,
     db: Session = Depends(get_db)

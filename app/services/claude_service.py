@@ -1,5 +1,6 @@
 import os
 import sys
+from typing import Optional
 import anthropic
 from anthropic import Anthropic
 
@@ -18,7 +19,7 @@ async def customize_resume(
     resume_content: str,
     job_description: str,
     customization_strength: int = 2,
-    focus_areas: str = None
+    focus_areas: Optional[str] = None
 ) -> str:
     """
     Customize a resume for a specific job description using Claude AI.
