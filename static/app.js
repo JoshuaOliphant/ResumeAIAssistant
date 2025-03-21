@@ -243,17 +243,31 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Get form data
             const url = document.getElementById('job-url').value;
+            const submitBtn = document.getElementById('job-url-submit');
+            const submitText = document.getElementById('job-url-submit-text');
+            const spinner = document.getElementById('job-url-spinner');
+            const alertEl = document.getElementById('job-url-alert');
+            const successEl = document.getElementById('job-url-success');
             
             // Validate form data
             if (!url) {
-                showAlert('warning', 'Please enter a valid URL.');
+                alertEl.textContent = 'Please enter a valid URL.';
+                alertEl.classList.remove('d-none');
                 return;
             }
             
-            // Disable submit button
-            const submitBtn = jobUrlForm.querySelector('button[type="submit"]');
+            // Hide any previous alerts
+            alertEl.classList.add('d-none');
+            successEl.classList.add('d-none');
+            
+            // Show loading state
             submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Importing...';
+            submitText.textContent = 'Importing...';
+            spinner.classList.remove('d-none');
+            
+            // Add timeout for better user experience with slow connections
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 30000); // 30-second timeout
             
             // Send request to API
             fetch(`${API_BASE_URL}/jobs/from-url/`, {
@@ -263,35 +277,50 @@ document.addEventListener('DOMContentLoaded', function() {
                 },
                 body: JSON.stringify({
                     url: url
-                })
+                }),
+                signal: controller.signal
             })
             .then(response => {
+                clearTimeout(timeoutId);
+                
                 if (!response.ok) {
-                    throw new Error('Failed to import job description');
+                    return response.json().then(errData => {
+                        throw new Error(errData.detail || 'Failed to import job description');
+                    });
                 }
                 return response.json();
             })
             .then(data => {
                 // Show success message
+                successEl.classList.remove('d-none');
+                
+                // Fill form fields for preview/editing
+                document.getElementById('job-title').value = data.title || '';
+                document.getElementById('company').value = data.company || '';
+                document.getElementById('job-description').value = data.description || '';
+                
                 showAlert('success', 'Job description imported successfully!');
                 
-                // Reset form
-                jobUrlForm.reset();
-                
-                // Reload job descriptions
-                loadJobDescriptions();
-                
-                // Switch to analyze tab
-                document.getElementById('analyze-tab').click();
+                // Don't reset form or switch tabs - let user review the imported data first
             })
             .catch(error => {
                 console.error('Error importing job description:', error);
-                showAlert('danger', 'Failed to import job description. The URL might be invalid or not supported.');
+                
+                // Show error message
+                if (error.name === 'AbortError') {
+                    alertEl.textContent = 'The request took too long to complete. The website might be unavailable or too complex to process.';
+                } else {
+                    alertEl.textContent = 'Failed to import job description. Please try a different URL or enter the details manually.';
+                }
+                alertEl.classList.remove('d-none');
+                
+                showAlert('danger', 'Failed to import job description.');
             })
             .finally(() => {
-                // Re-enable submit button
+                // Reset UI state
                 submitBtn.disabled = false;
-                submitBtn.innerHTML = 'Import Job Description';
+                submitText.textContent = 'Import Job Description';
+                spinner.classList.add('d-none');
             });
         });
     }
