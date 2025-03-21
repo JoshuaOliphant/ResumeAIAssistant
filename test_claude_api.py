@@ -2,13 +2,16 @@ import requests
 import json
 import os
 import time
+import sys
 
 BASE_URL = "http://localhost:5000"
 API_V1 = "/api/v1"
+# Set a reasonable timeout for requests (10 seconds)
+REQUEST_TIMEOUT = 10
 
 def test_health():
     """Test the health endpoint"""
-    response = requests.get(f"{BASE_URL}/health")
+    response = requests.get(f"{BASE_URL}/health", timeout=REQUEST_TIMEOUT)
     assert response.status_code == 200
     assert response.json()["message"] == "Resume Customization API is running"
     print("✅ Health check passed")
@@ -48,7 +51,7 @@ Experienced software engineer with 5+ years in full-stack development, cloud ser
 """
     }
     
-    response = requests.post(f"{BASE_URL}{API_V1}/resumes/", json=sample_resume)
+    response = requests.post(f"{BASE_URL}{API_V1}/resumes/", json=sample_resume, timeout=REQUEST_TIMEOUT)
     print(f"Status Code: {response.status_code}")
     try:
         print(f"Response: {response.json()}")
@@ -102,7 +105,7 @@ We are seeking an experienced Senior Software Engineer with expertise in Python 
 """
     }
     
-    response = requests.post(f"{BASE_URL}{API_V1}/jobs/", json=sample_job)
+    response = requests.post(f"{BASE_URL}{API_V1}/jobs/", json=sample_job, timeout=REQUEST_TIMEOUT)
     print(f"Status Code: {response.status_code}")
     try:
         print(f"Response: {response.json()}")
@@ -123,7 +126,7 @@ def test_ats_analysis(resume_id, job_id):
         "job_description_id": job_id
     }
     
-    response = requests.post(f"{BASE_URL}{API_V1}/ats/analyze", json=analysis_request)
+    response = requests.post(f"{BASE_URL}{API_V1}/ats/analyze", json=analysis_request, timeout=REQUEST_TIMEOUT)
     print(f"Status Code: {response.status_code}")
     try:
         print(f"Response: {response.json()}")
@@ -151,7 +154,7 @@ def test_customize_resume(resume_id, job_id):
         "focus_areas": "technical skills, experience"
     }
     
-    response = requests.post(f"{BASE_URL}{API_V1}/customize/resume", json=customization_request)
+    response = requests.post(f"{BASE_URL}{API_V1}/customize/resume", json=customization_request, timeout=30)  # Longer timeout for AI operation
     print(f"Status Code: {response.status_code}")
     try:
         print(f"Response: {response.json()}")
@@ -176,7 +179,7 @@ def test_generate_cover_letter(resume_id, job_id):
         "tone": "professional"
     }
     
-    response = requests.post(f"{BASE_URL}{API_V1}/cover-letter/generate", json=cover_letter_request)
+    response = requests.post(f"{BASE_URL}{API_V1}/cover-letter/generate", json=cover_letter_request, timeout=30)  # Longer timeout for AI operation
     print(f"Status Code: {response.status_code}")
     try:
         print(f"Response: {response.json()}")
@@ -191,13 +194,13 @@ def test_generate_cover_letter(resume_id, job_id):
     print(f"  - Length: {len(cover_letter_data['cover_letter_content'])} characters")
     return cover_letter_data["cover_letter_content"]
 
-def run_all_tests():
-    """Run all API tests including Claude integration"""
+def run_basic_tests():
+    """Run basic API tests without Claude integration"""
     try:
         # Check if the API is running
         if not test_health():
             print("❌ Health check failed, make sure the API is running")
-            return
+            return False
         
         # Create a resume and job description
         resume_id = test_create_resume()
@@ -207,6 +210,18 @@ def run_all_tests():
         print("\n🔍 Testing ATS Analysis...")
         test_ats_analysis(resume_id, job_id)
         
+        print("\n✅ Basic tests completed successfully!")
+        return True, resume_id, job_id
+    
+    except Exception as e:
+        import traceback
+        print(f"\n❌ Basic test failed: {str(e)}")
+        print(traceback.format_exc())
+        return False, None, None
+
+def run_ai_tests(resume_id, job_id):
+    """Run AI-powered tests requiring Claude integration"""
+    try:
         # Allow some time for resources to be properly saved
         time.sleep(1)
         
@@ -218,12 +233,23 @@ def run_all_tests():
         print("\n📝 Testing Cover Letter Generation with Claude...")
         test_generate_cover_letter(resume_id, job_id)
         
-        print("\n✅ All tests completed successfully!")
+        print("\n✅ AI tests completed successfully!")
+        return True
     
     except Exception as e:
         import traceback
-        print(f"\n❌ Test failed: {str(e)}")
+        print(f"\n❌ AI test failed: {str(e)}")
         print(traceback.format_exc())
+        return False
+
+def run_all_tests():
+    """Run all API tests including Claude integration"""
+    success, resume_id, job_id = run_basic_tests()
+    if not success:
+        return
+        
+    print("\n🤖 Starting AI integration tests...")
+    run_ai_tests(resume_id, job_id)
 
 if __name__ == "__main__":
     run_all_tests()
