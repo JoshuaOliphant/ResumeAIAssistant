@@ -4,24 +4,17 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 import os
 from pathlib import Path
-import nltk
+import sys
 
 from app.api.endpoints import resumes, jobs, ats, customize, cover_letter, export
 from app.core.config import settings
 from app.db.session import Base, engine
+from app.core.nltk_init import initialize_nltk
 
-# Initialize NLTK data
-# Create NLTK data directory
-nltk_data_dir = os.path.join(os.getcwd(), 'nltk_data')
-os.makedirs(nltk_data_dir, exist_ok=True)
-nltk.data.path.insert(0, nltk_data_dir)
-
-# Download required NLTK packages
-nltk.download('punkt', download_dir=nltk_data_dir)
-nltk.download('stopwords', download_dir=nltk_data_dir)
-nltk.download('averaged_perceptron_tagger', download_dir=nltk_data_dir)
-nltk.download('maxent_ne_chunker', download_dir=nltk_data_dir)
-nltk.download('words', download_dir=nltk_data_dir)
+# Initialize NLTK data properly
+print("Initializing NLTK resources...", file=sys.stderr)
+initialize_nltk()
+print("NLTK initialization complete", file=sys.stderr)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)

@@ -1,8 +1,6 @@
 import re
 import nltk
 import os
-from nltk.tokenize import word_tokenize
-from nltk.corpus import stopwords
 from typing import List, Dict, Any
 
 # Import NLTK initialization
@@ -10,6 +8,9 @@ from app.core.nltk_init import initialize_nltk
 
 # Initialize NLTK data
 initialize_nltk()
+
+# Now import NLTK modules after initialization
+from nltk.corpus import stopwords
 
 from app.schemas.ats import KeywordMatch, ATSImprovement
 
