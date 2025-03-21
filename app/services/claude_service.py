@@ -104,10 +104,10 @@ async def customize_resume(
 async def generate_cover_letter(
     resume_content: str,
     job_description: str,
-    applicant_name: str = None,
+    applicant_name: Optional[str] = None,
     company_name: str = "the company",
-    hiring_manager_name: str = None,
-    additional_context: str = None,
+    hiring_manager_name: Optional[str] = None,
+    additional_context: Optional[str] = None,
     tone: str = "professional"
 ) -> str:
     """
