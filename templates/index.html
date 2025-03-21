@@ -108,9 +108,28 @@
                                         <label for="resume-title" class="form-label">Resume Title</label>
                                         <input type="text" class="form-control" id="resume-title" placeholder="e.g., My Software Engineer Resume">
                                     </div>
-                                    <div class="mb-3">
-                                        <label for="resume-content" class="form-label">Resume Content (Markdown Format)</label>
-                                        <textarea class="form-control" id="resume-content" rows="10" placeholder="# Your Name&#10;&#10;## Contact Information&#10;- Email: your.email@example.com&#10;- Phone: (123) 456-7890&#10;&#10;## Summary&#10;Experienced professional with..."></textarea>
+                                    <ul class="nav nav-tabs mb-3" id="resumeInputTab" role="tablist">
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link active" id="manual-tab" data-bs-toggle="tab" data-bs-target="#manual-input" type="button" role="tab" aria-controls="manual-input" aria-selected="true">Enter Manually</button>
+                                        </li>
+                                        <li class="nav-item" role="presentation">
+                                            <button class="nav-link" id="upload-tab" data-bs-toggle="tab" data-bs-target="#upload-input" type="button" role="tab" aria-controls="upload-input" aria-selected="false">Upload File</button>
+                                        </li>
+                                    </ul>
+                                    <div class="tab-content" id="resumeInputTabContent">
+                                        <div class="tab-pane fade show active" id="manual-input" role="tabpanel" aria-labelledby="manual-tab">
+                                            <div class="mb-3">
+                                                <label for="resume-content" class="form-label">Resume Content (Markdown Format)</label>
+                                                <textarea class="form-control" id="resume-content" rows="10" placeholder="# Your Name&#10;&#10;## Contact Information&#10;- Email: your.email@example.com&#10;- Phone: (123) 456-7890&#10;&#10;## Summary&#10;Experienced professional with..."></textarea>
+                                            </div>
+                                        </div>
+                                        <div class="tab-pane fade" id="upload-input" role="tabpanel" aria-labelledby="upload-tab">
+                                            <div class="mb-3">
+                                                <label for="resume-file" class="form-label">Upload Markdown File (.md)</label>
+                                                <input class="form-control" type="file" id="resume-file" accept=".md,text/markdown">
+                                                <div class="form-text">Supported format: Markdown (.md)</div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <button type="submit" class="btn btn-primary">Save Resume</button>
                                 </form>

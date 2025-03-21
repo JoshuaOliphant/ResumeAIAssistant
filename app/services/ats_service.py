@@ -5,15 +5,8 @@ from nltk.corpus import stopwords
 from typing import List, Dict, Any
 
 # Download necessary NLTK resources
-try:
-    nltk.data.find('tokenizers/punkt')
-except LookupError:
-    nltk.download('punkt')
-
-try:
-    nltk.data.find('corpora/stopwords')
-except LookupError:
-    nltk.download('stopwords')
+nltk.download('punkt')
+nltk.download('stopwords')
 
 from app.schemas.ats import KeywordMatch, ATSImprovement
 

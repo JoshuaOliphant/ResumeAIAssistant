@@ -76,6 +76,26 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
     
+    // Handle file upload for resume
+    const resumeFileInput = document.getElementById('resume-file');
+    if (resumeFileInput) {
+        resumeFileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const content = e.target.result;
+                    // Set the content to the textarea for preview (optional)
+                    // This allows users to still edit the content after uploading
+                    document.getElementById('resume-content').value = content;
+                    // Switch to manual tab to show preview
+                    document.getElementById('manual-tab').click();
+                };
+                reader.readAsText(file);
+            }
+        });
+    }
+    
     // Resume form submission
     if (resumeForm) {
         resumeForm.addEventListener('submit', function(e) {
@@ -83,11 +103,25 @@ document.addEventListener('DOMContentLoaded', function() {
             
             // Get form data
             const title = document.getElementById('resume-title').value;
-            const content = document.getElementById('resume-content').value;
+            let content;
+            
+            // Check if file was uploaded
+            const file = document.getElementById('resume-file').files[0];
+            if (file) {
+                // File is handled by the change event, get content from textarea where we stored it
+                content = document.getElementById('resume-content').value;
+            } else {
+                content = document.getElementById('resume-content').value;
+            }
             
             // Validate form data
-            if (!title || !content) {
-                showAlert('warning', 'Please fill in all required fields.');
+            if (!title) {
+                showAlert('warning', 'Please provide a title for your resume.');
+                return;
+            }
+            
+            if (!content) {
+                showAlert('warning', 'Please enter resume content or upload a Markdown file.');
                 return;
             }
             
