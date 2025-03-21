@@ -26,7 +26,7 @@ class Settings(BaseSettings):
 
     # Claude API
     ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
-    CLAUDE_MODEL: str = "claude-3-5-sonnet-20241022"  # the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
+    CLAUDE_MODEL: str = "claude-3-7-sonnet-latest"
     
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./resume_app.db")

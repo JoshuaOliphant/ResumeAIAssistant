@@ -6,12 +6,12 @@ from anthropic import Anthropic
 from app.core.config import settings
 
 # Initialize the Anthropic client
-anthropic_key: str = (settings.ANTHROPIC_API_KEY or
-                     sys.exit('ANTHROPIC_API_KEY environment variable must be set'))
+if not settings.ANTHROPIC_API_KEY:
+    raise ValueError('ANTHROPIC_API_KEY environment variable must be set')
 
 client = Anthropic(
     # Get your API key from https://console.anthropic.com/
-    api_key=anthropic_key,
+    api_key=settings.ANTHROPIC_API_KEY,
 )
 
 async def customize_resume(
