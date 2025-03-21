@@ -1,12 +1,15 @@
 import re
 import nltk
+import os
 from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from typing import List, Dict, Any
 
-# Download necessary NLTK resources
-nltk.download('punkt')
-nltk.download('stopwords')
+# Import NLTK initialization
+from app.core.nltk_init import initialize_nltk
+
+# Initialize NLTK data
+initialize_nltk()
 
 from app.schemas.ats import KeywordMatch, ATSImprovement
 
