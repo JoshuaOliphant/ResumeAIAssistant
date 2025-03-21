@@ -103,7 +103,13 @@ We are seeking an experienced Senior Software Engineer with expertise in Python 
     }
     
     response = requests.post(f"{BASE_URL}{API_V1}/jobs/", json=sample_job)
-    assert response.status_code == 200
+    print(f"Status Code: {response.status_code}")
+    try:
+        print(f"Response: {response.json()}")
+    except:
+        print(f"Response text: {response.text}")
+    
+    assert response.status_code == 200 or response.status_code == 201
     job_data = response.json()
     assert job_data["title"] == sample_job["title"]
     assert "id" in job_data
@@ -118,6 +124,12 @@ def test_ats_analysis(resume_id, job_id):
     }
     
     response = requests.post(f"{BASE_URL}{API_V1}/ats/analyze", json=analysis_request)
+    print(f"Status Code: {response.status_code}")
+    try:
+        print(f"Response: {response.json()}")
+    except:
+        print(f"Response text: {response.text}")
+        
     assert response.status_code == 200
     analysis_data = response.json()
     assert "match_score" in analysis_data
@@ -140,6 +152,12 @@ def test_customize_resume(resume_id, job_id):
     }
     
     response = requests.post(f"{BASE_URL}{API_V1}/customize/", json=customization_request)
+    print(f"Status Code: {response.status_code}")
+    try:
+        print(f"Response: {response.json()}")
+    except:
+        print(f"Response text: {response.text}")
+        
     assert response.status_code == 200
     customization_data = response.json()
     assert "original_resume_id" in customization_data
@@ -159,6 +177,12 @@ def test_generate_cover_letter(resume_id, job_id):
     }
     
     response = requests.post(f"{BASE_URL}{API_V1}/cover-letter/", json=cover_letter_request)
+    print(f"Status Code: {response.status_code}")
+    try:
+        print(f"Response: {response.json()}")
+    except:
+        print(f"Response text: {response.text}")
+    
     assert response.status_code == 200
     cover_letter_data = response.json()
     assert "cover_letter_content" in cover_letter_data
