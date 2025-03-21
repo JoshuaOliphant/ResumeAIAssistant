@@ -1,0 +1,260 @@
+from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse, PlainTextResponse
+from sqlalchemy.orm import Session
+import io
+
+from app.db.session import get_db
+from app.models.resume import Resume, ResumeVersion
+from app.services.export_service import (
+    convert_markdown_to_pdf,
+    convert_markdown_to_docx
+)
+
+router = APIRouter()
+
+
+@router.get("/resume/{resume_id}/markdown")
+def export_resume_as_markdown(
+    resume_id: str,
+    version_id: str = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Export a resume as Markdown.
+    
+    - **resume_id**: ID of the resume to export
+    - **version_id**: Optional ID of a specific version to export (default: latest)
+    """
+    # Verify the resume exists
+    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Get the specified version or the latest version
+    if version_id:
+        resume_version = db.query(ResumeVersion).filter(
+            ResumeVersion.resume_id == resume_id,
+            ResumeVersion.id == version_id
+        ).first()
+        if not resume_version:
+            raise HTTPException(status_code=404, detail="Resume version not found")
+    else:
+        resume_version = db.query(ResumeVersion).filter(
+            ResumeVersion.resume_id == resume_id
+        ).order_by(ResumeVersion.version_number.desc()).first()
+        if not resume_version:
+            raise HTTPException(status_code=404, detail="Resume content not found")
+    
+    # Return the markdown content with appropriate headers
+    filename = f"{resume.title.replace(' ', '_')}.md"
+    return PlainTextResponse(
+        content=resume_version.content,
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
+@router.get("/resume/{resume_id}/pdf")
+async def export_resume_as_pdf(
+    resume_id: str,
+    version_id: str = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Export a resume as PDF.
+    
+    - **resume_id**: ID of the resume to export
+    - **version_id**: Optional ID of a specific version to export (default: latest)
+    """
+    # Verify the resume exists
+    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Get the specified version or the latest version
+    if version_id:
+        resume_version = db.query(ResumeVersion).filter(
+            ResumeVersion.resume_id == resume_id,
+            ResumeVersion.id == version_id
+        ).first()
+        if not resume_version:
+            raise HTTPException(status_code=404, detail="Resume version not found")
+    else:
+        resume_version = db.query(ResumeVersion).filter(
+            ResumeVersion.resume_id == resume_id
+        ).order_by(ResumeVersion.version_number.desc()).first()
+        if not resume_version:
+            raise HTTPException(status_code=404, detail="Resume content not found")
+    
+    # Convert markdown to PDF
+    pdf_bytes = await convert_markdown_to_pdf(resume_version.content)
+    
+    # Return the PDF as a streaming response
+    filename = f"{resume.title.replace(' ', '_')}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
+@router.get("/resume/{resume_id}/docx")
+async def export_resume_as_docx(
+    resume_id: str,
+    version_id: str = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Export a resume as DOCX.
+    
+    - **resume_id**: ID of the resume to export
+    - **version_id**: Optional ID of a specific version to export (default: latest)
+    """
+    # Verify the resume exists
+    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Get the specified version or the latest version
+    if version_id:
+        resume_version = db.query(ResumeVersion).filter(
+            ResumeVersion.resume_id == resume_id,
+            ResumeVersion.id == version_id
+        ).first()
+        if not resume_version:
+            raise HTTPException(status_code=404, detail="Resume version not found")
+    else:
+        resume_version = db.query(ResumeVersion).filter(
+            ResumeVersion.resume_id == resume_id
+        ).order_by(ResumeVersion.version_number.desc()).first()
+        if not resume_version:
+            raise HTTPException(status_code=404, detail="Resume content not found")
+    
+    # Convert markdown to DOCX
+    docx_bytes = await convert_markdown_to_docx(resume_version.content)
+    
+    # Return the DOCX as a streaming response
+    filename = f"{resume.title.replace(' ', '_')}.docx"
+    return StreamingResponse(
+        io.BytesIO(docx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
+@router.get("/cover-letter/{resume_id}/{job_id}/markdown")
+def export_cover_letter_as_markdown(
+    resume_id: str,
+    job_id: str,
+    cover_letter_content: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Export a cover letter as Markdown.
+    
+    - **resume_id**: ID of the resume used for the cover letter
+    - **job_id**: ID of the job description used for the cover letter
+    - **cover_letter_content**: Content of the cover letter in Markdown format
+    """
+    # Verify the resume exists
+    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Verify the job description exists
+    job = db.query(JobDescription).filter(JobDescription.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job description not found")
+    
+    # Return the markdown content with appropriate headers
+    company_name = job.company or "Company"
+    filename = f"Cover_Letter_{company_name.replace(' ', '_')}.md"
+    return PlainTextResponse(
+        content=cover_letter_content,
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
+@router.get("/cover-letter/{resume_id}/{job_id}/pdf")
+async def export_cover_letter_as_pdf(
+    resume_id: str,
+    job_id: str,
+    cover_letter_content: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Export a cover letter as PDF.
+    
+    - **resume_id**: ID of the resume used for the cover letter
+    - **job_id**: ID of the job description used for the cover letter
+    - **cover_letter_content**: Content of the cover letter in Markdown format
+    """
+    # Verify the resume exists
+    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Verify the job description exists
+    job = db.query(JobDescription).filter(JobDescription.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job description not found")
+    
+    # Convert markdown to PDF
+    pdf_bytes = await convert_markdown_to_pdf(cover_letter_content)
+    
+    # Return the PDF as a streaming response
+    company_name = job.company or "Company"
+    filename = f"Cover_Letter_{company_name.replace(' ', '_')}.pdf"
+    return StreamingResponse(
+        io.BytesIO(pdf_bytes),
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
+
+
+@router.get("/cover-letter/{resume_id}/{job_id}/docx")
+async def export_cover_letter_as_docx(
+    resume_id: str,
+    job_id: str,
+    cover_letter_content: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Export a cover letter as DOCX.
+    
+    - **resume_id**: ID of the resume used for the cover letter
+    - **job_id**: ID of the job description used for the cover letter
+    - **cover_letter_content**: Content of the cover letter in Markdown format
+    """
+    # Verify the resume exists
+    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Verify the job description exists
+    job = db.query(JobDescription).filter(JobDescription.id == job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job description not found")
+    
+    # Convert markdown to DOCX
+    docx_bytes = await convert_markdown_to_docx(cover_letter_content)
+    
+    # Return the DOCX as a streaming response
+    company_name = job.company or "Company"
+    filename = f"Cover_Letter_{company_name.replace(' ', '_')}.docx"
+    return StreamingResponse(
+        io.BytesIO(docx_bytes),
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f"attachment; filename={filename}"
+        }
+    )
