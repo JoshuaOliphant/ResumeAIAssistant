@@ -1,5 +1,9 @@
-from fastapi import FastAPI, APIRouter
+from fastapi import FastAPI, APIRouter, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+import os
+from pathlib import Path
 
 from app.api.endpoints import resumes, jobs, ats, customize, cover_letter, export
 from app.core.config import settings
@@ -7,6 +11,13 @@ from app.db.session import Base, engine
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
+
+# Create directories for static files and templates if they don't exist
+static_dir = Path("./static")
+templates_dir = Path("./templates")
+
+static_dir.mkdir(exist_ok=True)
+templates_dir.mkdir(exist_ok=True)
 
 app = FastAPI(
     title="Resume Customization API",
@@ -17,6 +28,9 @@ app = FastAPI(
     redoc_url=f"{settings.API_V1_STR}/redoc",
 )
 
+# Set up templates
+templates = Jinja2Templates(directory="templates")
+
 # Set up CORS
 if settings.BACKEND_CORS_ORIGINS:
     app.add_middleware(
@@ -26,6 +40,9 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+# Mount static files
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Create API router
 api_router = APIRouter()
@@ -43,6 +60,11 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 
 @app.get("/")
-async def root():
-    """Root endpoint for health checks"""
+async def root(request: Request):
+    """Root endpoint for the resume customization application"""
+    return templates.TemplateResponse("index.html", {"request": request})
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint"""
     return {"message": "Resume Customization API is running"}
