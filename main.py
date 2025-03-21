@@ -5,6 +5,6 @@ from app.api.api import app
 
 if __name__ == "__main__":
     import uvicorn
-    # Get port from environment variable or use 8080 as default
-    port = int(os.environ.get("PORT", 8080))
+    # Get port from environment variable or use 5000 as default
+    port = int(os.environ.get("PORT", 5000))
     uvicorn.run(app, host="0.0.0.0", port=port)

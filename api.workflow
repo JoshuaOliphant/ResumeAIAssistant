@@ -1,2 +1,2 @@
-run = ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080"]
+run = ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "5000"]
 language = "python"
