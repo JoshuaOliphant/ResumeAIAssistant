@@ -151,7 +151,7 @@ def test_customize_resume(resume_id, job_id):
         "focus_areas": "technical skills, experience"
     }
     
-    response = requests.post(f"{BASE_URL}{API_V1}/customize/", json=customization_request)
+    response = requests.post(f"{BASE_URL}{API_V1}/customize/resume", json=customization_request)
     print(f"Status Code: {response.status_code}")
     try:
         print(f"Response: {response.json()}")
@@ -176,7 +176,7 @@ def test_generate_cover_letter(resume_id, job_id):
         "tone": "professional"
     }
     
-    response = requests.post(f"{BASE_URL}{API_V1}/cover-letter/", json=cover_letter_request)
+    response = requests.post(f"{BASE_URL}{API_V1}/cover-letter/generate", json=cover_letter_request)
     print(f"Status Code: {response.status_code}")
     try:
         print(f"Response: {response.json()}")
