@@ -1,5 +1,6 @@
 import re
 import httpx
+import trafilatura
 from typing import Dict, Any, Optional
 from bs4 import BeautifulSoup
 
@@ -14,9 +15,38 @@ async def scrape_job_description(url: str) -> Dict[str, Any]:
     Returns:
         Dictionary containing job title, company, and description
     """
-    async with httpx.AsyncClient() as client:
-        try:
-            # Fetch the page
+    try:
+        # Try with Trafilatura first - it handles networking and many edge cases
+        downloaded = trafilatura.fetch_url(url)
+        
+        if downloaded:
+            # Try to extract main content with Trafilatura
+            main_content = trafilatura.extract(downloaded, include_comments=False, include_tables=True)
+            
+            # Parse with BeautifulSoup for structured data extraction
+            soup = BeautifulSoup(downloaded, 'html.parser')
+            
+            # Extract job title and company
+            job_title = extract_job_title(soup, url)
+            company_name = extract_company_name(soup, url)
+            
+            # Decide on the best description text
+            if main_content and len(main_content) > 100:
+                # Use Trafilatura's extracted text if it looks good
+                description = main_content
+            else:
+                # Fall back to BeautifulSoup-based extraction
+                description = extract_job_description(soup, url)
+            
+            # Return the job data
+            return {
+                "title": job_title,
+                "company": company_name,
+                "description": description
+            }
+        
+        # Fall back to httpx if trafilatura's fetch_url fails
+        async with httpx.AsyncClient() as client:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
             }
@@ -35,8 +65,8 @@ async def scrape_job_description(url: str) -> Dict[str, Any]:
             
             return job_data
             
-        except Exception as e:
-            raise Exception(f"Failed to scrape job description: {str(e)}")
+    except Exception as e:
+        raise Exception(f"Failed to scrape job description: {str(e)}")
 
 
 def extract_job_title(soup: BeautifulSoup, url: str) -> Optional[str]:
@@ -140,8 +170,26 @@ def extract_company_name(soup: BeautifulSoup, url: str) -> Optional[str]:
 def extract_job_description(soup: BeautifulSoup, url: str) -> str:
     """
     Extract job description from the HTML.
+    First try Trafilatura for high-quality content extraction,
+    then fall back to BeautifulSoup selectors if needed.
     """
-    # Try common job description selectors
+    # First try with Trafilatura - it's specialized for content extraction
+    try:
+        # Get the raw HTML
+        html_content = str(soup)
+        
+        # Use Trafilatura to extract the main content
+        extracted_text = trafilatura.extract(html_content, include_comments=False, include_tables=True)
+        
+        if extracted_text and len(extracted_text) > 100:
+            # Clean up the text
+            extracted_text = re.sub(r'\s+', ' ', extracted_text).strip()
+            return extracted_text
+    except Exception:
+        # If Trafilatura fails, continue with BeautifulSoup approach
+        pass
+    
+    # Fall back to BeautifulSoup selectors
     selectors = [
         '.job-description',
         '.jobsearch-jobDescriptionText',  # Indeed

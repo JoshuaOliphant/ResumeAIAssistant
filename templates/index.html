@@ -155,9 +155,21 @@
                                     <form id="job-url-form">
                                         <div class="mb-3">
                                             <label for="job-url" class="form-label">Job Posting URL</label>
-                                            <input type="url" class="form-control" id="job-url" placeholder="https://example.com/job-posting">
+                                            <div class="input-group">
+                                                <input type="url" class="form-control" id="job-url" placeholder="https://example.com/job-posting">
+                                                <button type="submit" class="btn btn-outline-primary" id="job-url-submit">
+                                                    <span id="job-url-submit-text">Import Job Description</span>
+                                                    <span id="job-url-spinner" class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+                                                </button>
+                                            </div>
+                                            <div class="form-text">Paste a URL to a job posting and we'll extract the job details automatically.</div>
                                         </div>
-                                        <button type="submit" class="btn btn-outline-primary">Import Job Description</button>
+                                        <div id="job-url-alert" class="alert alert-danger d-none" role="alert">
+                                            Failed to fetch job description from the provided URL. Please try a different URL or enter the job details manually.
+                                        </div>
+                                        <div id="job-url-success" class="alert alert-success d-none" role="alert">
+                                            Successfully imported job description!
+                                        </div>
                                     </form>
                                 </div>
                             </div>
