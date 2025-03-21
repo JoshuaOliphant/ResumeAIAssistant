@@ -82,7 +82,6 @@ async def customize_resume(
     
     # Call Claude API
     try:
-        # the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
         response = client.messages.create(
             model=settings.CLAUDE_MODEL,
             system=system_prompt,
@@ -182,7 +181,6 @@ async def generate_cover_letter(
     
     # Call Claude API
     try:
-        # the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
         response = client.messages.create(
             model=settings.CLAUDE_MODEL,
             system=system_prompt,
