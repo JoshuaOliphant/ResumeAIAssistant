@@ -87,10 +87,15 @@ def extract_keywords(text: str) -> Dict[str, int]:
     Returns:
         Dictionary mapping keywords to their frequency
     """
-    # Convert to lowercase and tokenize
-    tokens = word_tokenize(text.lower())
+    # Convert to lowercase
+    text = text.lower()
     
-    # Remove stopwords, punctuation, and short words
+    # Simple tokenization approach - split by whitespace and punctuation
+    # This is more reliable than nltk.word_tokenize which requires specific data files
+    import re
+    tokens = re.findall(r'\b\w+\b', text)
+    
+    # Remove stopwords and short words
     stop_words = set(stopwords.words('english'))
     filtered_tokens = [
         token for token in tokens 

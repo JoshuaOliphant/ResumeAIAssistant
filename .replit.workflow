@@ -1,3 +1,3 @@
-run = "python main.py"
-language = "python"
-onBoot = true
+workflows:
+  resume-app:
+    onStart: "python -m uvicorn main:app --host 0.0.0.0 --port 5000"
