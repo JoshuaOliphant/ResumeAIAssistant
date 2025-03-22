@@ -54,7 +54,6 @@ uploads/
 .ipynb_checkpoints/
 
 # Replit specific
-.replit
 .breakpoints
 .cache/
 
@@ -67,3 +66,4 @@ attached_assets/
 
 # IDE rules
 .windsurfrules
+CLAUDE.md
