@@ -452,7 +452,7 @@ document.addEventListener('DOMContentLoaded', function() {
             resultsContainer.classList.remove('d-none');
             
             // Send request to API
-            fetch(`${API_BASE_URL}/cover-letter/`, {
+            fetch(`${API_BASE_URL}/cover-letter/generate/`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
