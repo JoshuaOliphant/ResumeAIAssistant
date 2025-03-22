@@ -154,7 +154,7 @@ def test_customize_resume(resume_id, job_id):
         "focus_areas": "technical skills, experience"
     }
     
-    response = requests.post(f"{BASE_URL}{API_V1}/customize/resume", json=customization_request, timeout=30)  # Longer timeout for AI operation
+    response = requests.post(f"{BASE_URL}{API_V1}/customize/", json=customization_request, timeout=30)  # Longer timeout for AI operation
     print(f"Status Code: {response.status_code}")
     try:
         print(f"Response: {response.json()}")
@@ -179,7 +179,7 @@ def test_generate_cover_letter(resume_id, job_id):
         "tone": "professional"
     }
     
-    response = requests.post(f"{BASE_URL}{API_V1}/cover-letter/generate", json=cover_letter_request, timeout=30)  # Longer timeout for AI operation
+    response = requests.post(f"{BASE_URL}{API_V1}/cover-letter/", json=cover_letter_request, timeout=30)  # Longer timeout for AI operation
     print(f"Status Code: {response.status_code}")
     try:
         print(f"Response: {response.json()}")
@@ -200,7 +200,7 @@ def run_basic_tests():
         # Check if the API is running
         if not test_health():
             print("❌ Health check failed, make sure the API is running")
-            return False
+            return (False, None, None)
         
         # Create a resume and job description
         resume_id = test_create_resume()
@@ -211,13 +211,13 @@ def run_basic_tests():
         test_ats_analysis(resume_id, job_id)
         
         print("\n✅ Basic tests completed successfully!")
-        return True, resume_id, job_id
+        return (True, resume_id, job_id)
     
     except Exception as e:
         import traceback
         print(f"\n❌ Basic test failed: {str(e)}")
         print(traceback.format_exc())
-        return False, None, None
+        return (False, None, None)
 
 def run_ai_tests(resume_id, job_id):
     """Run AI-powered tests requiring Claude integration"""
