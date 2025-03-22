@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./resume_app.db")
     
+    # PostgreSQL specific configuration
+    POSTGRES_USER: str = os.getenv("PGUSER", "")
+    POSTGRES_PASSWORD: str = os.getenv("PGPASSWORD", "")
+    POSTGRES_HOST: str = os.getenv("PGHOST", "")
+    POSTGRES_PORT: str = os.getenv("PGPORT", "")
+    POSTGRES_DB: str = os.getenv("PGDATABASE", "")
+    
     # File size limits
     MAX_UPLOAD_SIZE: int = 5 * 1024 * 1024  # 5MB
 

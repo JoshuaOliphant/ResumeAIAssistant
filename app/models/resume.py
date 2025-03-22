@@ -14,11 +14,13 @@ class Resume(Base):
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     title = Column(String(255), nullable=False)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True)  # Allow null for existing data
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationship
+    # Relationships
     versions = relationship("ResumeVersion", back_populates="resume", cascade="all, delete-orphan")
+    user = relationship("User", back_populates="resumes")
 
 
 class ResumeVersion(Base):

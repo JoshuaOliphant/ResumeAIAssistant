@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.resume import Resume, ResumeVersion
+from app.models.user import User
 from app.schemas.resume import (
     ResumeCreate,
     Resume as ResumeSchema,
@@ -17,6 +18,7 @@ from app.schemas.resume import (
     ResumeDiffResponse
 )
 from app.core.config import settings
+from app.core.security import get_optional_current_user, get_current_user_required
 from app.services.diff_service import generate_resume_diff, get_diff_statistics
 
 router = APIRouter()
@@ -25,7 +27,8 @@ router = APIRouter()
 @router.post("/", response_model=ResumeSchema, status_code=status.HTTP_201_CREATED)
 def create_resume(
     resume: ResumeCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Create a new resume.
@@ -36,7 +39,8 @@ def create_resume(
     # Create the resume object
     db_resume = Resume(
         id=str(uuid.uuid4()),
-        title=resume.title
+        title=resume.title,
+        user_id=current_user.id if current_user else None
     )
     db.add(db_resume)
     db.flush()
@@ -64,12 +68,18 @@ def create_resume(
 def get_resumes(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
-    Get all resumes.
+    Get all resumes. If user is authenticated, only returns their resumes.
     """
-    resumes = db.query(Resume).offset(skip).limit(limit).all()
+    # If user is authenticated, filter by user_id
+    if current_user:
+        resumes = db.query(Resume).filter(Resume.user_id == current_user.id).offset(skip).limit(limit).all()
+    else:
+        # For unauthenticated users, just show public resumes (those with null user_id)
+        resumes = db.query(Resume).filter(Resume.user_id.is_(None)).offset(skip).limit(limit).all()
     
     # For each resume, get its latest version
     for resume in resumes:
@@ -86,7 +96,8 @@ def get_resumes(
 @router.get("/{resume_id}", response_model=ResumeDetail)
 def get_resume(
     resume_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Get a specific resume by ID with all its versions.
@@ -94,6 +105,10 @@ def get_resume(
     resume = db.query(Resume).filter(Resume.id == resume_id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Check ownership if user is authenticated and the resume belongs to a user
+    if current_user and resume.user_id and resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this resume")
     
     # Get all versions
     versions = db.query(ResumeVersion).filter(
@@ -116,7 +131,8 @@ def get_resume(
 def update_resume(
     resume_id: str,
     resume_update: ResumeUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Update a resume.
@@ -127,6 +143,10 @@ def update_resume(
     db_resume = db.query(Resume).filter(Resume.id == resume_id).first()
     if not db_resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Check ownership if user is authenticated
+    if current_user and db_resume.user_id and db_resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this resume")
     
     # Update the title if provided
     if resume_update.title:
@@ -168,7 +188,8 @@ def update_resume(
 @router.delete("/{resume_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_resume(
     resume_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Delete a resume.
@@ -176,6 +197,10 @@ def delete_resume(
     db_resume = db.query(Resume).filter(Resume.id == resume_id).first()
     if not db_resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Check ownership if user is authenticated
+    if current_user and db_resume.user_id and db_resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this resume")
     
     db.delete(db_resume)
     db.commit()
@@ -187,7 +212,8 @@ def delete_resume(
 def create_resume_version(
     resume_id: str,
     version: ResumeVersionCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Create a new version for a resume.
@@ -199,6 +225,10 @@ def create_resume_version(
     db_resume = db.query(Resume).filter(Resume.id == resume_id).first()
     if not db_resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Check ownership if user is authenticated and the resume belongs to a user
+    if current_user and db_resume.user_id and db_resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to create versions for this resume")
     
     # Get the latest version number
     latest_version = db.query(ResumeVersion).filter(
@@ -226,7 +256,8 @@ def create_resume_version(
 @router.get("/{resume_id}/versions", response_model=List[ResumeVersionSchema])
 def get_resume_versions(
     resume_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Get all versions of a resume.
@@ -234,6 +265,10 @@ def get_resume_versions(
     db_resume = db.query(Resume).filter(Resume.id == resume_id).first()
     if not db_resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Check ownership if user is authenticated and the resume belongs to a user
+    if current_user and db_resume.user_id and db_resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access versions of this resume")
     
     versions = db.query(ResumeVersion).filter(
         ResumeVersion.resume_id == resume_id
@@ -246,11 +281,21 @@ def get_resume_versions(
 def get_resume_version(
     resume_id: str,
     version_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Get a specific version of a resume.
     """
+    # First check if the resume exists and check ownership
+    db_resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not db_resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Check ownership if user is authenticated and the resume belongs to a user
+    if current_user and db_resume.user_id and db_resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access versions of this resume")
+    
     db_version = db.query(ResumeVersion).filter(
         ResumeVersion.resume_id == resume_id,
         ResumeVersion.id == version_id
@@ -267,7 +312,8 @@ def get_resume_version_diff(
     resume_id: str,
     version_id: str,
     original_version_id: Optional[str] = None,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Get a diff view comparing a customized resume version with its original version.
@@ -281,6 +327,10 @@ def get_resume_version_diff(
     db_resume = db.query(Resume).filter(Resume.id == resume_id).first()
     if not db_resume:
         raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Check ownership if user is authenticated and the resume belongs to a user
+    if current_user and db_resume.user_id and db_resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this resume's diff view")
     
     # Get the customized version
     customized_version = db.query(ResumeVersion).filter(
