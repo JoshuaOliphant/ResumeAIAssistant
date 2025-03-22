@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.models.job import JobDescription
+from app.models.user import User
 from app.schemas.job import (
     JobDescriptionCreate,
     JobDescriptionCreateFromUrl,
@@ -13,6 +14,7 @@ from app.schemas.job import (
     JobDescriptionUpdate
 )
 from app.services.job_scraper import scrape_job_description
+from app.core.security import get_optional_current_user
 
 router = APIRouter()
 
@@ -20,7 +22,8 @@ router = APIRouter()
 @router.post("/", response_model=JobDescriptionSchema, status_code=status.HTTP_201_CREATED)
 def create_job_description(
     job: JobDescriptionCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Create a new job description from text.
@@ -34,7 +37,8 @@ def create_job_description(
         title=job.title,
         company=job.company,
         description=job.description,
-        is_from_url=False
+        is_from_url=False,
+        user_id=current_user.id if current_user else None
     )
     db.add(db_job)
     db.commit()
@@ -46,7 +50,8 @@ def create_job_description(
 @router.post("/from-url", response_model=JobDescriptionSchema, status_code=status.HTTP_201_CREATED)
 async def create_job_description_from_url(
     job: JobDescriptionCreateFromUrl,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Create a new job description from URL.
@@ -75,7 +80,8 @@ async def create_job_description_from_url(
             company=company,
             description=description,
             source_url=job.url,
-            is_from_url=True
+            is_from_url=True,
+            user_id=current_user.id if current_user else None
         )
         db.add(db_job)
         db.commit()
@@ -94,19 +100,27 @@ async def create_job_description_from_url(
 def get_job_descriptions(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
-    Get all job descriptions.
+    Get all job descriptions. If user is authenticated, only returns their job descriptions.
     """
-    jobs = db.query(JobDescription).offset(skip).limit(limit).all()
+    # If user is authenticated, filter by user_id
+    if current_user:
+        jobs = db.query(JobDescription).filter(JobDescription.user_id == current_user.id).offset(skip).limit(limit).all()
+    else:
+        # For unauthenticated users, just show public jobs (those with null user_id)
+        jobs = db.query(JobDescription).filter(JobDescription.user_id.is_(None)).offset(skip).limit(limit).all()
+    
     return jobs
 
 
 @router.get("/{job_id}", response_model=JobDescriptionSchema)
 def get_job_description(
     job_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Get a specific job description by ID.
@@ -114,6 +128,11 @@ def get_job_description(
     job = db.query(JobDescription).filter(JobDescription.id == job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job description not found")
+    
+    # Check ownership if user is authenticated and the job belongs to a user
+    if current_user and job.user_id and job.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this job description")
+    
     return job
 
 
@@ -121,7 +140,8 @@ def get_job_description(
 def update_job_description(
     job_id: str,
     job_update: JobDescriptionUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Update a job description.
@@ -133,6 +153,10 @@ def update_job_description(
     db_job = db.query(JobDescription).filter(JobDescription.id == job_id).first()
     if not db_job:
         raise HTTPException(status_code=404, detail="Job description not found")
+    
+    # Check ownership if user is authenticated
+    if current_user and db_job.user_id and db_job.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this job description")
     
     if job_update.title is not None:
         db_job.title = job_update.title
@@ -150,7 +174,8 @@ def update_job_description(
 @router.delete("/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_job_description(
     job_id: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user)
 ):
     """
     Delete a job description.
@@ -158,6 +183,10 @@ def delete_job_description(
     db_job = db.query(JobDescription).filter(JobDescription.id == job_id).first()
     if not db_job:
         raise HTTPException(status_code=404, detail="Job description not found")
+    
+    # Check ownership if user is authenticated
+    if current_user and db_job.user_id and db_job.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this job description")
     
     db.delete(db_job)
     db.commit()

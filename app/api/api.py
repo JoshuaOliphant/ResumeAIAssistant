@@ -5,19 +5,30 @@ from fastapi.templating import Jinja2Templates
 import os
 from pathlib import Path
 import sys
+import logging
 
-from app.api.endpoints import resumes, jobs, ats, customize, cover_letter, export
+from app.api.endpoints import resumes, jobs, ats, customize, cover_letter, export, auth
 from app.core.config import settings
 from app.db.session import Base, engine
 from app.core.nltk_init import initialize_nltk
 
-# Initialize NLTK data properly
-print("Initializing NLTK resources...", file=sys.stderr)
-initialize_nltk()
-print("NLTK initialization complete", file=sys.stderr)
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Create database tables
-Base.metadata.create_all(bind=engine)
+# Initialize NLTK data properly
+logger.info("Initializing NLTK resources...")
+initialize_nltk()
+logger.info("NLTK initialization complete")
+
+# PostgreSQL Database Connection Verification
+try:
+    # Verify database connection
+    with engine.connect() as conn:
+        logger.info("Successfully connected to PostgreSQL database")
+except Exception as e:
+    logger.error(f"Failed to connect to PostgreSQL database: {str(e)}")
+    sys.exit(1)
 
 # Create directories for static files and templates if they don't exist
 static_dir = Path("./static")
@@ -55,6 +66,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 api_router = APIRouter()
 
 # Include all endpoint routers
+api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 api_router.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 api_router.include_router(ats.router, prefix="/ats", tags=["ats"])
