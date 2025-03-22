@@ -7,20 +7,20 @@ import sys
 import time
 import nltk
 
-def initialize_nltk():
-    """Ensure NLTK resources are available"""
+def initialize_nlp():
+    """Ensure NLP resources are available"""
     try:
         nltk.corpus.stopwords.words('english')
         print("NLTK resources already initialized")
     except:
-        print("Initializing NLTK resources...")
+        print("Initializing NLP resources...")
         import app.core.nltk_init
-        app.core.nltk_init.initialize_nltk()
+        app.core.nltk_init.initialize_nlp()
 
 def test_ats_analysis():
     """Test the ATS analysis endpoint"""
-    # Ensure NLTK is initialized
-    initialize_nltk()
+    # Ensure NLP resources are initialized
+    initialize_nlp()
     
     base_url = "http://localhost:5000"
     

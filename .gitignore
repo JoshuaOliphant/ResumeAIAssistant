@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Virtual Environment
+venv/
+env/
+ENV/
+.env
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Project specific
+*.log
+api.log
+resume_app.db
+*.db-journal
+.env.local
+exports/
+uploads/
+*.bak
+
+# NLTK (since data is included in repo)
+# nltk_data/
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# Replit specific
+.replit
+.breakpoints
+.cache/
+
+# Editor/tool temp files
+*~
+.*.sw?
+.~lock.*
+
+attached_assets/
+
+# IDE rules
+.windsurfrules

@@ -1,13 +1,13 @@
 import re
 import nltk
 import os
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional, Set, Tuple
 
-# Import NLTK initialization
-from app.core.nltk_init import initialize_nltk
+# Import NLP initialization
+from app.core.nltk_init import initialize_nlp
 
-# Initialize NLTK data
-initialize_nltk()
+# Initialize NLP resources
+nltk_initialized, spacy_model = initialize_nlp()
 
 # Now import NLTK modules after initialization
 from nltk.corpus import stopwords
@@ -81,6 +81,7 @@ async def analyze_resume_for_ats(
 def extract_keywords(text: str) -> Dict[str, int]:
     """
     Extract important keywords from text, filtering out common words.
+    Uses spaCy for enhanced NLP capabilities if available, with fallback to basic NLTK.
     
     Args:
         text: The text to extract keywords from
@@ -91,9 +92,86 @@ def extract_keywords(text: str) -> Dict[str, int]:
     # Convert to lowercase
     text = text.lower()
     
+    # Try to use spaCy for enhanced NLP if available
+    if spacy_model is not None:
+        return extract_keywords_with_spacy(text)
+    else:
+        # Fallback to basic NLTK approach
+        return extract_keywords_with_nltk(text)
+
+
+def extract_keywords_with_spacy(text: str) -> Dict[str, int]:
+    """
+    Extract keywords using spaCy's NLP capabilities.
+    
+    Args:
+        text: The text to extract keywords from
+    
+    Returns:
+        Dictionary mapping keywords to their frequency
+    """
+    # Process the text with spaCy
+    doc = spacy_model(text)
+    
+    # Get stopwords from both spaCy and NLTK for better filtering
+    stop_words = get_combined_stopwords()
+    
+    # Extract single tokens (filtering stopwords, punctuation, etc.)
+    tokens = []
+    for token in doc:
+        if (
+            not token.is_stop 
+            and not token.is_punct 
+            and not token.is_space 
+            and token.text.lower() not in stop_words 
+            and len(token.text) > 2
+        ):
+            tokens.append(token.text.lower())
+    
+    # Extract named entities (organizations, products, etc.)
+    entities = []
+    for ent in doc.ents:
+        # Only include certain entity types that are relevant for resumes/jobs
+        if ent.label_ in ['ORG', 'PRODUCT', 'GPE', 'WORK_OF_ART', 'EVENT', 'LAW', 'LANGUAGE']:
+            entities.append(ent.text.lower())
+    
+    # Extract noun chunks (for technical terms and skills)
+    noun_chunks = []
+    for chunk in doc.noun_chunks:
+        # Filter out chunks that are just stopwords or too short
+        chunk_text = chunk.text.lower()
+        if not all(token.is_stop for token in chunk) and len(chunk_text) > 3:
+            noun_chunks.append(chunk_text)
+    
+    # Extract phrases using n-grams (2-3 word combinations)
+    phrases = extract_ngrams(text, tokens, 2, 3)
+    
+    # Combine all extracted elements and count frequencies
+    all_elements = tokens + entities + noun_chunks + phrases
+    keyword_freq = {}
+    for element in all_elements:
+        if element in keyword_freq:
+            keyword_freq[element] += 1
+        else:
+            keyword_freq[element] = 1
+    
+    # Filter to keep only keywords appearing more than once or technical terms
+    filtered_keywords = filter_technical_terms(keyword_freq)
+    
+    return filtered_keywords
+
+
+def extract_keywords_with_nltk(text: str) -> Dict[str, int]:
+    """
+    Extract keywords using basic NLTK and regex approach (original implementation).
+    
+    Args:
+        text: The text to extract keywords from
+    
+    Returns:
+        Dictionary mapping keywords to their frequency
+    """
     # Simple tokenization approach - split by whitespace and punctuation
-    # This is more reliable than nltk.word_tokenize which requires specific data files
-    import re
     tokens = re.findall(r'\b\w+\b', text)
     
     # Remove stopwords and short words
@@ -132,7 +210,73 @@ def extract_keywords(text: str) -> Dict[str, int]:
                 keyword_freq[phrase] = 1
     
     # Filter to keep only keywords appearing more than once or technical terms
-    technical_pattern = r'(python|java|javascript|react|node|sql|aws|azure|docker|kubernetes|machine learning|data science|artificial intelligence|blockchain|devops|agile|scrum|html|css|api|nosql|mongodb|express|vue|angular|swift|kotlin|c\+\+|ruby|php|golang|rust|scala|hadoop|spark|tensorflow|pytorch|nlp|ci\/cd|git|github|gitlab|bitbucket|jira|confluence|jenkins|terraform|ansible|chef|puppet)'
+    filtered_keywords = filter_technical_terms(keyword_freq)
+    
+    return filtered_keywords
+
+
+def get_combined_stopwords() -> Set[str]:
+    """
+    Get a combined set of stopwords from NLTK and custom additions.
+    
+    Returns:
+        Set of stopwords
+    """
+    # Get NLTK stopwords
+    stop_words = set(stopwords.words('english'))
+    
+    # Add custom stopwords relevant to resumes and job descriptions
+    custom_stopwords = {
+        'resume', 'cv', 'curriculum', 'vitae', 'job', 'description', 'position',
+        'responsibilities', 'requirements', 'qualifications', 'apply', 'please',
+        'email', 'contact', 'www', 'http', 'https', 'com', 'org', 'net',
+        'year', 'years', 'month', 'months', 'day', 'days', 'experience',
+        'role', 'roles', 'responsibility', 'team', 'company', 'work', 'working'
+    }
+    
+    return stop_words.union(custom_stopwords)
+
+
+def extract_ngrams(text: str, tokens: List[str], min_n: int = 2, max_n: int = 3) -> List[str]:
+    """
+    Extract n-grams (phrases of n words) from text.
+    
+    Args:
+        text: The original text
+        tokens: List of already extracted tokens
+        min_n: Minimum number of words in a phrase
+        max_n: Maximum number of words in a phrase
+    
+    Returns:
+        List of extracted phrases
+    """
+    # Simple tokenization for phrase extraction
+    words = re.findall(r'\b\w+\b', text)
+    phrases = []
+    
+    # Extract phrases of different lengths
+    for n in range(min_n, max_n + 1):
+        for i in range(len(words) - n + 1):
+            if all(words[i+j].isalpha() for j in range(n)):
+                phrase = ' '.join(words[i:i+n])
+                if phrase in text.lower():
+                    phrases.append(phrase)
+    
+    return phrases
+
+
+def filter_technical_terms(keyword_freq: Dict[str, int]) -> Dict[str, int]:
+    """
+    Filter keywords to keep only those appearing more than once or technical terms.
+    
+    Args:
+        keyword_freq: Dictionary mapping keywords to their frequency
+    
+    Returns:
+        Filtered dictionary of keywords
+    """
+    # Technical terms pattern - expanded to include more technologies and skills
+    technical_pattern = r'(python|java|javascript|typescript|react|node|sql|nosql|aws|azure|gcp|docker|kubernetes|machine learning|data science|artificial intelligence|blockchain|devops|agile|scrum|kanban|html|css|api|rest|graphql|mongodb|express|vue|angular|swift|kotlin|c\+\+|ruby|php|golang|rust|scala|hadoop|spark|tensorflow|pytorch|nlp|ci\/cd|git|github|gitlab|bitbucket|jira|confluence|jenkins|terraform|ansible|chef|puppet|linux|unix|windows|macos|ios|android|cloud|saas|paas|iaas|frontend|backend|fullstack|database|security|testing|qa|ux|ui|design|product|project|management|leadership|communication|teamwork|problem solving|critical thinking|creativity|innovation|analytical|detail oriented|results driven|customer focused|strategic thinking|negotiation|presentation|mentoring|coaching|training)'
     
     filtered_keywords = {}
     for keyword, count in keyword_freq.items():

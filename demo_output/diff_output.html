@@ -1,0 +1,152 @@
+
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>Resume Diff Demo</title>
+        <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            .addition { background-color: #e6ffed; color: #22863a; }
+            .deletion { background-color: #ffeef0; color: #cb2431; text-decoration: line-through; }
+            .modification { background-color: #fff5b1; }
+            .stats { display: flex; gap: 20px; margin-bottom: 20px; }
+            .stat-item { padding: 10px; border: 1px solid #ddd; border-radius: 5px; }
+            .container { max-width: 800px; margin: 0 auto; }
+            h1, h2 { color: #333; }
+            .toggle-container { margin: 20px 0; }
+            #original-content, #customized-content { display: none; padding: 20px; border: 1px solid #ddd; margin-top: 10px; }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>Resume Diff Demo</h1>
+            
+            <div class="stats">
+                <div class="stat-item">
+                    <strong>Additions:</strong> <span style="color: #22863a">+198</span>
+                </div>
+                <div class="stat-item">
+                    <strong>Deletions:</strong> <span style="color: #cb2431">-9</span>
+                </div>
+                <div class="stat-item">
+                    <strong>Modifications:</strong> <span style="color: #dbab09">102</span>
+                </div>
+                <div class="stat-item">
+                    <strong>Unchanged:</strong> <span style="color: #0366d6">373</span>
+                </div>
+            </div>
+            
+            <div class="toggle-container">
+                <button onclick="showDiff()">Show Diff</button>
+                <button onclick="showOriginal()">Show Original</button>
+                <button onclick="showCustomized()">Show Customized</button>
+            </div>
+            
+            <div id="diff-content"># John Doe
+## <span class="deletion"><del>Python Developer
+
+### Summary
+</del></span><span class="addition">Senior Python Developer
+
+### Summary
+Experienced </span>Python developer with <span class="deletion"><del>3</del></span><span class="addition">5</span> years of exper<span class="deletion"><del>ienc</del></span><span class="addition">tis</span>e in web development<span class="deletion"><del> and data analysis</del></span><span class="addition">, data analysis, and machine learning</span>.
+
+### Skills
+- Python
+- Django
+- Flask<span class="addition">
+- FastAPI</span>
+- SQL
+- Git
+<span class="addition">- Docker
+- Machine Learning
+</span>
+### Experience
+**<span class="addition">Senior </span>Software Developer, ABC Tech**
+*2020 - Present*
+- Developed <span class="addition">and maintained scalable </span>web applications using Django<span class="deletion"><del>
+- </del></span><span class="addition"> and FastAP</span>I<span class="addition">
+- Designed and i</span>mplemented RESTful APIs<span class="deletion"><del>
+- Worked</del></span> with<span class="addition"> comprehensive documentation
+- Optimized</span> PostgreSQL database<span class="addition">s for performance
+- Mentored junior developers and conducted code review</span>s
+
+### Education
+**Bachelor of Science in Computer Science**
+*University of Technology, 2019*
+</div>
+            <pre id="original-content"># John Doe
+## Python Developer
+
+### Summary
+Python developer with 3 years of experience in web development and data analysis.
+
+### Skills
+- Python
+- Django
+- Flask
+- SQL
+- Git
+
+### Experience
+**Software Developer, ABC Tech**
+*2020 - Present*
+- Developed web applications using Django
+- Implemented RESTful APIs
+- Worked with PostgreSQL databases
+
+### Education
+**Bachelor of Science in Computer Science**
+*University of Technology, 2019*
+</pre>
+            <pre id="customized-content"># John Doe
+## Senior Python Developer
+
+### Summary
+Experienced Python developer with 5 years of expertise in web development, data analysis, and machine learning.
+
+### Skills
+- Python
+- Django
+- Flask
+- FastAPI
+- SQL
+- Git
+- Docker
+- Machine Learning
+
+### Experience
+**Senior Software Developer, ABC Tech**
+*2020 - Present*
+- Developed and maintained scalable web applications using Django and FastAPI
+- Designed and implemented RESTful APIs with comprehensive documentation
+- Optimized PostgreSQL databases for performance
+- Mentored junior developers and conducted code reviews
+
+### Education
+**Bachelor of Science in Computer Science**
+*University of Technology, 2019*
+</pre>
+            
+            <script>
+                function showDiff() {
+                    document.getElementById('diff-content').style.display = 'block';
+                    document.getElementById('original-content').style.display = 'none';
+                    document.getElementById('customized-content').style.display = 'none';
+                }
+                
+                function showOriginal() {
+                    document.getElementById('diff-content').style.display = 'none';
+                    document.getElementById('original-content').style.display = 'block';
+                    document.getElementById('customized-content').style.display = 'none';
+                }
+                
+                function showCustomized() {
+                    document.getElementById('diff-content').style.display = 'none';
+                    document.getElementById('original-content').style.display = 'none';
+                    document.getElementById('customized-content').style.display = 'block';
+                }
+            </script>
+        </div>
+    </body>
+    </html>
+    
