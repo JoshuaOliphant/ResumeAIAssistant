@@ -8,18 +8,23 @@
 - Run single test: `python -c "import test_api; test_api.test_NAME()"`
 - Run basic tests: `python test_basic.py`
 
+## Git Conventions
+- Write concise, descriptive commit messages
+- Use present tense in commit messages
+- Prefix commits with type: "Fix:", "Feature:", "Refactor:", etc.
+- DO NOT include "Generated with Claude" footer in commits
+
 ## Environment Variables
 - `ANTHROPIC_API_KEY`: Required for Claude AI integration
-- `DATABASE_URL`: PostgreSQL connection string (e.g., `postgresql://user:password@localhost:5432/dbname`)
-  - Default: SQLite (`sqlite:///./resume_app.db`)
 - `SECRET_KEY`: JWT secret key (auto-generated if not provided)
 - `PORT`: Port for the application (default: 5000)
 
 ## Database
-- SQLite for development/testing: Used by default
-- PostgreSQL for production: Set `DATABASE_URL` environment variable
+- SQLite database at `./resume_app.db`
+- Created automatically on application startup
+- No migrations needed - schema created with `Base.metadata.create_all()`
 - Data models in `app/models/` (SQLAlchemy ORM)
-- No explicit migrations; tables created with `Base.metadata.create_all()`
+- For deployment to fly.io, can use LiteFS for distributed SQLite
 
 ## Code Style
 - Imports: 1) stdlib 2) third-party 3) local (with blank lines between groups)

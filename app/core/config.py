@@ -29,15 +29,8 @@ class Settings(BaseSettings):
     # the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
     CLAUDE_MODEL: str = "claude-3-5-sonnet-20241022"
     
-    # Database
-    DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite:///./resume_app.db")
-    
-    # PostgreSQL specific configuration
-    POSTGRES_USER: str = os.getenv("PGUSER", "")
-    POSTGRES_PASSWORD: str = os.getenv("PGPASSWORD", "")
-    POSTGRES_HOST: str = os.getenv("PGHOST", "")
-    POSTGRES_PORT: str = os.getenv("PGPORT", "")
-    POSTGRES_DB: str = os.getenv("PGDATABASE", "")
+    # Database - SQLite only
+    DATABASE_URL: str = "sqlite:///./resume_app.db"
     
     # File size limits
     MAX_UPLOAD_SIZE: int = 5 * 1024 * 1024  # 5MB

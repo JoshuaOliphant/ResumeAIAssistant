@@ -21,13 +21,13 @@ logger.info("Initializing NLTK resources...")
 initialize_nltk()
 logger.info("NLTK initialization complete")
 
-# PostgreSQL Database Connection Verification
+# Create database tables
 try:
-    # Verify database connection
-    with engine.connect() as conn:
-        logger.info("Successfully connected to PostgreSQL database")
+    # Create all tables defined in models
+    Base.metadata.create_all(bind=engine)
+    logger.info("Successfully initialized SQLite database")
 except Exception as e:
-    logger.error(f"Failed to connect to PostgreSQL database: {str(e)}")
+    logger.error(f"Failed to initialize SQLite database: {str(e)}")
     sys.exit(1)
 
 # Create directories for static files and templates if they don't exist
