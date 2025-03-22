@@ -581,16 +581,35 @@ document.addEventListener('DOMContentLoaded', function() {
                             <p>Your resume has been customized for the job description.</p>
                         </div>
                         
-                        <div class="mb-4">
-                            <h5>Customized Resume</h5>
-                            <div class="card">
-                                <div class="card-body bg-dark">
-                                    <pre class="mb-0"><code>${resume.current_version.content}</code></pre>
+                        <ul class="nav nav-tabs" id="resumeResultTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="customized-tab" data-bs-toggle="tab" data-bs-target="#customized" type="button" role="tab" aria-controls="customized" aria-selected="true">Customized Resume</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="diff-tab" data-bs-toggle="tab" data-bs-target="#diff" type="button" role="tab" aria-controls="diff" aria-selected="false">View Changes</button>
+                            </li>
+                        </ul>
+                        
+                        <div class="tab-content p-3" id="resumeResultTabContent">
+                            <div class="tab-pane fade show active" id="customized" role="tabpanel" aria-labelledby="customized-tab">
+                                <div class="card">
+                                    <div class="card-body bg-dark">
+                                        <pre class="mb-0"><code>${resume.current_version.content}</code></pre>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="diff" role="tabpanel" aria-labelledby="diff-tab">
+                                <div id="diff-view-container" class="mt-3">
+                                    <div class="d-flex justify-content-center">
+                                        <div class="spinner-border text-primary" role="status">
+                                            <span class="visually-hidden">Loading...</span>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                         
-                        <div class="d-grid gap-2">
+                        <div class="d-grid gap-2 mt-3">
                             <a href="${API_BASE_URL}/export/resume/${data.customized_resume_id}/pdf" class="btn btn-primary" target="_blank">Download as PDF</a>
                             <a href="${API_BASE_URL}/export/resume/${data.customized_resume_id}/docx" class="btn btn-secondary" target="_blank">Download as DOCX</a>
                             <a href="${API_BASE_URL}/export/resume/${data.customized_resume_id}/markdown" class="btn btn-outline-secondary" target="_blank">Download as Markdown</a>
@@ -598,10 +617,205 @@ document.addEventListener('DOMContentLoaded', function() {
                     </div>
                 </div>
             `;
+            
+            // Add event listener for diff tab click
+            document.getElementById('diff-tab').addEventListener('click', function() {
+                loadDiffView(resume.id, resume.current_version.id);
+            });
         })
         .catch(error => {
             console.error('Error fetching customized resume:', error);
             showAlert('danger', 'Failed to fetch customized resume. Please try again later.');
+        });
+    }
+    
+    // Load and display diff view
+    function loadDiffView(resumeId, versionId) {
+        const diffViewContainer = document.getElementById('diff-view-container');
+        
+        // Show loading spinner
+        diffViewContainer.innerHTML = `
+            <div class="d-flex justify-content-center">
+                <div class="spinner-border text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+            </div>
+        `;
+        
+        // Fetch diff data from API
+        fetch(`${API_BASE_URL}/resumes/${resumeId}/versions/${versionId}/diff`)
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Failed to fetch diff view');
+            }
+            return response.json();
+        })
+        .then(diffData => {
+            // Create diff view container with section analysis
+            let sectionAnalysisHTML = '';
+            
+            // Check if section analysis is available
+            if (diffData.section_analysis && Object.keys(diffData.section_analysis).length > 0) {
+                sectionAnalysisHTML = `
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            <h6 class="mb-0">Section-by-Section Analysis</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive">
+                                <table class="table table-striped table-hover mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th>Section</th>
+                                            <th>Status</th>
+                                            <th>Change %</th>
+                                            <th>Size</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                `;
+                
+                // Sort sections by change percentage (descending)
+                const sortedSections = Object.entries(diffData.section_analysis)
+                    .sort((a, b) => b[1].change_percentage - a[1].change_percentage);
+                
+                for (const [sectionName, sectionData] of sortedSections) {
+                    // Determine status class and label
+                    let statusClass = 'bg-secondary';
+                    let statusLabel = 'Unchanged';
+                    
+                    if (sectionData.status === 'added') {
+                        statusClass = 'bg-success';
+                        statusLabel = 'Added';
+                    } else if (sectionData.status === 'removed') {
+                        statusClass = 'bg-danger';
+                        statusLabel = 'Removed';
+                    } else if (sectionData.status === 'major_changes') {
+                        statusClass = 'bg-danger';
+                        statusLabel = 'Major Changes';
+                    } else if (sectionData.status === 'moderate_changes') {
+                        statusClass = 'bg-warning';
+                        statusLabel = 'Moderate Changes';
+                    } else if (sectionData.status === 'minor_changes') {
+                        statusClass = 'bg-info';
+                        statusLabel = 'Minor Changes';
+                    }
+                    
+                    sectionAnalysisHTML += `
+                        <tr>
+                            <td>${sectionName}</td>
+                            <td><span class="badge ${statusClass}">${statusLabel}</span></td>
+                            <td>${sectionData.change_percentage}%</td>
+                            <td>${sectionData.content_length} chars</td>
+                        </tr>
+                    `;
+                }
+                
+                sectionAnalysisHTML += `
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+            
+            // Create diff view container
+            diffViewContainer.innerHTML = `
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0">Changes Made to Your Resume</h5>
+                        <div class="form-check form-switch">
+                            <input class="form-check-input" type="checkbox" id="show-diff-switch" checked>
+                            <label class="form-check-label" for="show-diff-switch">Show Changes</label>
+                        </div>
+                    </div>
+                    <div class="card-body">
+                        <div class="diff-stats d-flex justify-content-between mb-3">
+                            <div class="stat-item text-center p-2 border rounded">
+                                <span class="d-block text-success">+${diffData.diff_statistics.additions}</span>
+                                <small class="text-muted">Additions</small>
+                            </div>
+                            <div class="stat-item text-center p-2 border rounded">
+                                <span class="d-block text-danger">-${diffData.diff_statistics.deletions}</span>
+                                <small class="text-muted">Deletions</small>
+                            </div>
+                            <div class="stat-item text-center p-2 border rounded">
+                                <span class="d-block text-warning">${diffData.diff_statistics.modifications}</span>
+                                <small class="text-muted">Modifications</small>
+                            </div>
+                            <div class="stat-item text-center p-2 border rounded">
+                                <span class="d-block text-info">${diffData.diff_statistics.unchanged}</span>
+                                <small class="text-muted">Unchanged</small>
+                            </div>
+                        </div>
+                        
+                        ${sectionAnalysisHTML}
+                        
+                        <ul class="nav nav-tabs mb-3" id="diffContentTabs" role="tablist">
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link active" id="diff-content-tab" data-bs-toggle="tab" data-bs-target="#diff-content-pane" type="button" role="tab">Diff View</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="customized-content-tab" data-bs-toggle="tab" data-bs-target="#customized-content-pane" type="button" role="tab">Customized</button>
+                            </li>
+                            <li class="nav-item" role="presentation">
+                                <button class="nav-link" id="original-content-tab" data-bs-toggle="tab" data-bs-target="#original-content-pane" type="button" role="tab">Original</button>
+                            </li>
+                        </ul>
+                        
+                        <div class="tab-content" id="diffContentTabContent">
+                            <div class="tab-pane fade show active" id="diff-content-pane" role="tabpanel" aria-labelledby="diff-content-tab">
+                                <div id="diff-content" class="diff-content">${diffData.diff_content}</div>
+                            </div>
+                            <div class="tab-pane fade" id="customized-content-pane" role="tabpanel" aria-labelledby="customized-content-tab">
+                                <div id="customized-content" class="customized-content">
+                                    <pre class="mb-0"><code>${diffData.customized_content}</code></pre>
+                                </div>
+                            </div>
+                            <div class="tab-pane fade" id="original-content-pane" role="tabpanel" aria-labelledby="original-content-tab">
+                                <div id="original-content" class="original-content">
+                                    <pre class="mb-0"><code>${diffData.original_content}</code></pre>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+            
+            // Add custom styles for diff view
+            const styleElement = document.createElement('style');
+            styleElement.textContent = `
+                .addition { background-color: #e6ffed; color: #22863a; }
+                .deletion { background-color: #ffeef0; color: #cb2431; text-decoration: line-through; }
+                .modification { background-color: #fff5b1; }
+                .diff-content { font-family: monospace; white-space: pre-wrap; }
+            `;
+            document.head.appendChild(styleElement);
+            
+            // Add event listener for toggle switch
+            const showDiffSwitch = document.getElementById('show-diff-switch');
+            
+            showDiffSwitch.addEventListener('change', function() {
+                const diffContentTab = document.getElementById('diff-content-tab');
+                const customizedContentTab = document.getElementById('customized-content-tab');
+                
+                if (this.checked) {
+                    // Show diff view tab
+                    diffContentTab.click();
+                } else {
+                    // Show customized content tab
+                    customizedContentTab.click();
+                }
+            });
+        })
+        .catch(error => {
+            console.error('Error fetching diff view:', error);
+            diffViewContainer.innerHTML = `
+                <div class="alert alert-danger">
+                    <p>Failed to load diff view. ${error.message}</p>
+                </div>
+            `;
         });
     }
     

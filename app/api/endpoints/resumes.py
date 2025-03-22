@@ -1,5 +1,5 @@
 import uuid
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from fastapi.responses import JSONResponse
@@ -13,9 +13,11 @@ from app.schemas.resume import (
     ResumeDetail,
     ResumeUpdate,
     ResumeVersionCreate,
-    ResumeVersion as ResumeVersionSchema
+    ResumeVersion as ResumeVersionSchema,
+    ResumeDiffResponse
 )
 from app.core.config import settings
+from app.services.diff_service import generate_resume_diff, get_diff_statistics
 
 router = APIRouter()
 
@@ -258,3 +260,93 @@ def get_resume_version(
         raise HTTPException(status_code=404, detail="Resume version not found")
     
     return db_version
+
+
+@router.get("/{resume_id}/versions/{version_id}/diff", response_model=ResumeDiffResponse)
+def get_resume_version_diff(
+    resume_id: str,
+    version_id: str,
+    original_version_id: Optional[str] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Get a diff view comparing a customized resume version with its original version.
+    
+    - **resume_id**: ID of the resume
+    - **version_id**: ID of the customized version to compare
+    - **original_version_id**: Optional ID of the original version to compare against. 
+                             If not provided, will use the previous version.
+    """
+    # Verify the resume exists
+    db_resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not db_resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    
+    # Get the customized version
+    customized_version = db.query(ResumeVersion).filter(
+        ResumeVersion.resume_id == resume_id,
+        ResumeVersion.id == version_id
+    ).first()
+    
+    if not customized_version:
+        raise HTTPException(status_code=404, detail="Resume version not found")
+    
+    # If this is not a customized version, return an error
+    if not customized_version.is_customized:
+        raise HTTPException(
+            status_code=400, 
+            detail="Diff view is only available for customized resume versions"
+        )
+    
+    # Get the original version
+    if original_version_id:
+        # Use the specified original version
+        original_version = db.query(ResumeVersion).filter(
+            ResumeVersion.resume_id == resume_id,
+            ResumeVersion.id == original_version_id
+        ).first()
+        
+        if not original_version:
+            raise HTTPException(status_code=404, detail="Original resume version not found")
+    else:
+        # Find the most recent non-customized version before this one
+        original_version = db.query(ResumeVersion).filter(
+            ResumeVersion.resume_id == resume_id,
+            ResumeVersion.version_number < customized_version.version_number,
+            ResumeVersion.is_customized == 0
+        ).order_by(ResumeVersion.version_number.desc()).first()
+        
+        if not original_version:
+            # If no previous non-customized version found, try to find any previous version
+            original_version = db.query(ResumeVersion).filter(
+                ResumeVersion.resume_id == resume_id,
+                ResumeVersion.version_number < customized_version.version_number
+            ).order_by(ResumeVersion.version_number.desc()).first()
+            
+            if not original_version:
+                raise HTTPException(
+                    status_code=404, 
+                    detail="No previous version found to compare against"
+                )
+    
+    # Generate the diff content
+    diff_content = generate_resume_diff(original_version.content, customized_version.content)
+    
+    # Get diff statistics
+    diff_stats = get_diff_statistics(original_version.content, customized_version.content)
+    
+    # Get section-level analysis
+    from app.services.diff_service import analyze_section_changes
+    section_analysis = analyze_section_changes(original_version.content, customized_version.content)
+    
+    # Return the diff response
+    return ResumeDiffResponse(
+        id=resume_id,
+        title=db_resume.title,
+        original_content=original_version.content,
+        customized_content=customized_version.content,
+        diff_content=diff_content,
+        diff_statistics=diff_stats,
+        section_analysis=section_analysis,
+        is_diff_view=True
+    )

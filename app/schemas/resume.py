@@ -57,6 +57,25 @@ class ResumeDetail(Resume):
         orm_mode = True
 
 
+class SectionDiffInfo(BaseModel):
+    """Schema for section-level diff information"""
+    status: str  # added, removed, unchanged, minor_changes, moderate_changes, major_changes
+    change_percentage: float
+    content_length: int
+    stats: Optional[dict] = None
+
+class ResumeDiffResponse(BaseModel):
+    """Schema for a resume diff view response"""
+    id: str
+    title: str
+    original_content: str
+    customized_content: str
+    diff_content: str
+    diff_statistics: dict
+    section_analysis: Optional[dict[str, SectionDiffInfo]] = None
+    is_diff_view: bool = True
+
+
 class ResumeUpdate(BaseModel):
     """Schema for updating a resume"""
     title: Optional[str] = None
