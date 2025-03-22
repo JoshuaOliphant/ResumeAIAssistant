@@ -11,7 +11,7 @@ export default function Home() {
             <h1 className="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tighter">
               Optimize Your Resume with AI
             </h1>
-            <p className="mx-auto max-w-[700px] text-gray-500 md:text-xl">
+            <p className="mx-auto max-w-[700px] text-gray-600 dark:text-gray-400 md:text-xl">
               Get personalized insights and recommendations to improve your resume and increase your chances of landing your dream job.
             </p>
             <div className="space-x-4">
@@ -56,7 +56,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="container px-4 md:px-6 py-12 bg-gray-50 rounded-lg">
+      <section className="container px-4 md:px-6 py-12 bg-gray-50 dark:bg-gray-800 rounded-lg">
         <h2 className="text-3xl font-bold text-center mb-8">Key Features</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card>
