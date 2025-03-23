@@ -2,7 +2,7 @@
  * API client for interacting with the Resume AI Assistant backend
  */
 
-const API_BASE_URL = 'http://localhost:5000/api/v1';
+const API_BASE_URL = '/api/v1';
 
 // Define common types
 export type User = {
@@ -141,35 +141,54 @@ async function fetchWithAuth(
 // Authentication
 export const AuthService = {
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
-    const formData = new URLSearchParams();
-    formData.append('username', credentials.username);
-    formData.append('password', credentials.password);
+    try {
+      const formData = new URLSearchParams();
+      formData.append('username', credentials.username);
+      formData.append('password', credentials.password);
 
-    const response = await fetch(`${API_BASE_URL}/auth/login`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: formData,
-    });
+      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: formData,
+      });
 
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new ApiError(
-        response.status,
-        error.detail || 'Login failed',
-        error
-      );
+      // Handle non-OK responses
+      if (!response.ok) {
+        let errorMessage = 'Login failed. Please check your credentials.';
+        let errorData = {};
+        
+        try {
+          errorData = await response.json();
+          if (errorData && (errorData as any).detail) {
+            errorMessage = (errorData as any).detail;
+          }
+        } catch (e) {
+          // If parsing JSON fails, use default error message
+        }
+        
+        throw new ApiError(
+          response.status,
+          errorMessage,
+          errorData
+        );
+      }
+
+      const data = await response.json();
+      
+      // Store the token in localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('auth_token', data.access_token);
+      }
+      
+      return data;
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(500, 'Network error during login. Please try again.', error);
     }
-
-    const data = await response.json();
-    
-    // Store the token in localStorage
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('auth_token', data.access_token);
-    }
-    
-    return data;
   },
 
   async register(user: {
@@ -178,10 +197,43 @@ export const AuthService = {
     password: string;
     full_name?: string;
   }): Promise<User> {
-    return fetchWithAuth('/auth/register', {
-      method: 'POST',
-      body: JSON.stringify(user),
-    });
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(user),
+      });
+
+      // Handle non-OK responses
+      if (!response.ok) {
+        let errorMessage = 'Registration failed. Please try again.';
+        let errorData = {};
+        
+        try {
+          errorData = await response.json();
+          if (errorData && (errorData as any).detail) {
+            errorMessage = (errorData as any).detail;
+          }
+        } catch (e) {
+          // If parsing JSON fails, use default error message
+        }
+        
+        throw new ApiError(
+          response.status,
+          errorMessage,
+          errorData
+        );
+      }
+
+      return response.json();
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(500, 'Network error during registration. Please try again.', error);
+    }
   },
 
   async getCurrentUser(): Promise<User> {
@@ -407,7 +459,7 @@ export const ExportService = {
     
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+        Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null}`,
       },
     });
 
@@ -430,7 +482,7 @@ export const ExportService = {
     
     const response = await fetch(`${API_BASE_URL}${endpoint}`, {
       headers: {
-        Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+        Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null}`,
       },
     });
 
@@ -454,7 +506,7 @@ export const ExportService = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+        Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null}`,
       },
       body: JSON.stringify({
         content: coverLetterContent,
@@ -482,7 +534,7 @@ export const ExportService = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('auth_token')}`,
+        Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null}`,
       },
       body: JSON.stringify({
         content: coverLetterContent,

@@ -1,7 +1,7 @@
 "use client"
 
 import Link from 'next/link'
-import { Menu } from 'lucide-react'
+import { Menu, LogIn } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { ThemeToggle } from '@/components/theme-toggle'
 import {
@@ -11,15 +11,20 @@ import {
   SheetTitle,
   SheetTrigger,
 } from '@/components/ui/sheet'
+import { useAuth } from '@/lib/auth'
+import { UserMenu } from '@/components/user-menu'
 
 const navigation = [
   { name: 'Features', href: '/#features' },
   { name: 'How It Works', href: '/#how-it-works' },
   { name: 'Resumes', href: '/resumes' },
+  { name: 'Jobs', href: '/jobs' },
   { name: 'API Docs', href: '/api/docs' },
 ]
 
 export default function Header() {
+  const { isAuthenticated, isLoading } = useAuth()
+
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="container mx-auto py-4 px-4 flex justify-between items-center">
@@ -53,11 +58,31 @@ export default function Header() {
             </Link>
           ))}
           <ThemeToggle />
+          
+          {!isLoading && (
+            <>
+              {isAuthenticated ? (
+                <UserMenu />
+              ) : (
+                <Button asChild size="sm">
+                  <Link href="/login">
+                    <LogIn className="w-4 h-4 mr-2" />
+                    Sign In
+                  </Link>
+                </Button>
+              )}
+            </>
+          )}
         </nav>
 
         {/* Mobile Navigation */}
         <div className="md:hidden flex items-center gap-2">
           <ThemeToggle />
+          
+          {!isLoading && isAuthenticated && (
+            <UserMenu />
+          )}
+          
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="ghost" size="icon" aria-label="Menu">
@@ -78,6 +103,16 @@ export default function Header() {
                     {item.name}
                   </Link>
                 ))}
+                
+                {!isLoading && !isAuthenticated && (
+                  <Link 
+                    href="/login" 
+                    className="text-sm font-medium hover:text-primary transition-colors p-2 -ml-2 rounded-md hover:bg-accent flex items-center"
+                  >
+                    <LogIn className="w-4 h-4 mr-2" />
+                    Sign In
+                  </Link>
+                )}
               </nav>
             </SheetContent>
           </Sheet>

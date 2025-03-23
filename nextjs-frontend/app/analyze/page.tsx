@@ -1,15 +1,18 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
+import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { ATSService } from "@/lib/client"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { ATSService, JobService, ResumeService, JobDescription, Resume } from "@/lib/client"
+import { Loader2, RefreshCw, PlusCircle } from "lucide-react"
 
 // Define form schema with zod
 const formSchema = z.object({
@@ -24,6 +27,13 @@ const formSchema = z.object({
 export default function AnalyzePage() {
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<any>(null)
+  const [isLoadingSaved, setIsLoadingSaved] = useState(false)
+  const [savedResumes, setSavedResumes] = useState<Resume[]>([])
+  const [savedJobs, setSavedJobs] = useState<JobDescription[]>([])
+  const [selectedResumeId, setSelectedResumeId] = useState<string>("")
+  const [selectedJobId, setSelectedJobId] = useState<string>("")
+  const [selectedResumeContent, setSelectedResumeContent] = useState<string>("")
+  const [selectedJobContent, setSelectedJobContent] = useState<string>("")
   
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -32,7 +42,60 @@ export default function AnalyzePage() {
       jobDescription: "",
     },
   })
+  
+  // Load saved resumes and job descriptions
+  useEffect(() => {
+    async function loadSavedData() {
+      setIsLoadingSaved(true)
+      try {
+        const [resumesResponse, jobsResponse] = await Promise.all([
+          ResumeService.getResumes(),
+          JobService.getJobs()
+        ])
+        
+        setSavedResumes(resumesResponse)
+        setSavedJobs(jobsResponse)
+      } catch (error) {
+        console.error("Error loading saved data:", error)
+      } finally {
+        setIsLoadingSaved(false)
+      }
+    }
+    
+    loadSavedData()
+  }, [])
 
+  // Fetch resume and job description content when selected
+  useEffect(() => {
+    async function fetchSelectedResumeContent() {
+      if (selectedResumeId) {
+        try {
+          const resume = await ResumeService.getResume(selectedResumeId)
+          setSelectedResumeContent(resume.current_version.content)
+        } catch (error) {
+          console.error("Error fetching resume content:", error)
+        }
+      }
+    }
+    
+    fetchSelectedResumeContent()
+  }, [selectedResumeId])
+  
+  useEffect(() => {
+    async function fetchSelectedJobContent() {
+      if (selectedJobId) {
+        try {
+          const job = await JobService.getJob(selectedJobId)
+          setSelectedJobContent(job.description)
+        } catch (error) {
+          console.error("Error fetching job description content:", error)
+        }
+      }
+    }
+    
+    fetchSelectedJobContent()
+  }, [selectedJobId])
+  
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
       setIsAnalyzing(true)
@@ -46,6 +109,28 @@ export default function AnalyzePage() {
       setAnalysisResult(result)
     } catch (error) {
       console.error("Error analyzing resume:", error)
+    } finally {
+      setIsAnalyzing(false)
+    }
+  }
+  
+  async function analyzeSavedItems() {
+    if (!selectedResumeContent || !selectedJobContent) {
+      return
+    }
+    
+    try {
+      setIsAnalyzing(true)
+      
+      // Call the API to analyze the selected resume against the selected job description
+      const result = await ATSService.analyzeContent(
+        selectedResumeContent,
+        selectedJobContent
+      )
+      
+      setAnalysisResult(result)
+    } catch (error) {
+      console.error("Error analyzing saved items:", error)
     } finally {
       setIsAnalyzing(false)
     }
@@ -144,11 +229,124 @@ export default function AnalyzePage() {
         </TabsContent>
         
         <TabsContent value="saved">
-          <Card className="p-6">
-            <p className="text-muted-foreground">
-              You need to sign in to access your saved resumes and job descriptions.
-            </p>
-            <Button className="mt-4">Sign In</Button>
+          <Card>
+            <CardHeader>
+              <CardTitle>Use Saved Data</CardTitle>
+              <CardDescription>
+                Select from your saved resumes and job descriptions
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {isLoadingSaved ? (
+                <div className="flex justify-center py-8">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : (
+                <>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-sm font-medium">Select Resume</label>
+                      <Link href="/resumes/new">
+                        <Button variant="outline" size="sm">
+                          <PlusCircle className="h-4 w-4 mr-2" />
+                          New Resume
+                        </Button>
+                      </Link>
+                    </div>
+                    {savedResumes.length === 0 ? (
+                      <div className="text-center p-4 border rounded-md bg-muted/20">
+                        <p className="text-muted-foreground text-sm">
+                          No saved resumes found. Create a new resume to get started.
+                        </p>
+                      </div>
+                    ) : (
+                      <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a resume" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {savedResumes.map((resume) => (
+                            <SelectItem key={resume.id} value={resume.id}>
+                              {resume.title}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <label className="text-sm font-medium">Select Job Description</label>
+                      <Link href="/jobs/new">
+                        <Button variant="outline" size="sm">
+                          <PlusCircle className="h-4 w-4 mr-2" />
+                          New Job
+                        </Button>
+                      </Link>
+                    </div>
+                    {savedJobs.length === 0 ? (
+                      <div className="text-center p-4 border rounded-md bg-muted/20">
+                        <p className="text-muted-foreground text-sm">
+                          No saved job descriptions found. Create a new job description to get started.
+                        </p>
+                      </div>
+                    ) : (
+                      <Select value={selectedJobId} onValueChange={setSelectedJobId}>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a job description" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {savedJobs.map((job) => (
+                            <SelectItem key={job.id} value={job.id}>
+                              {job.title} {job.company ? `- ${job.company}` : ''}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  </div>
+
+                  <div className="flex justify-end">
+                    <Button
+                      onClick={analyzeSavedItems}
+                      disabled={!selectedResumeId || !selectedJobId || isAnalyzing}
+                    >
+                      {isAnalyzing ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        "Analyze Match"
+                      )}
+                    </Button>
+                  </div>
+                </>
+              )}
+            </CardContent>
+            <CardFooter className="flex justify-end">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setIsLoadingSaved(true)
+                  Promise.all([
+                    ResumeService.getResumes(),
+                    JobService.getJobs()
+                  ]).then(([resumes, jobs]) => {
+                    setSavedResumes(resumes)
+                    setSavedJobs(jobs)
+                  }).catch(error => {
+                    console.error("Error refreshing data:", error)
+                  }).finally(() => {
+                    setIsLoadingSaved(false)
+                  })
+                }}
+              >
+                <RefreshCw className="h-4 w-4 mr-2" />
+                Refresh
+              </Button>
+            </CardFooter>
           </Card>
         </TabsContent>
       </Tabs>
