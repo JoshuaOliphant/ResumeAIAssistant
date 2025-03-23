@@ -1,0 +1,120 @@
+/* Import fonts */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Additional custom styles beyond Tailwind */
+@layer base {
+  /* Custom scrollbar for better Dark Mode visibility */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-background;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground;
+  }
+  
+  /* Focus styles for accessibility */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+  
+  /* Typography adjustments */
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-semibold tracking-tight;
+  }
+  
+  h1 {
+    @apply text-4xl md:text-5xl;
+  }
+  
+  h2 {
+    @apply text-3xl md:text-4xl;
+  }
+  
+  h3 {
+    @apply text-2xl md:text-3xl;
+  }
+  
+  h4 {
+    @apply text-xl md:text-2xl;
+  }
+  
+  h5 {
+    @apply text-lg md:text-xl;
+  }
+  
+  h6 {
+    @apply text-base md:text-lg;
+  }
+  
+  /* Code blocks */
+  pre, code {
+    @apply font-mono;
+  }
+  
+  code {
+    @apply bg-muted px-1.5 py-0.5 rounded text-sm;
+  }
+  
+  pre {
+    @apply bg-muted p-4 rounded-lg overflow-x-auto;
+  }
+  
+  pre code {
+    @apply bg-transparent p-0 text-sm;
+  }
+  
+  /* Transitions */
+  .page-transition {
+    @apply transition-all duration-300 ease-in-out;
+  }
+  
+  /* Buttons and interactive elements */
+  button, a {
+    @apply transition-colors duration-200;
+  }
+  
+  /* Selection styling */
+  ::selection {
+    @apply bg-primary/30 text-foreground;
+  }
+}
+
+/* Custom animations */
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.5s ease-in-out;
+  }
+  
+  .animate-slide-up {
+    animation: slideUp 0.5s ease-in-out;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+  
+  @keyframes slideUp {
+    from { 
+      transform: translateY(20px);
+      opacity: 0;
+    }
+    to { 
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+}
