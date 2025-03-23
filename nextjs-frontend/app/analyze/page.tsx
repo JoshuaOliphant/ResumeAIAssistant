@@ -158,7 +158,7 @@ export default function AnalyzePage() {
           <CardHeader>
             <CardTitle>Analysis Results</CardTitle>
             <CardDescription>
-              Here's how your resume matches the job description
+              Here&apos;s how your resume matches the job description
             </CardDescription>
           </CardHeader>
           <CardContent>
