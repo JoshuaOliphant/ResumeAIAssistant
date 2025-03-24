@@ -26,5 +26,6 @@ dependencies = [
     "uvicorn>=0.34.0",
     "xhtml2pdf>=0.2.17",
     "trafilatura>=2.0.0",
-    "requests>=2.32.3"
+    "requests>=2.32.3",
+    "logfire[fastapi,httpx,sqlalchemy,system-metrics]>=3.9.0",
 ]

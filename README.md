@@ -78,6 +78,46 @@ ResumeAIAssistant/
 └── run_integration_tests.py # Test runner script
 ```
 
+## Observability with Logfire
+
+The application is instrumented with [Logfire](https://logfire.pydantic.dev) for comprehensive observability.
+
+### Setting up Logfire
+
+1. Sign up for a Logfire account at [logfire.pydantic.dev](https://logfire.pydantic.dev)
+2. Create a project in the Logfire dashboard
+3. Get your Logfire API key from the dashboard
+4. Add Logfire configuration to your `.env.local` file:
+
+```
+LOGFIRE_API_KEY=your-logfire-api-key
+LOGFIRE_PROJECT=resume-ai-assistant
+ENVIRONMENT=development
+LOG_LEVEL=INFO
+LOGFIRE_ENABLED=true
+```
+
+### Logged Information
+
+The application logs the following information:
+
+- **Request/Response**: All HTTP requests and responses with timing information
+- **LLM Calls**: API calls to Anthropic Claude, including parameters and response timing
+- **Web Scraping**: Job description extraction details from URLs
+- **Database Operations**: Critical database operations
+- **Errors**: All exceptions with stack traces and context
+- **Performance Metrics**: Timing information for critical operations
+
+### Monitoring Dashboard
+
+You can view logs and metrics in the Logfire dashboard to:
+
+- Track application health
+- Debug errors in real-time
+- Analyze performance bottlenecks
+- Monitor LLM API usage and costs
+- Set up alerts for critical issues
+
 ## Future Enhancements
 
 1. Advanced NLP using spaCy for better keyword extraction

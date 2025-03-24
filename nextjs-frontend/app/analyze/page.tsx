@@ -5,14 +5,16 @@ import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import * as z from "zod"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ATSService, JobService, ResumeService, JobDescription, Resume } from "@/lib/client"
 import { Loader2, RefreshCw, PlusCircle } from "lucide-react"
+import { SelectResume } from "@/components/select-resume"
+import { SelectJob } from "@/components/select-job"
+import { ATSAnalysis } from "@/components/ats-analysis"
 
 // Define form schema with zod
 const formSchema = z.object({
@@ -25,13 +27,14 @@ const formSchema = z.object({
 })
 
 export default function AnalyzePage() {
+  const searchParams = useSearchParams()
+  const resumeIdFromUrl = searchParams.get('resumeId')
+  const jobIdFromUrl = searchParams.get('jobId')
+  
   const [isAnalyzing, setIsAnalyzing] = useState(false)
   const [analysisResult, setAnalysisResult] = useState<any>(null)
-  const [isLoadingSaved, setIsLoadingSaved] = useState(false)
-  const [savedResumes, setSavedResumes] = useState<Resume[]>([])
-  const [savedJobs, setSavedJobs] = useState<JobDescription[]>([])
-  const [selectedResumeId, setSelectedResumeId] = useState<string>("")
-  const [selectedJobId, setSelectedJobId] = useState<string>("")
+  const [selectedResumeId, setSelectedResumeId] = useState<string>(resumeIdFromUrl || "")
+  const [selectedJobId, setSelectedJobId] = useState<string>(jobIdFromUrl || "")
   const [selectedResumeContent, setSelectedResumeContent] = useState<string>("")
   const [selectedJobContent, setSelectedJobContent] = useState<string>("")
   
@@ -43,29 +46,21 @@ export default function AnalyzePage() {
     },
   })
   
-  // Load saved resumes and job descriptions
+  // Check URL parameters on component mount
   useEffect(() => {
-    async function loadSavedData() {
-      setIsLoadingSaved(true)
-      try {
-        const [resumesResponse, jobsResponse] = await Promise.all([
-          ResumeService.getResumes(),
-          JobService.getJobs()
-        ])
-        
-        setSavedResumes(resumesResponse)
-        setSavedJobs(jobsResponse)
-      } catch (error) {
-        console.error("Error loading saved data:", error)
-      } finally {
-        setIsLoadingSaved(false)
-      }
+    const resumeId = searchParams.get('resumeId');
+    const jobId = searchParams.get('jobId');
+    
+    if (resumeId) {
+      setSelectedResumeId(resumeId);
     }
     
-    loadSavedData()
-  }, [])
+    if (jobId) {
+      setSelectedJobId(jobId);
+    }
+  }, [searchParams]);
 
-  // Fetch resume and job description content when selected
+  // Fetch resume content when selected
   useEffect(() => {
     async function fetchSelectedResumeContent() {
       if (selectedResumeId) {
@@ -75,12 +70,15 @@ export default function AnalyzePage() {
         } catch (error) {
           console.error("Error fetching resume content:", error)
         }
+      } else {
+        setSelectedResumeContent("")
       }
     }
     
     fetchSelectedResumeContent()
   }, [selectedResumeId])
   
+  // Fetch job description content when selected
   useEffect(() => {
     async function fetchSelectedJobContent() {
       if (selectedJobId) {
@@ -90,11 +88,25 @@ export default function AnalyzePage() {
         } catch (error) {
           console.error("Error fetching job description content:", error)
         }
+      } else {
+        setSelectedJobContent("")
       }
     }
     
     fetchSelectedJobContent()
   }, [selectedJobId])
+  
+  // Auto-analyze when both resume and job are loaded from URL parameters
+  useEffect(() => {
+    const resumeId = searchParams.get('resumeId');
+    const jobId = searchParams.get('jobId');
+    
+    // Only auto-analyze if both parameters are provided and content is loaded
+    if (resumeId && jobId && selectedResumeContent && selectedJobContent && !isAnalyzing && !analysisResult) {
+      console.log('Auto-analyzing with loaded content');
+      analyzeSavedItems();
+    }
+  }, [selectedResumeContent, selectedJobContent, searchParams, isAnalyzing, analysisResult]);
   
   async function onSubmit(values: z.infer<typeof formSchema>) {
     try {
@@ -136,11 +148,29 @@ export default function AnalyzePage() {
     }
   }
 
+  // Handle resume change from SelectResume component
+  const handleResumeChange = (resume: Resume | null) => {
+    if (resume) {
+      setSelectedResumeContent(resume.current_version.content)
+    } else {
+      setSelectedResumeContent("")
+    }
+  }
+  
+  // Handle job change from SelectJob component
+  const handleJobChange = (job: JobDescription | null) => {
+    if (job) {
+      setSelectedJobContent(job.description)
+    } else {
+      setSelectedJobContent("")
+    }
+  }
+
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Analyze Resume</h1>
       
-      <Tabs defaultValue="manual" className="w-full">
+      <Tabs defaultValue={resumeIdFromUrl ? "saved" : "manual"} className="w-full">
         <TabsList className="mb-4">
           <TabsTrigger value="manual">Enter Resume & Job</TabsTrigger>
           <TabsTrigger value="saved">Use Saved Data</TabsTrigger>
@@ -237,186 +267,48 @@ export default function AnalyzePage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
-              {isLoadingSaved ? (
-                <div className="flex justify-center py-8">
-                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
-                </div>
-              ) : (
-                <>
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <label className="text-sm font-medium">Select Resume</label>
-                      <Link href="/resumes/new">
-                        <Button variant="outline" size="sm">
-                          <PlusCircle className="h-4 w-4 mr-2" />
-                          New Resume
-                        </Button>
-                      </Link>
-                    </div>
-                    {savedResumes.length === 0 ? (
-                      <div className="text-center p-4 border rounded-md bg-muted/20">
-                        <p className="text-muted-foreground text-sm">
-                          No saved resumes found. Create a new resume to get started.
-                        </p>
-                      </div>
-                    ) : (
-                      <Select value={selectedResumeId} onValueChange={setSelectedResumeId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a resume" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {savedResumes.map((resume) => (
-                            <SelectItem key={resume.id} value={resume.id}>
-                              {resume.title}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <div className="flex justify-between items-center">
-                      <label className="text-sm font-medium">Select Job Description</label>
-                      <Link href="/jobs/new">
-                        <Button variant="outline" size="sm">
-                          <PlusCircle className="h-4 w-4 mr-2" />
-                          New Job
-                        </Button>
-                      </Link>
-                    </div>
-                    {savedJobs.length === 0 ? (
-                      <div className="text-center p-4 border rounded-md bg-muted/20">
-                        <p className="text-muted-foreground text-sm">
-                          No saved job descriptions found. Create a new job description to get started.
-                        </p>
-                      </div>
-                    ) : (
-                      <Select value={selectedJobId} onValueChange={setSelectedJobId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a job description" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {savedJobs.map((job) => (
-                            <SelectItem key={job.id} value={job.id}>
-                              {job.title} {job.company ? `- ${job.company}` : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    )}
-                  </div>
+              <SelectResume 
+                value={selectedResumeId} 
+                onValueChange={setSelectedResumeId}
+                onResumeChange={handleResumeChange}
+                disabled={isAnalyzing}
+              />
+              
+              <SelectJob 
+                value={selectedJobId}
+                onValueChange={setSelectedJobId}
+                onJobChange={handleJobChange}
+                disabled={isAnalyzing}
+              />
 
-                  <div className="flex justify-end">
-                    <Button
-                      onClick={analyzeSavedItems}
-                      disabled={!selectedResumeId || !selectedJobId || isAnalyzing}
-                    >
-                      {isAnalyzing ? (
-                        <>
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                          Analyzing...
-                        </>
-                      ) : (
-                        "Analyze Match"
-                      )}
-                    </Button>
-                  </div>
-                </>
-              )}
+              <div className="flex justify-end">
+                <Button
+                  onClick={analyzeSavedItems}
+                  disabled={!selectedResumeId || !selectedJobId || isAnalyzing}
+                >
+                  {isAnalyzing ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    "Analyze Match"
+                  )}
+                </Button>
+              </div>
             </CardContent>
-            <CardFooter className="flex justify-end">
-              <Button
-                variant="outline"
-                onClick={() => {
-                  setIsLoadingSaved(true)
-                  Promise.all([
-                    ResumeService.getResumes(),
-                    JobService.getJobs()
-                  ]).then(([resumes, jobs]) => {
-                    setSavedResumes(resumes)
-                    setSavedJobs(jobs)
-                  }).catch(error => {
-                    console.error("Error refreshing data:", error)
-                  }).finally(() => {
-                    setIsLoadingSaved(false)
-                  })
-                }}
-              >
-                <RefreshCw className="h-4 w-4 mr-2" />
-                Refresh
-              </Button>
-            </CardFooter>
           </Card>
         </TabsContent>
       </Tabs>
       
       {analysisResult && (
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle>Analysis Results</CardTitle>
-            <CardDescription>
-              Here&apos;s how your resume matches the job description
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-medium mb-2">Match Score</h3>
-                <div className="w-full bg-secondary rounded-full h-4">
-                  <div 
-                    className="bg-primary h-4 rounded-full" 
-                    style={{ width: `${analysisResult.match_score}%` }}
-                  ></div>
-                </div>
-                <p className="text-right text-sm text-muted-foreground mt-1">
-                  {analysisResult.match_score}%
-                </p>
-              </div>
-              
-              <div>
-                <h3 className="font-medium mb-2">Matching Keywords</h3>
-                <div className="flex flex-wrap gap-2">
-                  {analysisResult.matching_keywords.map((item: any, index: number) => (
-                    <div key={index} className="bg-primary/10 text-primary px-2 py-1 rounded-full text-sm">
-                      {item.keyword} ({item.count})
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <div>
-                <h3 className="font-medium mb-2">Missing Keywords</h3>
-                <div className="flex flex-wrap gap-2">
-                  {analysisResult.missing_keywords.map((keyword: string, index: number) => (
-                    <div key={index} className="bg-destructive/10 text-destructive px-2 py-1 rounded-full text-sm">
-                      {keyword}
-                    </div>
-                  ))}
-                </div>
-              </div>
-              
-              <div>
-                <h3 className="font-medium mb-2">Improvement Suggestions</h3>
-                <div className="space-y-4">
-                  {Object.entries(analysisResult.improvement_suggestions).map(([category, suggestions]: [string, any]) => (
-                    <div key={category} className="border rounded-lg p-4">
-                      <h4 className="font-medium mb-2">{category}</h4>
-                      <ul className="list-disc pl-5 space-y-1">
-                        {suggestions.map((suggestion: string, index: number) => (
-                          <li key={index} className="text-sm">{suggestion}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-          <CardFooter>
-            <Button className="w-full">Customize Resume</Button>
-          </CardFooter>
-        </Card>
+        <div className="mt-8">
+          <ATSAnalysis 
+            resumeId={selectedResumeId} 
+            jobId={selectedJobId} 
+            onAnalysisComplete={setAnalysisResult}
+          />
+        </div>
       )}
     </div>
   )

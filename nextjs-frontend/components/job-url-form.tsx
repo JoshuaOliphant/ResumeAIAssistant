@@ -45,11 +45,11 @@ export function JobURLForm({ onImportSuccess, onImportError }: JobURLFormProps) 
     setIsImporting(true)
     setImportError(null)
     
-    // Set timeout handler
+    // Set timeout handler - giving plenty of time for the API to process
     const timeout = setTimeout(() => {
       setImportError("The request is taking longer than expected. The website might be slow to respond or blocked.");
       setIsImporting(false);
-    }, 30000); // 30 seconds timeout
+    }, 120000); // 120 seconds (2 minutes) timeout
     
     setTimeoutId(timeout);
     
@@ -71,7 +71,14 @@ export function JobURLForm({ onImportSuccess, onImportError }: JobURLFormProps) 
       // Clear timeout as we received an error
       if (timeoutId) clearTimeout(timeoutId);
       
-      const errorMessage = "Failed to import job description. Please try again or copy and paste the description manually.";
+      // Extract error message if available
+      let errorMessage = "Failed to import job description. Please try again or copy and paste the description manually.";
+      
+      if (error instanceof Error) {
+        // If it's a specific error from the JINA API, use that message
+        errorMessage = error.message || errorMessage;
+      }
+      
       setImportError(errorMessage);
       
       if (onImportError) {
@@ -148,6 +155,12 @@ export function JobURLForm({ onImportSuccess, onImportError }: JobURLFormProps) 
               )}
             </Button>
           </CardFooter>
+          
+          {/* Debug information */}
+          <div className="p-3 text-xs text-muted-foreground">
+            <p>After importing a job, the content will be used to pre-fill the job description form.</p>
+            <p>Enter a URL like: https://www.linkedin.com/jobs/view/4133298276</p>
+          </div>
         </form>
       </Form>
     </Card>

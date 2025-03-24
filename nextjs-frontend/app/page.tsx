@@ -87,7 +87,12 @@ export default function Home() {
               <CardTitle className="text-xl">ATS Compatibility</CardTitle>
             </CardHeader>
             <CardContent>
-              <p>Analyze and optimize your resume for Applicant Tracking Systems with detailed keyword matching and formatting checks.</p>
+              <p>
+                <Link href="/ats" className="text-primary hover:underline">
+                  Analyze and optimize
+                </Link>{" "}
+                your resume for Applicant Tracking Systems with detailed keyword matching and formatting checks.
+              </p>
             </CardContent>
           </Card>
 
@@ -165,7 +170,12 @@ export default function Home() {
                 <BarChart2 className="w-7 h-7" />
               </div>
               <h3 className="text-xl font-semibold mb-3">3. Get ATS Analysis</h3>
-              <p className="text-muted-foreground">See how well your resume matches the job requirements with detailed scoring.</p>
+              <p className="text-muted-foreground">
+                <Link href="/ats" className="text-primary hover:underline">
+                  Analyze your resume
+                </Link> 
+                {" "}to see how well it matches the job requirements with detailed scoring.
+              </p>
             </div>
             
             <div className="flex flex-col items-center text-center relative z-10">
@@ -204,9 +214,14 @@ export default function Home() {
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Start customizing your resume with AI today to increase your interview callbacks by up to 60%.
           </p>
-          <Button size="lg" asChild className="text-lg px-8 py-6 h-auto shadow-lg hover:shadow-xl transition-all">
-            <Link href="/resumes/new">Get Started Now</Link>
-          </Button>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            <Button size="lg" asChild className="text-lg px-8 py-6 h-auto shadow-lg hover:shadow-xl transition-all">
+              <Link href="/resumes/new">Get Started Now</Link>
+            </Button>
+            <Button size="lg" asChild variant="outline" className="text-lg px-8 py-6 h-auto hover:bg-secondary/50 transition-all">
+              <Link href="/ats">Analyze Your Resume</Link>
+            </Button>
+          </div>
         </div>
       </section>
     </div>

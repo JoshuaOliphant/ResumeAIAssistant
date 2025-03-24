@@ -2,7 +2,7 @@
  * API client for interacting with the Resume AI Assistant backend
  */
 
-const API_BASE_URL = 'http://localhost:5000';
+const API_BASE_URL = 'http://localhost:5001';
 
 interface ApiResponse<T> {
   data?: T;

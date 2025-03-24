@@ -1,21 +1,89 @@
 import os
-import logging
+import logfire
+import httpx
+import anthropic
 from app.api.api import app
+from app.db.session import engine
+from app.core.logging import (
+    configure_logging, 
+    setup_fastapi_instrumentation,
+    setup_sqlalchemy_instrumentation,
+    setup_httpx_instrumentation,
+    setup_anthropic_instrumentation
+)
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+# Configure Logfire with more detailed options
+configure_logging(
+    service_name="resume-ai-assistant",
+    environment=os.getenv("ENVIRONMENT", "development"),
+    log_level=os.getenv("LOG_LEVEL", "INFO"),
+    capture_headers=False,  # Set to True to capture headers (be careful with sensitive data)
+    enable_system_metrics=True
+)
+
+# Initialize all instrumentation
+try:
+    # Set up FastAPI instrumentation
+    setup_fastapi_instrumentation(
+        app,
+        exclude_urls=[
+            # Exclude health check and static files to reduce noise
+            "/health",
+            "/static/*",
+            "/favicon.ico"
+        ]
+    )
+
+    # Set up SQLAlchemy instrumentation
+    setup_sqlalchemy_instrumentation(engine)
+    
+    # Set up HTTPX instrumentation for all clients
+    setup_httpx_instrumentation(
+        client=None,  # Instrument all clients
+        capture_headers=False  # Avoid capturing potentially sensitive headers
+    )
+    
+    # Set up Anthropic instrumentation
+    # This will catch all LLM calls and provide detailed logs
+    setup_anthropic_instrumentation()
+    
+    logfire.info("All instrumentations set up successfully")
+except Exception as e:
+    logfire.error(
+        "Error setting up instrumentations", 
+        error=str(e), 
+        error_type=type(e).__name__,
+        traceback=logfire.format_exception(e)
+    )
 
 # Initialize database on startup
 try:
-    logger.info("Database initialized successfully")
+    logfire.info("Database initialized successfully")
 except Exception as e:
-    logger.error(f"Error initializing database: {str(e)}")
+    logfire.error(
+        "Error initializing database", 
+        error=str(e), 
+        error_type=type(e).__name__,
+        traceback=logfire.format_exception(e)
+    )
     
 # This exposes the ASGI app for gunicorn to use with the uvicorn worker
 
 if __name__ == "__main__":
     import uvicorn
-    # Get port from environment variable or use 5000 as default
-    port = int(os.environ.get("PORT", 5000))
+    
+    # Get port from environment variable or use 5001 as default
+    port = int(os.environ.get("PORT", 5001))
+    
+    # Log server startup with more details
+    logfire.info(
+        "Starting server", 
+        host="0.0.0.0", 
+        port=port, 
+        environment=os.getenv("ENVIRONMENT", "development"),
+        logfire_project=os.getenv("LOGFIRE_PROJECT", "resume-ai-assistant"),
+        python_version=os.getenv("PYTHON_VERSION", "3.x")
+    )
+    
+    # Run the server
     uvicorn.run(app, host="0.0.0.0", port=port)

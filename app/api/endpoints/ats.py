@@ -49,7 +49,11 @@ async def analyze_resume(
         match_score=analysis_result["match_score"],
         matching_keywords=analysis_result["matching_keywords"],
         missing_keywords=analysis_result["missing_keywords"],
-        improvements=analysis_result["improvements"]
+        improvements=analysis_result["improvements"],
+        job_type=analysis_result.get("job_type", "default"),
+        section_scores=analysis_result.get("section_scores", []),
+        confidence=analysis_result.get("confidence", "medium"),
+        keyword_density=analysis_result.get("keyword_density", 0.0)
     )
     
     return response

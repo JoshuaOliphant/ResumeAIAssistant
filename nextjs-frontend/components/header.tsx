@@ -19,6 +19,8 @@ const navigation = [
   { name: 'How It Works', href: '/#how-it-works' },
   { name: 'Resumes', href: '/resumes' },
   { name: 'Jobs', href: '/jobs' },
+  { name: 'ATS Analysis', href: '/ats' },
+  { name: 'Customize Resume', href: '/customize' },
   { name: 'API Docs', href: '/api/docs' },
 ]
 

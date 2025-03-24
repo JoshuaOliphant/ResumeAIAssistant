@@ -2,7 +2,15 @@
  * API client for interacting with the Resume AI Assistant backend
  */
 
-const API_BASE_URL = '/api/v1';
+import { API_BASE_URL } from "@/lib/api-config";
+
+
+
+
+
+
+
+
 
 // Define common types
 export type User = {
@@ -49,6 +57,17 @@ export type ATSAnalysisResult = {
   matching_keywords: { keyword: string; count: number }[];
   missing_keywords: string[];
   improvement_suggestions: { [category: string]: string[] };
+  
+  // New fields from enhanced analysis
+  improvements?: { category: string; suggestion: string; priority: number }[];
+  job_type?: string;
+  section_scores?: { section: string; score: number; weight: number }[];
+  confidence?: string;
+  keyword_density?: number;
+  
+  // Rich data fields for updated components
+  matching_keywords_rich?: { keyword: string; count_in_resume: number; count_in_job: number; is_match: boolean }[];
+  missing_keywords_rich?: { keyword: string; count_in_resume: number; count_in_job: number; is_match: boolean }[];
 };
 
 export type ResumeDiff = {
@@ -268,14 +287,14 @@ export const ResumeService = {
     id: string,
     updates: { title?: string; content?: string }
   ): Promise<Resume> {
-    return fetchWithAuth(`/resumes/${id}`, {
+    return fetchWithAuth(`/api/v1/resumes/${id}`, {
       method: 'PUT',
       body: JSON.stringify(updates),
     });
   },
 
   async deleteResume(id: string): Promise<void> {
-    return fetchWithAuth(`/resumes/${id}`, {
+    return fetchWithAuth(`/api/v1/resumes/${id}`, {
       method: 'DELETE',
     });
   },
@@ -349,10 +368,36 @@ export const JobService = {
   },
 
   async importFromUrl(url: string): Promise<{ title: string; company?: string; description: string }> {
-    return fetchWithAuth('/jobs/import-from-url', {
-      method: 'POST',
-      body: JSON.stringify({ url }),
-    });
+    // Use JINA API to extract job description
+    console.log(`Extracting job description from URL: ${url}`);
+    
+    try {
+      console.log(`Sending job URL extraction request for: ${url}`);
+      // Try to use the JINA API via our Next.js proxy
+      const response = await fetch(`/api/extract-job?url=${encodeURIComponent(url)}`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(typeof window !== 'undefined' && localStorage.getItem('auth_token') 
+            ? { Authorization: `Bearer ${localStorage.getItem('auth_token')}` } 
+            : {}),
+        },
+      });
+      
+      if (!response.ok) {
+        const error = await response.json().catch(() => ({}));
+        throw new Error(error.detail || `Failed to extract job description (HTTP ${response.status})`);
+      }
+      
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error using JINA API:', error);
+      
+      // No fallback in production mode
+      
+      throw error;
+    }
   },
 };
 
@@ -390,13 +435,16 @@ export const ATSService = {
 export const CustomizationService = {
   async customizeResume(
     resumeId: string,
-    jobDescriptionId: string
+    jobDescriptionId: string,
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced'
   ): Promise<ResumeVersion> {
-    return fetchWithAuth('/customize/resume', {
+    return fetchWithAuth('/customize/', {
       method: 'POST',
       body: JSON.stringify({
         resume_id: resumeId,
         job_description_id: jobDescriptionId,
+        customization_strength: customizationLevel === 'conservative' ? 1 : customizationLevel === 'balanced' ? 2 : 3,
+        focus_areas: '',
       }),
     });
   },

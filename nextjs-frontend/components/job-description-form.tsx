@@ -53,6 +53,18 @@ export function JobDescriptionForm({ initialData, onSuccess }: JobDescriptionFor
     },
   })
   
+  // Update form values when initialData changes
+  React.useEffect(() => {
+    if (initialData) {
+      console.log("Updating form with initialData:", initialData)
+      form.reset({
+        title: initialData.title || "",
+        company: initialData.company || "",
+        description: initialData.description || "",
+      })
+    }
+  }, [initialData, form])
+  
   // Handle form submission
   async function onSubmit(values: JobDescriptionFormValues) {
     setIsSubmitting(true)

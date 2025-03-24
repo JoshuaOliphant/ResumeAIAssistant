@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
 
 
@@ -23,6 +23,13 @@ class ATSImprovement(BaseModel):
     priority: int = Field(..., ge=1, le=3, description="Priority level 1-3, with 1 being highest")
 
 
+class SectionScore(BaseModel):
+    """Schema for section score details"""
+    section: str
+    score: float
+    weight: float
+
+
 class ATSAnalysisResponse(BaseModel):
     """Schema for ATS analysis response"""
     resume_id: str
@@ -31,3 +38,7 @@ class ATSAnalysisResponse(BaseModel):
     matching_keywords: List[KeywordMatch]
     missing_keywords: List[KeywordMatch]
     improvements: List[ATSImprovement]
+    job_type: str = "default"
+    section_scores: List[Dict[str, Any]] = []
+    confidence: str = "medium"
+    keyword_density: float = 0.0

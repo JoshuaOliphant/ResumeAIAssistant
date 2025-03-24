@@ -8,6 +8,13 @@ const nextConfig = {
       },
     ]
   },
+  // Increase API timeout for long-running operations like job extraction
+  serverRuntimeConfig: {
+    api: {
+      // Response timeout is 120 seconds
+      responseTimeout: 120000,
+    },
+  },
 }
 
 module.exports = nextConfig
