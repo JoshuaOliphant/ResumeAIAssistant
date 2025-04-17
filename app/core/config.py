@@ -29,6 +29,14 @@ class Settings(BaseSettings):
     # the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
     CLAUDE_MODEL: str = "claude-3-7-sonnet-20250219"
     
+    # OpenAI API
+    OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
+    # Default to gpt-4o-2024-05-13 for best performance, but allow fallback to other models
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-2024-05-13")
+    # Use GPT-4o for evaluator and optimizer tasks too, since o3 might not be available
+    OPENAI_EVALUATOR_MODEL: str = os.getenv("OPENAI_EVALUATOR_MODEL", "gpt-4o-2024-05-13")
+    OPENAI_OPTIMIZER_MODEL: str = os.getenv("OPENAI_OPTIMIZER_MODEL", "gpt-4o-2024-05-13")
+    
     # Database - SQLite only
     DATABASE_URL: str = "sqlite:///./resume_app.db"
     

@@ -8,6 +8,8 @@ from sqlalchemy import Engine
 from typing import Optional, Dict, Any, Callable, List, Union
 from app.core.config import settings
 from functools import wraps
+import openai
+from openai import OpenAI
 
 def configure_logging(
     service_name: str = "resume-ai-assistant", 
@@ -224,6 +226,31 @@ def setup_anthropic_instrumentation(client: Optional[anthropic.Anthropic] = None
     except Exception as e:
         logfire.error(
             "Failed to set up Anthropic instrumentation",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=traceback.format_exception(type(e), e, e.__traceback__)
+        )
+
+def setup_openai_instrumentation(client: Optional[OpenAI] = None) -> None:
+    """
+    Set up OpenAI instrumentation with Logfire
+    
+    Args:
+        client: Optional OpenAI client instance (if None, instrument all clients)
+    """
+    try:
+        # Instrument OpenAI client
+        logfire.instrument_openai(openai_client=client)
+        
+        logfire.info(
+            "OpenAI instrumentation set up successfully",
+            global_instrumentation=client is None,
+            agent_support=True,
+            models=[settings.OPENAI_MODEL, settings.OPENAI_EVALUATOR_MODEL, settings.OPENAI_OPTIMIZER_MODEL]
+        )
+    except Exception as e:
+        logfire.error(
+            "Failed to set up OpenAI instrumentation",
             error=str(e),
             error_type=type(e).__name__,
             traceback=traceback.format_exception(type(e), e, e.__traceback__)

@@ -132,104 +132,83 @@ OpenAI offers several advanced capabilities that can enhance the application:
 
 The migration will follow these principles:
 
-1. **Incremental Approach**: Replace functionality in small, testable steps
-2. **Backward Compatibility**: Maintain existing API contracts
-3. **Feature Enhancement**: Improve functionality using OpenAI capabilities
-4. **Cost Optimization**: Use appropriate models for different tasks (consider o-series models for reasoning tasks)
-5. **Future-Proofing**: Implement Responses API instead of Assistants API to avoid future migration
-6. **Error Handling**: Implement robust error handling for API transitions
+1. **Direct Agent SDK Approach**: Replace Claude service with Agents SDK implementation in one step
+2. **Backward Compatibility**: Maintain existing API contracts and function signatures
+3. **Feature Enhancement**: Improve functionality using OpenAI Agents capabilities
+4. **Cost Optimization**: Use appropriate models for different tasks (consider o3-mini for cost-effective reasoning)
+5. **Future-Proofing**: Implement using the latest OpenAI capabilities with the Agents SDK
+6. **Error Handling**: Implement robust error handling with proper fallbacks
 
 ## Implementation Plan
 
-### Phase 1: Basic API Migration (Weeks 1-2)
+### Phase 1: Direct Agents SDK Integration
+1. **Environment Setup**
+   - Install the OpenAI Agents SDK and dependencies in the project
+   - Add configuration options for API keys and model selection
+   - Set up necessary environment variables
+   - Create initial scaffolding for the `openai_agents_service.py` module
 
-1. **Infrastructure & Environment Setup**
-   - Create OpenAI API client
-   - Set up environment variables
-   - Update dependency management
+2. **Agent Design & Implementation**
+   - Define Pydantic models for structured agent outputs
+   - Implement the Resume Evaluator Agent using the existing evaluator prompt
+   - Implement the Resume Optimizer Agent using the existing optimizer prompt
+   - Implement the Cover Letter Agent using the existing cover letter prompt
+   - Set up proper error handling, retry logic, and logging for each agent
+   - Configure all agents with the OpenAIResponsesModel
 
-2. **Direct API Replacement**
-   - Replace Claude API calls with equivalent OpenAI Responses API calls
-   - Keep the same input/output interfaces
-   - Maintain existing business logic
+3. **Core Function Implementation**
+   - Create direct replacements for all core functions:
+     - `evaluate_resume_job_match`: Use the evaluator agent to analyze resume-job fit
+     - `generate_optimization_plan`: Use the optimizer agent to create customization plans
+     - `customize_resume`: Implement a simpler, direct customization function
+     - `generate_cover_letter`: Use the cover letter agent to create cover letters
+   - Ensure identical function signatures for backward compatibility
+   - Add comprehensive logging and telemetry
+   - Test functions individually against Claude outputs
 
-3. **Prompt Engineering**
-   - Convert Claude prompts to OpenAI format
-   - Optimize prompts for OpenAI models
-   - Test prompt effectiveness
+### Phase 2: Enhanced Features & Tools
+1. **Custom Tools Development**
+   - Implement keyword extraction tool for identifying important job requirements
+   - Create ATS simulation tool for resume scoring
+   - Develop formatting analysis tool for resume structure evaluation
+   - Implement job-match scoring tool for comparison metrics
+   - Integrate all tools with the existing agents
+   - Add proper documentation and error handling
 
-### Phase 2: Function Calling Integration (Weeks 3-4)
+2. **Vector Store Integration**
+   - Set up OpenAI Vector Store for industry-specific knowledge
+   - Create embeddings for industry guidelines and best practices
+   - Implement retrieval functionality for enhancing agent context
+   - Store and retrieve job-specific templates and examples
 
-1. **Schema Definitions**
-   - Define JSON schema for structured outputs
-   - Create function calling definitions
+3. **RAG Enhancement**
+   - Implement retrieval for industry-specific guidance
+   - Create context augmentation for the agents
+   - Develop methods to provide relevant examples to agents
 
-2. **Service Refactoring**
-   - Implement function calling for:
-     - Resume evaluation
-     - Optimization plan generation
-     - ATS analysis
-   - Update parsing logic for function outputs
+### Phase 3: Optimization & Production Refinement
+1. **Performance & Cost Optimization**
+   - Analyze token usage across different functions
+   - Implement model selection strategy:
+     - GPT-4o for highest quality evaluations
+     - o3-mini for cost-effective reasoning tasks
+     - o3 for complex optimization scenarios
+   - Optimize agent instructions for token efficiency
+   - Add token counting and budget monitoring
+   - Create cost allocation and reporting mechanism
 
-3. **Error Handling & Testing**
-   - Implement fallbacks for function calling errors
-   - Test edge cases
-   - Create testing framework for function output validation
+2. **Workflow Refinement**
+   - Fine-tune the iteration loop between evaluator and optimizer
+   - Optimize parameters for different customization levels
+   - Adjust stopping criteria for optimal performance
+   - Add efficiency improvements for common patterns
 
-### Phase 3: Agents SDK Integration (Weeks 5-6)
-
-1. **SDK Setup**
-   - Install and configure the OpenAI Agents SDK
-   - Create specialized agents for different tasks:
-     - Resume Evaluator Agent
-     - Resume Optimizer Agent
-     - Cover Letter Agent
-   - Configure agent parameters, tools, and handoffs
-
-2. **Multi-Agent Workflow**
-   - Implement handoffs between evaluation and optimization agents
-   - Set up agent orchestration
-   - Integrate tools for resume parsing and analysis
-
-3. **Service Integration**
-   - Refactor services to use Agents SDK with Responses API
-   - Update business logic to handle agent workflows
-   - Implement state management for multi-step processes
-
-### Phase 4: Vector Store & Advanced Features (Weeks 7-8)
-
-1. **Vector Database Setup**
-   - Set up vector store (e.g., Pinecone, Qdrant, or OpenAI's embeddings)
-   - Populate with industry guidelines and examples
-   - Implement retrieval functionality
-
-2. **RAG Implementation**
-   - Create industry-specific RAG pipelines
-   - Implement resume template retrieval
-   - Enhance job-specific optimization
-
-3. **Custom Tools Development**
-   - Implement custom tools for resume parsing
-   - Create tools for ATS analysis
-   - Integrate with Agents SDK and Responses API
-
-### Phase 5: Optimization & Scaling (Weeks 9-10)
-
-1. **Performance Optimization**
-   - Analyze and optimize token usage
-   - Implement model switching based on task complexity
-   - Consider o3-mini for cost-effective reasoning tasks
-   - Optimize prompt length and efficiency
-
-2. **Cost Management**
-   - Implement token counting and budgeting
-   - Create cost allocation and monitoring
-   - Optimize for cost-effectiveness
-
-3. **Scalability & Monitoring**
-   - Set up monitoring for API calls
-   - Implement rate limiting and batching
-   - Create dashboards for API usage and performance
+3. **Production Scaling**
+   - Implement robust error handling and fallbacks
+   - Add rate limiting and request throttling
+   - Create dashboards for API usage monitoring
+   - Add performance metrics and analytics
+   - Set up alerting for API issues
 
 ## Evaluator-Optimizer Implementation with Agents SDK
 
@@ -542,141 +521,318 @@ By implementing the evaluator-optimizer pattern using OpenAI's Agents SDK, we ca
 
 ## Code Generation Prompts
 
-The following section contains prompts for generating code for each implementation step.
+The following section contains structured prompts for generating code for the direct Agents SDK implementation.
 
-### Prompt 1: Create OpenAI Service Module
+### Prompt 1: Create OpenAI Agents Service Module
 
 ```
-Create a new Python module called openai_service.py that will replace the functionality in claude_service.py. 
+Create a new Python module called openai_agents_service.py that will replace claude_service.py using the OpenAI Agents SDK.
 The module should:
-1. Initialize the OpenAI client with proper error handling
-2. Import configuration from app.core.config
-3. Set up logging similar to the Claude service
-4. Create stub functions with the same signatures as in claude_service.py
-5. Include documentation for each function
-Use the OpenAI Python SDK (v1.0+) with the Responses API and follow the project's coding style.
+1. Import necessary dependencies:
+   - OpenAI Agents SDK (Agent, Runner, function_tool, OpenAIResponsesModel)
+   - Pydantic for structured data models
+   - Logging from logfire
+   - Configuration from app.core.config
+2. Set up proper error handling for API key validation
+3. Initialize logging similar to the Claude service
+4. Create the basic scaffolding for the specialized agents:
+   - Resume Evaluator Agent
+   - Resume Optimizer Agent
+   - Cover Letter Agent
+5. Define stubs for the main API functions with the same signatures as claude_service.py:
+   - evaluate_resume_job_match
+   - generate_optimization_plan
+   - customize_resume
+   - generate_cover_letter
+
+Include thorough documentation for the module and use the proper project coding style.
 ```
 
 ### Prompt 2: Update Configuration Module
 
 ```
-Update the app.core.config.py module to add OpenAI configuration. 
+Update the app.core.config.py module to add OpenAI configuration for the Agents SDK.
 The changes should:
-1. Add OPENAI_API_KEY, OPENAI_MODEL, and OPENAI_TEMPERATURE settings
-2. Create model selection logic that maps different tasks to appropriate models (including o-series)
-3. Keep backward compatibility with existing Claude configuration
-4. Add documentation for new settings
-Keep the same code style as the existing configuration module.
+1. Add the following settings:
+   - OPENAI_API_KEY: For API authentication
+   - OPENAI_DEFAULT_MODEL: Default model setting (e.g., "gpt-4o")
+   - OPENAI_EVALUATOR_MODEL: Model for evaluation tasks (could specify o3 for better reasoning)
+   - OPENAI_OPTIMIZER_MODEL: Model for optimization tasks
+   - OPENAI_TEMPERATURE: Temperature setting for agent outputs
+   - OPENAI_MAX_TOKENS: Maximum tokens for responses
+2. Add model mapping logic for different tasks, including:
+   - Evaluation tasks: o3 or gpt-4o for high quality
+   - Optimization tasks: gpt-4o for creative customization
+   - Basic tasks: o3-mini for cost efficiency
+3. Maintain complete backward compatibility with existing Claude configuration
+4. Add proper documentation for all new settings
+5. Include error checking for missing API keys
+
+Follow the existing code style and structure in the config module.
 ```
 
-### Prompt 3: Implement Function Calling for Resume Evaluation
+### Prompt 3: Define Evaluator Agent and Output Schemas
 
 ```
-Implement the evaluate_resume_job_match function in openai_service.py using OpenAI's function calling with the Responses API.
+Implement the resume evaluator agent and its output schemas using the OpenAI Agents SDK. The implementation should:
+1. Define Pydantic models for structured outputs from the evaluator agent
+2. Create a ResumeEvaluator agent class with system instructions from the existing EVALUATOR_PROMPT
+3. Configure the agent with the OpenAIResponsesModel for the appropriate GPT model
+4. Set up the agent to output structured evaluation data using the defined schemas
+5. Implement support for different customization levels and industry-specific guidance
+6. Add thorough documentation following the project's standards
+7. Ensure all industry-specific prompts and customization levels from the original code are preserved
+8. Implement proper error handling for the agent
+
+Match the project's coding style and ensure backward compatibility with existing schemas.
+```
+
+### Prompt 4: Define Optimizer Agent and Integration
+
+```
+Implement the resume optimizer agent and integrate it with the evaluator using the OpenAI Agents SDK. The implementation should:
+1. Define or reuse the existing CustomizationPlan Pydantic model for structured optimizer output
+2. Create a ResumeOptimizer agent class using the existing OPTIMIZER_PROMPT
+3. Configure the agent with the OpenAIResponsesModel for the appropriate GPT model
+4. Set up the agent to generate detailed optimization plans with section-by-section changes
+5. Ensure compatibility with the existing CustomizationPlan schema
+6. Add special handling for different customization levels
+7. Include proper error handling and retry logic
+8. Add thorough documentation following the project's standards
+
+Match the project's coding style and ensure optimizer output structure matches existing expectations.
+```
+
+### Prompt 5: Implement Evaluator-Optimizer Workflow Functions
+
+```
+Implement the main API-compatible functions for the evaluator-optimizer workflow using the OpenAI Agents SDK.
 The implementation should:
-1. Define a JSON schema for the evaluation output
-2. Set up function calling parameters for the OpenAI Responses API
-3. Handle response parsing for function outputs
-4. Implement error handling and fallbacks
-5. Match the output format of the original Claude function
-Match the coding style of the existing codebase and add thorough documentation.
+1. Create the evaluate_resume_job_match function with the same signature as the Claude version
+2. Create the generate_optimization_plan function with the same signature as the Claude version
+3. Create the customize_resume function with the same signature as the Claude version
+4. Create the generate_cover_letter function with the same signature as the Claude version
+5. Implement proper error handling, logging, and performance tracking
+6. Ensure outputs match the existing schema expectations
+7. Add thorough documentation following the project's standards
+8. Include support for all the original parameters like customization levels and industry guidance
+
+The implementation should maintain complete backward compatibility while using the Agents SDK architecture.
 ```
 
-### Prompt 4: Implement Function Calling for Optimization Plan
+### Prompt 6: Implement Custom Tools for Resume Analysis
 
 ```
-Implement the generate_optimization_plan function in openai_service.py using OpenAI's function calling with the Responses API.
+Implement custom tools for the agents using the OpenAI Agents SDK function_tool decorator that will enhance resume analysis capabilities.
+The implementation should include:
+
+1. Keyword Extraction Tool:
+   - Function to extract key requirements from job descriptions
+   - Process to identify important skills, qualifications, and technologies
+   - Support for different levels of keyword importance (required vs preferred)
+   - Proper error handling for invalid inputs
+
+2. ATS Simulation Tool:
+   - Function to simulate how an ATS would process the resume
+   - Score calculation based on keyword matches and formatting
+   - Section-by-section analysis of resume components
+   - Detection of common ATS parsing issues
+
+3. Formatting Analysis Tool:
+   - Function to evaluate resume structure and formatting
+   - Detection of inconsistent formatting, spacing, and bullet usage
+   - Recommendations for ATS-friendly formatting
+   - Analysis of section organization and content distribution
+
+4. Integration with Agents:
+   - Register tools with the evaluator and optimizer agents
+   - Ensure tools can be called asynchronously within the agent workflows
+   - Add proper documentation for each tool
+   - Implement error handling for all tool functions
+
+Follow the project's existing coding style and error handling patterns.
+```
+
+### Prompt 7: Vector Store Implementation for Industry Knowledge
+
+```
+Create a module for integrating OpenAI's vector store to enhance the agents with industry-specific knowledge.
+The implementation should include:
+
+1. Vector Store Setup:
+   - Configure the OpenAI embeddings API for creating vectorized content
+   - Set up a vector database to store embeddings (using OpenAI or an alternative like Faiss)
+   - Create functions to add, update, and retrieve vectors
+   - Implement proper error handling for API interactions
+
+2. Industry Knowledge Base:
+   - Create embeddings for industry-specific guidelines and best practices
+   - Index resume templates and examples for different industries
+   - Store information about common job requirements by industry
+   - Import existing industry guidance from the prompts.py file
+
+3. Retrieval System:
+   - Implement functions to retrieve relevant industry guidance based on job descriptions
+   - Create methods for finding similar resumes or templates
+   - Set up relevance scoring for retrieval results
+   - Implement pagination and filtering for efficient retrieval
+
+4. Agent Integration:
+   - Design a system to inject relevant retrieved content into agent context
+   - Create a wrapper for enriching prompts with industry-specific knowledge
+   - Ensure the system can be used with both evaluator and optimizer agents
+   - Add telemetry to track retrieval effectiveness
+
+Follow the project's modular architecture and provide thorough documentation.
+```
+
+### Prompt 8: Update API Endpoints for Agent Integration
+
+```
+Update the API endpoints to use the new openai_agents_service module instead of claude_service.
 The implementation should:
-1. Define a JSON schema for the CustomizationPlan output
-2. Set up function calling parameters for the OpenAI Responses API
-3. Parse the response and convert to the CustomizationPlan model
-4. Handle error cases with appropriate fallbacks
-5. Match the original function's signature and behavior
-Follow the project's error handling patterns and coding style.
+
+1. Update ATS Endpoints (app/api/endpoints/ats.py):
+   - Import the openai_agents_service module instead of claude_service
+   - Update all function calls to use the new service
+   - Keep the same API interface and response formats
+   - Add any necessary error handling specific to the Agents SDK
+   - Add logging for tracking agent-specific metrics
+
+2. Update Customization Endpoints (app/api/endpoints/customize.py):
+   - Switch all Claude-specific imports to the new OpenAI Agents service
+   - Maintain the existing API contracts and input/output formats
+   - Add specific error handling for agent errors
+   - Ensure all existing functionality is preserved
+   - Add telemetry to compare performance with Claude
+
+3. Update Cover Letter Endpoints (app/api/endpoints/cover_letter.py):
+   - Replace Claude service calls with the equivalent Agent SDK calls
+   - Preserve the same interface for backward compatibility
+   - Add proper error handling for agent-specific errors
+   - Update logging to include agent-specific information
+
+4. Testing & Validation:
+   - Add validation checks to ensure outputs match expected formats
+   - Include fallback mechanisms for handling agent errors
+   - Update error messages to be specific to the Agents SDK
+
+Follow the project's existing API architecture and error handling patterns.
 ```
 
-### Prompt 5: Create Evaluator-Optimizer Agents
+### Prompt 9: Cost Tracking and Optimization Module
 
 ```
-Create a module for implementing the evaluator-optimizer pattern using the OpenAI Agents SDK.
-The module should:
-1. Define the Evaluator Agent with instructions for resume evaluation
-2. Define the Optimizer Agent with instructions for resume customization
-3. Implement the workflow to connect these agents in an iterative feedback loop
-4. Include custom tools for enhanced functionality (keyword extraction, ATS simulation)
-5. Provide proper error handling and retry logic
-The implementation should match the project's architecture and follow best practices for agent design.
+Create a module for tracking, analyzing, and optimizing OpenAI API costs when using the Agents SDK.
+The implementation should include:
+
+1. Token Usage Tracking:
+   - Implement token counting for requests and responses
+   - Create functions to estimate input and output tokens for different models
+   - Set up a system to log token usage per request type
+   - Implement aggregation for usage statistics
+   - Add visualization helpers for usage trends
+
+2. Cost Estimation:
+   - Create a cost calculator for different OpenAI models
+   - Add specific pricing for all models (GPT-4o, o3, o3-mini, etc.)
+   - Implement functions to estimate costs for different operations
+   - Add budget tracking and alerting for cost thresholds
+   - Create reporting tools for cost analysis
+
+3. Optimization Strategies:
+   - Implement automated model selection based on task complexity
+   - Create prompt optimization tools to reduce token usage
+   - Add batch processing for efficiency when possible
+   - Implement caching mechanisms for common requests
+   - Create a system for breaking large requests into smaller chunks
+
+4. Configuration & Monitoring:
+   - Create a configuration system for cost-related settings
+   - Add monitoring dashboards for real-time usage tracking
+   - Implement alerting for unusual spending patterns
+   - Create a reporting system for usage statistics
+
+Follow the project's architecture and provide thorough documentation for all features.
 ```
 
-### Prompt 6: Implement Vector Store Integration
+### Prompt 10: Create Custom Tools for Resume Analysis
 
 ```
-Create a module for integrating vector databases with the application. The module should:
-1. Set up a connection to a vector database (e.g., Pinecone or similar)
-2. Implement functions to index and retrieve industry guidelines
-3. Create RAG pipelines for enhancing prompts with relevant knowledge
-4. Include error handling and performance optimization
-5. Support integration with both Responses API and Agents SDK
-Follow the project's modular architecture and error handling patterns.
+Implement custom tools for the resume analysis process using the OpenAI Agents SDK function_tool decorator.
+The implementation should include:
+1. A keyword extraction tool that identifies important keywords from job descriptions
+2. An ATS simulation tool that evaluates how well a resume would perform in an ATS system
+3. A formatting analysis tool that checks for resume formatting issues
+4. A custom job-match scoring tool that calculates match percentages
+5. Proper error handling for all tools
+6. Clear documentation for each tool
+7. Integration with the evaluator and optimizer agents
+
+These tools should enhance the capabilities of the agents while maintaining the existing API interface.
 ```
 
-### Prompt 7: Update ATS Endpoints
+### Prompt 11: Testing Framework for Agent Implementation
 
 ```
-Update the app/api/endpoints/ats.py module to use the new OpenAI service instead of Claude.
-The changes should:
-1. Import the openai_service module instead of claude_service
-2. Keep the same API interface and response formats
-3. Add any necessary error handling for the new service
-4. Update logging to track OpenAI-specific metrics
-5. Maintain backward compatibility with existing clients
-Ensure the code follows the project's style and error handling patterns.
+Create a comprehensive testing framework for validating the OpenAI Agents SDK implementation.
+The implementation should include:
+
+1. Agent Testing Utilities:
+   - Create mock agents for testing purposes
+   - Implement fixtures for consistent test environments
+   - Add helpers for validating agent outputs
+   - Create tools for tracking agent performance metrics
+   - Implement comparison testing between Claude and Agent outputs
+
+2. Integration Tests:
+   - Create tests for all main API functions
+   - Implement tests for the evaluator-optimizer workflow
+   - Add tests for the custom tools
+   - Create tests for error handling and edge cases
+   - Implement tests for different customization levels
+
+3. Performance Benchmarking:
+   - Create benchmarks for response time comparison
+   - Implement tools for measuring token efficiency
+   - Add quality comparison metrics
+   - Create tests for different models (GPT-4o, o3, o3-mini)
+   - Add functions for visualizing benchmark results
+
+4. Validation Framework:
+   - Implement schema validation for all agent outputs
+   - Create content validation for specific output types
+   - Add validation for agent-to-agent communication
+   - Implement consistency checks for agent outputs
+   - Create regression testing tools
+
+Follow the project's existing testing conventions and provide thorough documentation.
 ```
 
-### Prompt 8: Implementation of Cost Tracking
+### Prompt 12: Documentation Update
 
 ```
-Create a module for tracking and optimizing OpenAI API usage costs. The module should:
-1. Implement token counting for requests and responses
-2. Create functions to estimate costs for different operations and models
-3. Add logging for token usage and estimated costs
-4. Implement model selection logic to optimize for cost (including o-series models)
-5. Create helpers for breaking large requests into smaller chunks
-Match the project's overall architecture and logging approach.
-```
+Update the project documentation to reflect the direct OpenAI Agents SDK migration. The documentation should:
+1. Describe the new Agents SDK architecture and how it implements the evaluator-optimizer pattern
+2. Update API documentation to highlight the preserved backward compatibility
+3. Add troubleshooting information for common issues with the Agents SDK
+4. Include cost estimation and optimization guidelines for OpenAI models
+5. Provide examples of how the system uses specialized agents for different tasks
+6. Explain the structured output schemas and how they maintain compatibility
+7. Add clear installation and configuration instructions
+8. Include performance comparisons between Claude and the Agents SDK implementation
 
-### Prompt 9: Testing Framework for API Migration
-
-```
-Create testing utilities for validating the OpenAI API migration. The code should:
-1. Create test cases for comparing Claude and OpenAI outputs
-2. Implement validation for output structure and content
-3. Create benchmarking tools for performance comparison
-4. Add tests for error conditions and edge cases
-5. Support both synchronous and asynchronous testing
-Follow the project's testing patterns and convention.
-```
-
-### Prompt 10: Documentation Update
-
-```
-Update the project documentation to reflect the OpenAI migration. The documentation should:
-1. Describe the new OpenAI functionality including Responses API and Agents SDK
-2. Update API documentation with any changes
-3. Add troubleshooting information for common issues
-4. Include cost estimation and optimization guidelines
-5. Provide examples of using the new features
 Follow the existing documentation format and style.
 ```
 
 ## Next Steps and Considerations
 
-- **Evaluation**: Test each phase thoroughly before proceeding
+- **Evaluation**: Test the Agents SDK implementation thoroughly against Claude results
 - **Rollback Plan**: Maintain the ability to switch back to Claude if needed
-- **A/B Testing**: Consider running both APIs in parallel to compare results
+- **A/B Testing**: Consider running both services in parallel to compare results
 - **Cost Monitoring**: Implement detailed monitoring of API costs
-- **Prompt Optimization**: Continuously refine prompts for best results
-- **Model Selection**: Evaluate o-series models for reasoning tasks
-- **Future-Proofing**: Use Responses API to avoid future migration from Assistants API
-- **Agents SDK**: Explore advanced orchestration capabilities for complex workflows
-- **Evaluator-Optimizer Loop**: Fine-tune the feedback loop for optimal resume customization
+- **Prompt Optimization**: Continuously refine agent instructions for best results
+- **Model Selection**: Test different models (GPT-4o, o3, o3-mini) to optimize cost/performance
+- **Tool Enhancement**: Expand the custom tools for additional capabilities
+- **Agent Refinement**: Optimize agent configurations based on performance data
+- **Evaluator-Optimizer Loop**: Fine-tune the iteration parameters for optimal results
