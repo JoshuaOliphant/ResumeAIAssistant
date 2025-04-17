@@ -2,7 +2,7 @@
  * API client for interacting with the Resume AI Assistant backend
  */
 
-import { API_BASE_URL } from "@/lib/api-config";
+import { API_BASE_URL, BACKEND_API_URL, API_VERSION } from "@/lib/api-config";
 
 
 
@@ -131,13 +131,25 @@ async function fetchWithAuth(
   };
 
   try {
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    // Ensure endpoint has correct versioning prefix
+    const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+    // Use BACKEND_API_URL with single API_VERSION to avoid double prefixing
+    const fullUrl = `${BACKEND_API_URL}${API_VERSION}${cleanEndpoint}`;
+    console.log(`Fetching from: ${fullUrl}`);
+    const response = await fetch(fullUrl, {
       ...options,
       headers,
     });
-
+    
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+    
     // Read the response body
-    const data = await response.json().catch(() => ({}));
+    const data = await response.json().catch((err) => {
+      console.error(`Error parsing JSON: ${err.message}`);
+      return {};
+    });
+    
+    console.log(`Response data:`, data);
 
     // Check if the request was successful
     if (!response.ok) {
@@ -165,7 +177,7 @@ export const AuthService = {
       formData.append('username', credentials.username);
       formData.append('password', credentials.password);
 
-      const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      const response = await fetch(`${BACKEND_API_URL}${API_VERSION}/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -217,7 +229,7 @@ export const AuthService = {
     full_name?: string;
   }): Promise<User> {
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/register`, {
+      const response = await fetch(`${BACKEND_API_URL}${API_VERSION}/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -287,14 +299,14 @@ export const ResumeService = {
     id: string,
     updates: { title?: string; content?: string }
   ): Promise<Resume> {
-    return fetchWithAuth(`/api/v1/resumes/${id}`, {
+    return fetchWithAuth(`/resumes/${id}`, {
       method: 'PUT',
       body: JSON.stringify(updates),
     });
   },
 
   async deleteResume(id: string): Promise<void> {
-    return fetchWithAuth(`/api/v1/resumes/${id}`, {
+    return fetchWithAuth(`/resumes/${id}`, {
       method: 'DELETE',
     });
   },
@@ -407,13 +419,41 @@ export const ATSService = {
     resumeId: string,
     jobDescriptionId: string
   ): Promise<ATSAnalysisResult> {
-    return fetchWithAuth('/ats/analyze', {
-      method: 'POST',
-      body: JSON.stringify({
-        resume_id: resumeId,
-        job_description_id: jobDescriptionId,
-      }),
+    console.log('ATSService.analyzeResume - input params:', { resumeId, jobDescriptionId });
+    const requestBody = JSON.stringify({
+      resume_id: resumeId,
+      job_description_id: jobDescriptionId,
     });
+    console.log('ATSService.analyzeResume - request body:', requestBody);
+    
+    // Bypass NextJS API routes and go directly to the backend
+    // to avoid path prefixing issues
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const response = await fetch(`${BACKEND_API_URL}/api/v1/ats/analyze`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: requestBody,
+    });
+    
+    console.log(`Response status: ${response.status} ${response.statusText}`);
+    
+    const data = await response.json().catch((err) => {
+      console.error(`Error parsing JSON: ${err.message}`);
+      return {};
+    });
+    
+    if (!response.ok) {
+      throw new ApiError(
+        response.status,
+        data.detail || 'An error occurred',
+        data
+      );
+    }
+    
+    return data;
   },
 
   // Direct content analysis (without saving)
@@ -429,6 +469,40 @@ export const ATSService = {
       }),
     });
   },
+  
+  // Advanced AI-driven analysis for creating better customization plans
+  async analyzeAndPlan(
+    resumeId: string,
+    jobDescriptionId: string,
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced'
+  ): Promise<any> {
+    return fetchWithAuth('/ats/analyze-and-plan', {
+      method: 'POST',
+      body: JSON.stringify({
+        resume_id: resumeId,
+        job_description_id: jobDescriptionId,
+        customization_level: customizationLevel === 'conservative' ? 1 : 
+                            customizationLevel === 'balanced' ? 2 : 3,
+      }),
+    });
+  },
+  
+  // Direct content advanced analysis (without saving)
+  async analyzeContentAndPlan(
+    resumeContent: string,
+    jobDescriptionContent: string,
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced'
+  ): Promise<any> {
+    return fetchWithAuth('/ats/analyze-content-and-plan', {
+      method: 'POST',
+      body: JSON.stringify({
+        resume_content: resumeContent,
+        job_description_content: jobDescriptionContent,
+        customization_level: customizationLevel === 'conservative' ? 1 : 
+                            customizationLevel === 'balanced' ? 2 : 3,
+      }),
+    });
+  },
 };
 
 // Customization
@@ -436,31 +510,120 @@ export const CustomizationService = {
   async customizeResume(
     resumeId: string,
     jobDescriptionId: string,
-    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced'
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced',
+    customizationPlan?: any
   ): Promise<ResumeVersion> {
-    return fetchWithAuth('/customize/', {
-      method: 'POST',
-      body: JSON.stringify({
-        resume_id: resumeId,
-        job_description_id: jobDescriptionId,
-        customization_strength: customizationLevel === 'conservative' ? 1 : customizationLevel === 'balanced' ? 2 : 3,
-        focus_areas: '',
-      }),
+    console.log('customizeResume - input params:', { 
+      resumeId, 
+      jobDescriptionId, 
+      customizationLevel,
+      hasPlan: !!customizationPlan
     });
+    
+    const requestBody = JSON.stringify({
+      resume_id: resumeId,
+      job_description_id: jobDescriptionId,
+      customization_strength: customizationLevel === 'conservative' ? 1 : customizationLevel === 'balanced' ? 2 : 3,
+      focus_areas: '',
+      customization_plan: customizationPlan || undefined,
+    });
+    
+    // Bypass NextJS API routes and go directly to the backend
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const response = await fetch(`${BACKEND_API_URL}/api/v1/customize/`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: requestBody,
+    });
+    
+    console.log(`Customize response status: ${response.status} ${response.statusText}`);
+    
+    const data = await response.json().catch((err) => {
+      console.error(`Error parsing customize response JSON: ${err.message}`);
+      return {};
+    });
+    
+    if (!response.ok) {
+      throw new ApiError(
+        response.status,
+        data.detail || 'Failed to customize resume',
+        data
+      );
+    }
+    
+    return data;
   },
 
   // Direct content customization (without saving)
   async customizeContent(
     resumeContent: string,
-    jobDescriptionContent: string
+    jobDescriptionContent: string,
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced',
+    customizationPlan?: any
   ): Promise<{ customized_content: string }> {
     return fetchWithAuth('/customize/content', {
       method: 'POST',
       body: JSON.stringify({
         resume_content: resumeContent,
         job_description_content: jobDescriptionContent,
+        customization_strength: customizationLevel === 'conservative' ? 1 : customizationLevel === 'balanced' ? 2 : 3,
+        customization_plan: customizationPlan || undefined,
       }),
     });
+  },
+  
+  // Generate an advanced customization plan only (without implementing)
+  async generateCustomizationPlan(
+    resumeId: string,
+    jobDescriptionId: string,
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced',
+    atsAnalysis?: any
+  ): Promise<any> {
+    console.log('generateCustomizationPlan - input params:', { 
+      resumeId, 
+      jobDescriptionId, 
+      customizationLevel,
+      hasAnalysis: !!atsAnalysis
+    });
+    
+    const requestBody = JSON.stringify({
+      resume_id: resumeId,
+      job_description_id: jobDescriptionId,
+      customization_strength: customizationLevel === 'conservative' ? 1 : customizationLevel === 'balanced' ? 2 : 3,
+      ats_analysis: atsAnalysis || undefined,
+    });
+    
+    // Use NextJS API routes to handle the request instead of direct backend call
+    // This ensures proper error handling and authentication forwarding
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const response = await fetch('/api/customize/plan', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+      },
+      body: requestBody,
+    });
+    
+    console.log(`Plan response status: ${response.status} ${response.statusText}`);
+    
+    const data = await response.json().catch((err) => {
+      console.error(`Error parsing plan JSON: ${err.message}`);
+      return {};
+    });
+    
+    if (!response.ok) {
+      throw new ApiError(
+        response.status,
+        data.detail || 'Failed to generate customization plan',
+        data
+      );
+    }
+    
+    return data;
   },
 };
 

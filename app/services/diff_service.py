@@ -179,14 +179,20 @@ def analyze_section_changes(original_text: str, customized_text: str) -> Dict[st
             section_analysis[section_name] = {
                 "status": "added",
                 "change_percentage": 100.0,
-                "content_length": len(cust_content)
+                "content_length": len(cust_content),
+                "changes": 0,
+                "additions": len(cust_content),
+                "deletions": 0
             }
         elif orig_content and not cust_content:
             # Section removed
             section_analysis[section_name] = {
                 "status": "removed",
                 "change_percentage": 100.0,
-                "content_length": len(orig_content)
+                "content_length": len(orig_content),
+                "changes": 0,
+                "additions": 0,
+                "deletions": len(orig_content)
             }
         else:
             # Section exists in both - calculate differences
@@ -208,7 +214,11 @@ def analyze_section_changes(original_text: str, customized_text: str) -> Dict[st
                 "status": status,
                 "change_percentage": round(change_percentage, 1),
                 "stats": stats,
-                "content_length": len(cust_content)
+                "content_length": len(cust_content),
+                # Add these properties that the frontend component expects
+                "changes": stats["modifications"],
+                "additions": stats["additions"],
+                "deletions": stats["deletions"]
             }
     
     return section_analysis

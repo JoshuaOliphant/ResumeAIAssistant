@@ -24,6 +24,14 @@ type CustomizationStage = 'analysis' | 'plan' | 'implementation' | 'complete';
 // Define customization level type
 type CustomizationLevel = 'conservative' | 'balanced' | 'extensive';
 
+// Define KeywordMatch interface to match the backend schema
+interface KeywordMatch {
+  keyword: string;
+  count_in_resume?: number;
+  count_in_job?: number;
+  is_match?: boolean;
+}
+
 // Define customization plan interface
 interface CustomizationPlan {
   summary: string;
@@ -139,11 +147,13 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       console.log("Analyzing resume and job description...");
       
       try {
-        // Use ATSService to analyze the resume against the job description
+        // Step 1: Basic keyword analysis using ATSService
+        console.log("Step 1: Performing basic keyword analysis...");
+        console.log(`Analyzing resume ID: ${resumeId}, job ID: ${jobId}`);
         const analysisResult = await ATSService.analyzeResume(resumeId, jobId);
-        console.log("Analysis result:", analysisResult);
+        console.log("Basic analysis result:", analysisResult);
         
-        // Move to the plan stage
+        // Step 2: Move to the plan stage with AI-enhanced analysis
         setStage('plan');
         
         // Reset progress for the next stage
@@ -152,42 +162,94 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
           setProgressTimer(null);
         }
         
-        // Extract keywords and format them properly for display
-        const keywordsToAdd = Array.isArray(analysisResult.missing_keywords_rich) 
-          ? analysisResult.missing_keywords_rich.map(item => item.keyword) 
-          : (Array.isArray(analysisResult.missing_keywords) 
-              ? analysisResult.missing_keywords 
-              : []);
-        
-        // Create a customization plan from the analysis result
-        const plan = {
-          summary: `Your resume has a ${analysisResult.match_score}% match with the job description. We've identified opportunities to improve this match.`,
-          job_analysis: `The job requires skills related to: ${keywordsToAdd.slice(0, 5).join(', ')}`,
-          keywords_to_add: keywordsToAdd,
-          formatting_suggestions: analysisResult.improvements?.filter(imp => 
-            imp.category.includes("Format") || 
-            imp.category.includes("Structure") || 
-            imp.suggestion.includes("format")
-          ).map(imp => imp.suggestion) || [
-            "Add more specific technical skills mentioned in the job description",
-            "Quantify your achievements with metrics",
-            "Use more powerful action verbs to describe your accomplishments"
-          ],
-          recommendations: analysisResult.improvements?.map(imp => ({
-            section: imp.category,
-            what: imp.priority === 1 ? "Critical" : imp.priority === 2 ? "Important" : "Helpful",
-            why: imp.suggestion,
-            before_text: "Original content will be improved",
-            after_text: "Customized with job-specific details",
-            description: imp.suggestion
-          })) || []
-        };
-        
-        // Set customization plan
-        setCustomizationPlan(plan);
-        setLoading(false);
+        // Step 3: Use enhanced AI analysis to create a better customization plan
+        console.log("Step 2: Generating AI-enhanced customization plan...");
+        try {
+          // Try to use the AI-enhanced customization plan generator
+          const enhancedPlan = await CustomizationService.generateCustomizationPlan(
+            resumeId,
+            jobId,
+            customizationLevel,
+            analysisResult
+          );
+          
+          console.log("Enhanced plan generated:", enhancedPlan);
+          
+          // Set the enhanced customization plan
+          setCustomizationPlan(enhancedPlan);
+          setLoading(false);
+        } catch (enhancedPlanError) {
+          console.error("Error generating enhanced plan:", enhancedPlanError);
+          console.log("Falling back to basic plan generation...");
+          
+          // Extract keywords and format them properly for display as fallback
+          const keywordsToAdd = Array.isArray(analysisResult.missing_keywords_rich) 
+            ? analysisResult.missing_keywords_rich.map(item => {
+                if (typeof item === 'object' && item !== null) {
+                  // Type assertion to KeywordMatch
+                  const keywordItem = item as unknown as KeywordMatch;
+                  return typeof keywordItem.keyword === 'string' ? keywordItem.keyword : String(keywordItem.keyword || '');
+                }
+                return String(item || '');
+              })
+            : (Array.isArray(analysisResult.missing_keywords) 
+                ? analysisResult.missing_keywords.map(item => {
+                    if (typeof item === 'object' && item !== null) {
+                      // Type assertion to KeywordMatch
+                      const keywordItem = item as unknown as KeywordMatch;
+                      if (typeof keywordItem.keyword === 'string') {
+                        return keywordItem.keyword;
+                      }
+                      // Otherwise stringify but remove curly braces
+                      const str = JSON.stringify(item);
+                      return str.replace(/[{}]/g, '').replace(/"/g, '');
+                    }
+                    return String(item || '');
+                  })
+                : []);
+          
+          // Create a basic customization plan from the analysis result as fallback
+          const fallbackPlan = {
+            summary: `Your resume has a ${analysisResult.match_score || 0}% match with the job description. We've identified opportunities to improve this match.`,
+            job_analysis: `The job requires skills related to: ${Array.isArray(keywordsToAdd) && keywordsToAdd.length > 0 ? keywordsToAdd.slice(0, 5).map(kw => typeof kw === 'string' ? kw : String(kw || '')).join(', ') : 'relevant skills'}`,
+            keywords_to_add: keywordsToAdd,
+            formatting_suggestions: Array.isArray(analysisResult.improvements) 
+              ? analysisResult.improvements
+                  .filter(imp => 
+                    typeof imp === 'object' && imp !== null &&
+                    typeof imp.category === 'string' && typeof imp.suggestion === 'string' &&
+                    (imp.category.includes("Format") || 
+                    imp.category.includes("Structure") || 
+                    imp.suggestion.includes("format"))
+                  )
+                  .map(imp => imp.suggestion)
+              : [
+                  "Add more specific technical skills mentioned in the job description",
+                  "Quantify your achievements with metrics",
+                  "Use more powerful action verbs to describe your accomplishments"
+                ],
+            recommendations: Array.isArray(analysisResult.improvements)
+              ? analysisResult.improvements
+                  .filter(imp => typeof imp === 'object' && imp !== null)
+                  .map(imp => ({
+                    section: typeof imp.category === 'string' ? imp.category : 'General',
+                    what: typeof imp.priority === 'number' 
+                      ? (imp.priority === 1 ? "Critical" : imp.priority === 2 ? "Important" : "Helpful")
+                      : "Helpful",
+                    why: typeof imp.suggestion === 'string' ? imp.suggestion : 'Improvement suggestion',
+                    before_text: "Original content will be improved",
+                    after_text: "Customized with job-specific details",
+                    description: typeof imp.suggestion === 'string' ? imp.suggestion : 'Improvement suggestion'
+                  }))
+              : []
+          };
+          
+          // Set fallback customization plan
+          setCustomizationPlan(fallbackPlan);
+          setLoading(false);
+        }
       } catch (analysisError) {
-        // If analysis fails, log the error and proceed directly to implementation
+        // If initial analysis fails, log the error and proceed directly to implementation
         console.error("Error during analysis stage:", analysisError);
         console.log("Proceeding directly to implementation stage...");
         
@@ -214,22 +276,20 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       setStage('implementation');
       setError(null);
       
-      // In a real application, this would be an API call to customize the resume
-      // using the RESUME_CUSTOMIZATION_IMPLEMENTATION_PROMPT with the customization plan
-      // and the customization level
-      
       // Add the level-specific prompt additions
       const levelPrompt = getCustomizationLevelPrompt(customizationLevel);
       console.log("Using customization level:", customizationLevel, levelPrompt);
       
       // Call the API to customize resume
       console.log("Starting resume customization:", resumeId, jobId, "with level:", customizationLevel);
+      console.log("Using customization plan:", customizationPlan);
       
-      // Pass the customization level to the API
+      // Pass the customization level and plan to the API
       const result = await CustomizationService.customizeResume(
         resumeId,
         jobId,
-        customizationLevel
+        customizationLevel,
+        customizationPlan
       );
       console.log("Customization result:", result);
       
@@ -383,18 +443,22 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
             
             <div className="space-y-2">
               <h4 className="text-md font-medium">Job Analysis</h4>
-              <p className="text-sm text-muted-foreground">{customizationPlan.job_analysis}</p>
+              <p className="text-sm text-muted-foreground">
+                {typeof customizationPlan.job_analysis === 'string' 
+                  ? customizationPlan.job_analysis 
+                  : 'The job requires skills related to relevant technologies and experience.'}
+              </p>
             </div>
             
             <div className="space-y-2">
               <h4 className="text-md font-medium">Keywords to Add</h4>
               <div className="flex flex-wrap gap-2">
-                {customizationPlan.keywords_to_add.map((keyword, index) => (
+                {Array.isArray(customizationPlan.keywords_to_add) && customizationPlan.keywords_to_add.map((keyword, index) => (
                   <span 
                     key={index} 
                     className="px-2 py-1 text-xs bg-primary/10 rounded-full text-primary-foreground"
                   >
-                    {keyword}
+                    {typeof keyword === 'string' ? keyword : String(keyword)}
                   </span>
                 ))}
               </div>
@@ -403,8 +467,8 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
             <div className="space-y-2">
               <h4 className="text-md font-medium">Formatting Suggestions</h4>
               <ul className="space-y-1 list-disc list-inside text-sm text-muted-foreground">
-                {customizationPlan.formatting_suggestions.map((suggestion, index) => (
-                  <li key={index}>{suggestion}</li>
+                {Array.isArray(customizationPlan.formatting_suggestions) && customizationPlan.formatting_suggestions.map((suggestion, index) => (
+                  <li key={index}>{typeof suggestion === 'string' ? suggestion : String(suggestion)}</li>
                 ))}
               </ul>
             </div>
@@ -412,23 +476,23 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
             <div className="space-y-2">
               <h4 className="text-md font-medium">Recommended Changes</h4>
               <div className="space-y-4">
-                {customizationPlan.recommendations.map((rec, index) => (
+                {Array.isArray(customizationPlan.recommendations) && customizationPlan.recommendations.map((rec, index) => (
                   <div key={index} className="border rounded-md p-3 space-y-2">
                     <div className="flex justify-between items-start">
-                      <span className="font-medium text-sm">{rec.section}</span>
+                      <span className="font-medium text-sm">{typeof rec.section === 'string' ? rec.section : 'General'}</span>
                       <span className="text-xs bg-primary/20 px-2 py-0.5 rounded-full">
-                        {rec.what}
+                        {typeof rec.what === 'string' ? rec.what : 'Improvement'}
                       </span>
                     </div>
-                    <p className="text-xs text-muted-foreground">{rec.why}</p>
+                    <p className="text-xs text-muted-foreground">{typeof rec.why === 'string' ? rec.why : 'Suggested improvement'}</p>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
                       <div className="bg-muted/50 p-2 rounded text-xs">
                         <div className="text-muted-foreground mb-1">Before:</div>
-                        <div>{rec.before_text}</div>
+                        <div>{typeof rec.before_text === 'string' ? rec.before_text : 'Original content'}</div>
                       </div>
                       <div className="bg-primary/5 p-2 rounded text-xs">
                         <div className="text-primary mb-1">After:</div>
-                        <div>{rec.after_text}</div>
+                        <div>{typeof rec.after_text === 'string' ? rec.after_text : 'Improved content'}</div>
                       </div>
                     </div>
                   </div>

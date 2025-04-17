@@ -41,10 +41,68 @@ export function CustomizationResult({ resumeId, versionId, originalVersionId }: 
         setCustomizedVersion(resume.current_version);
         console.log("Set customized version:", resume.current_version);
         
-        // Get resume diff
-        const diff = await ResumeService.getResumeDiff(resumeId, resume.current_version.id, originalVersionId)
-        setResumeDiff(diff)
-        console.log("Set resume diff:", diff);
+        try {
+          // Get resume diff - handle this separately so if it fails, we still show the resume
+          const diff = await ResumeService.getResumeDiff(resumeId, resume.current_version.id, originalVersionId)
+          console.log("Got resume diff:", diff);
+          
+          // Make sure the diff has the required properties
+          if (!diff.section_analysis) {
+            console.warn("Diff is missing section_analysis, adding an empty object");
+            diff.section_analysis = {};
+          }
+          
+          if (!diff.diff_statistics) {
+            console.warn("Diff is missing diff_statistics, adding default values");
+            diff.diff_statistics = {
+              additions: 0,
+              deletions: 0,
+              modifications: 0
+            };
+          }
+
+          // Ensure original and customized content are strings
+          if (!diff.original_content || typeof diff.original_content !== 'string') {
+            console.warn("Diff is missing or invalid original_content, using empty string");
+            diff.original_content = "";
+          }
+          
+          if (!diff.customized_content || typeof diff.customized_content !== 'string') {
+            console.warn("Diff is missing or invalid customized_content, using empty string");
+            diff.customized_content = "";
+          }
+          
+          // Strip any HTML from the content that might interfere with the diff viewer
+          if (diff.original_content.includes('<span') || diff.original_content.includes('</span>')) {
+            console.warn("Stripping HTML from original_content");
+            diff.original_content = diff.original_content.replace(/<\/?[^>]+(>|$)/g, "");
+          }
+          
+          if (diff.customized_content.includes('<span') || diff.customized_content.includes('</span>')) {
+            console.warn("Stripping HTML from customized_content");
+            diff.customized_content = diff.customized_content.replace(/<\/?[^>]+(>|$)/g, "");
+          }
+          
+          setResumeDiff(diff)
+          console.log("Set resume diff:", diff);
+        } catch (diffErr) {
+          console.error("Error fetching diff:", diffErr);
+          // Create a minimal valid diff object to avoid rendering errors
+          setResumeDiff({
+            id: resumeId,
+            title: resume.title,
+            original_content: resume.current_version?.content?.replace(/<\/?[^>]+(>|$)/g, "") || "",
+            customized_content: resume.current_version?.content?.replace(/<\/?[^>]+(>|$)/g, "") || "",
+            diff_content: "",
+            diff_statistics: {
+              additions: 0,
+              deletions: 0,
+              modifications: 0
+            },
+            section_analysis: {},
+            is_diff_view: false
+          });
+        }
       } catch (err) {
         console.error("Error fetching customization result:", err)
         setError(err instanceof Error ? err.message : "Failed to load customization result")
@@ -176,7 +234,10 @@ export function CustomizationResult({ resumeId, versionId, originalVersionId }: 
             
             <TabsContent value="changes" className="mt-0">
               {resumeDiff ? (
-                <ResumeDiffView resumeDiff={resumeDiff} />
+                <>
+                  {console.log("About to render ResumeDiffView with:", resumeDiff)}
+                  <ResumeDiffView resumeDiff={resumeDiff} />
+                </>
               ) : (
                 <div className="p-4 bg-muted rounded-md">
                   <p className="text-muted-foreground">No difference data available.</p>
