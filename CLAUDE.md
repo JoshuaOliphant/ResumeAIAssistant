@@ -7,6 +7,10 @@
 - Run all tests: `python test_api.py`
 - Run single test: `python -c "import test_api; test_api.test_NAME()"`
 - Run basic tests: `python test_basic.py`
+- This project uses `uv`, not `pip` for dependency management.
+- Add new dependencies with `uv add ...`.
+- This project has a virtual environment that needs to be sourced.
+- After sourcing the virtual environment, `uv sync` can be used to sync the dependencies.
 
 ## Frontend Development (Next.js)
 - Location: `/nextjs-frontend` directory

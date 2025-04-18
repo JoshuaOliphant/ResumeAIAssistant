@@ -3,3 +3,4 @@ from app.db.session import Base
 from app.models.resume import Resume, ResumeVersion
 from app.models.job import JobDescription
 from app.models.user import User
+from app.models.customization import CustomizationPlan

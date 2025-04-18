@@ -8,9 +8,9 @@ from pprint import pprint
 
 # Set up the environment for testing
 os.environ["OPENAI_API_KEY"] = os.environ.get("OPENAI_API_KEY", "dummy-key-for-testing")
-os.environ["OPENAI_MODEL"] = "gpt-4o-2024-05-13"  # Use actual model for testing
-os.environ["OPENAI_EVALUATOR_MODEL"] = "gpt-4o-2024-05-13"  # Use actual model for testing
-os.environ["OPENAI_OPTIMIZER_MODEL"] = "gpt-4o-2024-05-13"  # Use actual model for testing
+os.environ["OPENAI_MODEL"] = "o4-mini"  # Use cost-efficient model with reasoning capabilities for testing
+os.environ["OPENAI_EVALUATOR_MODEL"] = "o4-mini"  # Use cost-efficient model with reasoning capabilities for testing
+os.environ["OPENAI_OPTIMIZER_MODEL"] = "o4-mini"  # Use cost-efficient model with reasoning capabilities for testing
 
 import logfire
 from app.services.openai_agents_service import evaluate_resume_job_match, generate_optimization_plan, customize_resume

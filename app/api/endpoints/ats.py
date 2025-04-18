@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import logfire
+import traceback
 
 from app.db.session import get_db
 from app.models.resume import Resume, ResumeVersion
@@ -134,9 +135,11 @@ async def analyze_and_generate_plan(
             
     except Exception as e:
         # Handle unexpected errors
-        logfire.exception(
+        logfire.error(
             "Unexpected error in analyze-and-plan",
             error=str(e),
+            error_type=type(e).__name__,
+            traceback=traceback.format_exception(type(e), e, e.__traceback__),
             resume_id=request.resume_id,
             job_id=request.job_description_id
         )
@@ -181,9 +184,11 @@ async def analyze_resume_content(
         
     except Exception as e:
         # Handle unexpected errors
-        logfire.exception(
+        logfire.error(
             "Error analyzing resume content",
-            error=str(e)
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=traceback.format_exception(type(e), e, e.__traceback__)
         )
         raise HTTPException(
             status_code=500, 
@@ -246,9 +251,11 @@ async def analyze_content_and_generate_plan(
         
     except Exception as e:
         # Handle unexpected errors
-        logfire.exception(
+        logfire.error(
             "Error in content-based analyze-and-plan",
-            error=str(e)
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=traceback.format_exception(type(e), e, e.__traceback__)
         )
         raise HTTPException(
             status_code=500, 

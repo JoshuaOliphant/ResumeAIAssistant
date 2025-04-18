@@ -10,11 +10,22 @@ from typing import Optional, Dict, Any, List, Tuple
 import logfire
 from pydantic import BaseModel, Field
 
-# Import from Agents SDK
-from agents import Agent, Runner
+# Import from Agents SDK - wrapped in try/except to handle missing dependencies gracefully
+try:
+    from agents import Agent, Runner
+except ImportError:
+    logfire.error("Agents SDK not installed. Please install with 'pip install openai-agents'")
+    # Create dummy classes to prevent import errors
+    class Agent:
+        def __init__(self, *args, **kwargs):
+            pass
+    class Runner:
+        @staticmethod
+        async def run(*args, **kwargs):
+            raise NotImplementedError("Agents SDK not installed")
 
 from app.core.config import settings
-from app.core.logging import log_function_call, setup_openai_instrumentation
+from app.core.logging import log_function_call
 from app.schemas.customize import CustomizationLevel, CustomizationPlan, RecommendationItem
 
 # Check for OpenAI API key
@@ -41,24 +52,32 @@ def _get_prompts():
         get_customization_level_instructions,
         get_industry_specific_guidance,
         EVALUATOR_PROMPT,
-        OPTIMIZER_PROMPT
+        OPTIMIZER_PROMPT,
+        EVALUATOR_FEEDBACK_PROMPT,
+        OPTIMIZER_FEEDBACK_RESPONSE_PROMPT,
+        MAX_FEEDBACK_ITERATIONS
     )
     return {
         'get_customization_level_instructions': get_customization_level_instructions,
         'get_industry_specific_guidance': get_industry_specific_guidance,
         'EVALUATOR_PROMPT': EVALUATOR_PROMPT,
-        'OPTIMIZER_PROMPT': OPTIMIZER_PROMPT
+        'OPTIMIZER_PROMPT': OPTIMIZER_PROMPT,
+        'EVALUATOR_FEEDBACK_PROMPT': EVALUATOR_FEEDBACK_PROMPT,
+        'OPTIMIZER_FEEDBACK_RESPONSE_PROMPT': OPTIMIZER_FEEDBACK_RESPONSE_PROMPT,
+        'MAX_FEEDBACK_ITERATIONS': MAX_FEEDBACK_ITERATIONS
     }
 
 # Define agent creation functions
 def create_resume_evaluator_agent(customization_level: CustomizationLevel = CustomizationLevel.BALANCED, 
-                                 industry: Optional[str] = None) -> Agent:
+                                 industry: Optional[str] = None, 
+                                 is_feedback_agent: bool = False) -> Agent:
     """
     Create an agent for evaluating resume-job match.
     
     Args:
         customization_level: Level of customization
         industry: Optional industry name for industry-specific guidance
+        is_feedback_agent: Whether this agent is for providing feedback on optimization
         
     Returns:
         OpenAI Agent configured for resume evaluation
@@ -66,50 +85,62 @@ def create_resume_evaluator_agent(customization_level: CustomizationLevel = Cust
     # Get prompts dynamically
     prompts = _get_prompts()
     
-    # Get customization level specific instructions
-    customization_instructions = prompts['get_customization_level_instructions'](customization_level)
-    
-    # Get industry-specific guidance if industry is provided
-    industry_guidance = ""
-    if industry:
-        industry_guidance = prompts['get_industry_specific_guidance'](industry)
-        if industry_guidance:
-            customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
-    
-    # Format the prompt with the customization level instructions
-    prompt_template = prompts['EVALUATOR_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
-    
-    # Add instructions to return JSON format
-    json_instruction = """
-    Your output must be in JSON format with these fields:
-    {
-        "overall_assessment": "Detailed evaluation of how well the resume matches the job",
-        "match_score": 85, // A score from 0-100 representing how well the resume matches the job
-        "job_key_requirements": ["list", "of", "most", "important", "job", "requirements"],
-        "strengths": ["list", "of", "candidate", "strengths", "relative", "to", "job"],
-        "gaps": ["list", "of", "missing", "skills", "or", "experiences"],
-        "term_mismatches": [
-            {
-                "job_term": "required term from job description",
-                "resume_term": "equivalent term used in resume",
-                "context": "brief explanation of the equivalence"
-            }
-        ],
-        "section_evaluations": [
-            {
-                "section": "section name (e.g., Summary, Experience, Skills)",
-                "assessment": "detailed evaluation of how well this section matches job requirements",
-                "improvement_potential": "high/medium/low",
-                "key_issues": ["specific", "issues", "to", "address"],
-                "priority": "high/medium/low"
-            }
-        ],
-        "competitor_analysis": "Brief assessment of how this resume might compare to other candidates based on job market trends",
-        "reframing_opportunities": ["list", "of", "experience", "that", "could", "be", "reframed", "using", "job", "description", "terminology"]
-    }
-    """
-    
-    prompt_template = f"{prompt_template}\n\n{json_instruction}"
+    # Select the appropriate base prompt based on whether this is a feedback agent
+    if is_feedback_agent:
+        prompt_template = prompts['EVALUATOR_FEEDBACK_PROMPT']
+        
+        # No need for customization instructions for feedback agent - it uses a simpler format
+        # Add any industry-specific considerations if relevant
+        if industry:
+            industry_guidance = prompts['get_industry_specific_guidance'](industry)
+            if industry_guidance:
+                prompt_template += f"\n\nConsider this INDUSTRY-SPECIFIC GUIDANCE for {industry.upper()}:\n{industry_guidance}"
+    else:
+        # Standard evaluator agent
+        # Get customization level specific instructions
+        customization_instructions = prompts['get_customization_level_instructions'](customization_level)
+        
+        # Get industry-specific guidance if industry is provided
+        industry_guidance = ""
+        if industry:
+            industry_guidance = prompts['get_industry_specific_guidance'](industry)
+            if industry_guidance:
+                customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
+        
+        # Format the prompt with the customization level instructions
+        prompt_template = prompts['EVALUATOR_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
+        
+        # Add instructions to return JSON format for standard evaluator
+        json_instruction = """
+        Your output must be in JSON format with these fields:
+        {
+            "overall_assessment": "Detailed evaluation of how well the resume matches the job",
+            "match_score": 85, // A score from 0-100 representing how well the resume matches the job
+            "job_key_requirements": ["list", "of", "most", "important", "job", "requirements"],
+            "strengths": ["list", "of", "candidate", "strengths", "relative", "to", "job"],
+            "gaps": ["list", "of", "missing", "skills", "or", "experiences"],
+            "term_mismatches": [
+                {
+                    "job_term": "required term from job description",
+                    "resume_term": "equivalent term used in resume",
+                    "context": "brief explanation of the equivalence"
+                }
+            ],
+            "section_evaluations": [
+                {
+                    "section": "section name (e.g., Summary, Experience, Skills)",
+                    "assessment": "detailed evaluation of how well this section matches job requirements",
+                    "improvement_potential": "high/medium/low",
+                    "key_issues": ["specific", "issues", "to", "address"],
+                    "priority": "high/medium/low"
+                }
+            ],
+            "competitor_analysis": "Brief assessment of how this resume might compare to other candidates based on job market trends",
+            "reframing_opportunities": ["list", "of", "experience", "that", "could", "be", "reframed", "using", "job", "description", "terminology"],
+            "experience_preservation_check": "Confirmation that ALL original experience is preserved in the optimized resume, or specific details of any missing items"
+        }
+        """
+        prompt_template = f"{prompt_template}\n\n{json_instruction}"
     
     # Create the agent using the Agents SDK
     try:
@@ -135,13 +166,15 @@ def create_resume_evaluator_agent(customization_level: CustomizationLevel = Cust
         raise e
 
 def create_resume_optimizer_agent(customization_level: CustomizationLevel = CustomizationLevel.BALANCED, 
-                                 industry: Optional[str] = None) -> Agent:
+                                 industry: Optional[str] = None,
+                                 is_feedback_response: bool = False) -> Agent:
     """
     Create an agent for generating resume optimization plans.
     
     Args:
         customization_level: Level of customization
         industry: Optional industry name for industry-specific guidance
+        is_feedback_response: Whether this agent is responding to evaluator feedback
         
     Returns:
         OpenAI Agent configured for resume optimization
@@ -149,44 +182,57 @@ def create_resume_optimizer_agent(customization_level: CustomizationLevel = Cust
     # Get prompts dynamically
     prompts = _get_prompts()
     
-    # Get customization level specific instructions
-    customization_instructions = prompts['get_customization_level_instructions'](customization_level)
-    
-    # Get industry-specific guidance if industry is provided
-    industry_guidance = ""
-    if industry:
-        industry_guidance = prompts['get_industry_specific_guidance'](industry)
-        if industry_guidance:
-            customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
-    
-    # Format the prompt with the customization level instructions
-    prompt_template = prompts['OPTIMIZER_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
-    
-    # Add instructions to return JSON format
-    json_instruction = """
-    Your output must be in JSON format with these fields:
-    {
-        "summary": "Brief overall assessment of the resume's current alignment with the job",
-        "job_analysis": "Brief analysis of the job description's key requirements and priorities",
-        "keywords_to_add": ["list", "of", "important", "keywords", "to", "incorporate", "based", "on", "existing", "experience"],
-        "formatting_suggestions": ["suggestions", "for", "better", "ATS", "friendly", "formatting"],
-        "authenticity_statement": "Statement confirming that all recommendations maintain complete truthfulness while optimizing presentation",
-        "recommendations": [
-            {
-                "section": "Section name",
-                "what": "Specific change to make",
-                "why": "Why this change improves ATS performance",
-                "before_text": "Original text to be replaced",
-                "after_text": "Suggested new text",
-                "description": "Detailed explanation of this change",
-                "priority": "high/medium/low",
-                "authenticity_check": "Explanation of how this change maintains truthfulness while optimizing presentation"
-            }
-        ]
-    }
-    """
-    
-    prompt_template = f"{prompt_template}\n\n{json_instruction}"
+    # Select the appropriate base prompt based on whether this is a feedback response agent
+    if is_feedback_response:
+        prompt_template = prompts['OPTIMIZER_FEEDBACK_RESPONSE_PROMPT']
+        
+        # Add any industry-specific considerations if relevant
+        if industry:
+            industry_guidance = prompts['get_industry_specific_guidance'](industry)
+            if industry_guidance:
+                prompt_template += f"\n\nConsider this INDUSTRY-SPECIFIC GUIDANCE for {industry.upper()}:\n{industry_guidance}"
+    else:
+        # Standard optimizer agent
+        # Get customization level specific instructions
+        customization_instructions = prompts['get_customization_level_instructions'](customization_level)
+        
+        # Get industry-specific guidance if industry is provided
+        industry_guidance = ""
+        if industry:
+            industry_guidance = prompts['get_industry_specific_guidance'](industry)
+            if industry_guidance:
+                customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
+        
+        # Format the prompt with the customization level instructions
+        prompt_template = prompts['OPTIMIZER_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
+        
+        # Add instructions to return JSON format
+        json_instruction = """
+        Your output must be in JSON format with these fields:
+        {
+            "summary": "Brief overall assessment of the resume's current alignment with the job",
+            "job_analysis": "Brief analysis of the job description's key requirements and priorities",
+            "keywords_to_add": ["list", "of", "important", "keywords", "to", "incorporate", "based", "on", "existing", "experience"],
+            "formatting_suggestions": ["suggestions", "for", "better", "ATS", "friendly", "formatting"],
+            "authenticity_statement": "Statement confirming that all recommendations maintain complete truthfulness while optimizing presentation",
+            "experience_preservation_statement": "Confirmation that ALL experience from the original resume is preserved in the recommendations",
+            "recommendations": [
+                {
+                    "section": "Section name",
+                    "what": "Specific change to make",
+                    "why": "Why this change improves ATS performance",
+                    "before_text": "Original text to be replaced",
+                    "after_text": "Suggested new text",
+                    "description": "Detailed explanation of this change",
+                    "priority": "high/medium/low",
+                    "authenticity_check": "Explanation of how this change maintains truthfulness while optimizing presentation",
+                    "preservation_check": "Confirmation that this change preserves all original experience content"
+                }
+            ]
+        }
+        """
+        
+        prompt_template = f"{prompt_template}\n\n{json_instruction}"
     
     # Create the agent using the Agents SDK
     try:
@@ -275,26 +321,33 @@ async def _run_agent(agent: Agent, message: str) -> str:
     start_time = time.time()
     
     try:
-        # Create a runner for the agent
-        runner = Runner()
-        
         # Run the agent with the message
-        result = await Runner.run(
-            starting_agent=agent,
-            input=message
-        )
-        
-        # Log success
-        elapsed_time = time.time() - start_time
-        logfire.info(
-            "Agent run completed successfully",
-            agent_name=agent.name,
-            response_length=len(result.final_output) if result.final_output else 0,
-            duration_seconds=round(elapsed_time, 2)
-        )
-        
-        # Return the final output
-        return result.final_output
+        try:
+            result = await Runner.run(
+                starting_agent=agent,
+                input=message
+            )
+            
+            # Log success
+            elapsed_time = time.time() - start_time
+            logfire.info(
+                "Agent run completed successfully",
+                agent_name=getattr(agent, 'name', 'unknown'),
+                response_length=len(result.final_output) if hasattr(result, 'final_output') and result.final_output else 0,
+                duration_seconds=round(elapsed_time, 2)
+            )
+            
+            # Return the final output
+            return result.final_output if hasattr(result, 'final_output') else ""
+            
+        except (AttributeError, NotImplementedError) as e:
+            # Handle the case where Agents SDK is not available - fallback to a basic response
+            logfire.warning(
+                "Agents SDK not available, using fallback response",
+                error=str(e)
+            )
+            # Return a basic response
+            return "Unable to process request - Agents SDK not available"
         
     except Exception as e:
         # Calculate elapsed time
@@ -305,7 +358,7 @@ async def _run_agent(agent: Agent, message: str) -> str:
             "Error running agent",
             error=str(e),
             error_type=type(e).__name__,
-            agent_name=agent.name,
+            agent_name=getattr(agent, 'name', 'unknown'),
             duration_seconds=round(elapsed_time, 2)
         )
         
@@ -313,6 +366,327 @@ async def _run_agent(agent: Agent, message: str) -> str:
         raise e
 
 # Helper for the async functions defined below
+
+@log_function_call
+async def evaluate_optimization_plan(
+    original_resume: str,
+    job_description: str,
+    optimized_resume: str,
+    customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
+    industry: Optional[str] = None
+) -> Dict:
+    """
+    Evaluate an optimization plan against the original resume and job description.
+    This is the "feedback" step in the evaluator-optimizer iterative pattern.
+    
+    Args:
+        original_resume: The original resume content in Markdown format
+        job_description: The job description text
+        optimized_resume: The optimized resume content to evaluate
+        customization_level: Level of customization (affects evaluation detail)
+        industry: Optional industry name for industry-specific guidance
+        
+    Returns:
+        Dictionary containing evaluation feedback for the optimizer
+    """
+    # Start timer for performance tracking
+    start_time = time.time()
+    
+    # Create a span in OpenTelemetry for tracing
+    with logfire.span("evaluate_optimization_plan_operation") as span:
+        span.set_attribute("original_resume_length", len(original_resume))
+        span.set_attribute("job_description_length", len(job_description))
+        span.set_attribute("optimized_resume_length", len(optimized_resume))
+        span.set_attribute("customization_level", customization_level.value)
+        span.set_attribute("industry", industry if industry else "not specified")
+        
+        # Log operation start
+        logfire.info(
+            "Starting optimization plan evaluation",
+            original_resume_length=len(original_resume),
+            job_description_length=len(job_description),
+            optimized_resume_length=len(optimized_resume),
+            customization_level=customization_level.name,
+            industry=industry if industry else "not specified"
+        )
+        
+        # Create the evaluator agent specifically for feedback
+        evaluator_agent = create_resume_evaluator_agent(
+            customization_level=customization_level,
+            industry=industry,
+            is_feedback_agent=True
+        )
+        
+        # Build the user message
+        user_message = f"""
+        Here's the ORIGINAL resume content:
+        
+        {original_resume}
+        
+        Here's the job description:
+        
+        {job_description}
+        
+        Here's the OPTIMIZED resume to evaluate:
+        
+        {optimized_resume}
+        """
+        
+        try:
+            # Run the agent
+            response_text = await _run_agent(
+                agent=evaluator_agent,
+                message=user_message
+            )
+            
+            # Calculate elapsed time
+            elapsed_time = time.time() - start_time
+            
+            try:
+                # Extract JSON from the response text
+                # Sometimes the model wraps JSON in markdown code blocks
+                if "```json" in response_text:
+                    json_str = response_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in response_text:
+                    json_str = response_text.split("```")[1].split("```")[0].strip()
+                else:
+                    json_str = response_text.strip()
+                
+                feedback_result = json.loads(json_str)
+                
+                # Log success
+                logfire.info(
+                    "Optimization plan evaluation completed successfully",
+                    response_length=len(response_text),
+                    duration_seconds=round(elapsed_time, 2),
+                    requires_iteration=feedback_result.get("requires_iteration", False)
+                )
+                
+                return feedback_result
+                
+            except json.JSONDecodeError as json_err:
+                # Log parsing error but continue with a fallback
+                logfire.warning(
+                    "Failed to parse feedback evaluation as JSON",
+                    error=str(json_err),
+                    response_text=response_text[:500] + ("..." if len(response_text) > 500 else "")
+                )
+                
+                # Return a basic structure as fallback with critical feedback about parsing failure
+                return {
+                    "requires_iteration": True,
+                    "experience_preservation_issues": [],
+                    "keyword_alignment_feedback": [],
+                    "formatting_feedback": [],
+                    "authenticity_concerns": [],
+                    "missed_opportunities": [
+                        {
+                            "opportunity": "Unable to parse feedback properly",
+                            "suggestion": "Please retry the optimization with clearer JSON formatting"
+                        }
+                    ],
+                    "overall_feedback": "Failed to parse structured feedback, please ensure all output is in valid JSON format.",
+                    "parsing_error": True
+                }
+                
+        except Exception as e:
+            # Calculate elapsed time
+            elapsed_time = time.time() - start_time
+            
+            # Log error
+            logfire.error(
+                "Error evaluating optimization plan",
+                error=str(e),
+                error_type=type(e).__name__,
+                duration_seconds=round(elapsed_time, 2)
+            )
+            
+            # Re-raise the exception
+            raise e
+
+@log_function_call
+async def optimize_resume_with_feedback(
+    original_resume: str,
+    job_description: str,
+    evaluation: Dict,
+    feedback: Dict,
+    customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
+    industry: Optional[str] = None
+) -> CustomizationPlan:
+    """
+    Generate an improved optimization plan based on evaluator feedback.
+    This continues the feedback loop in the evaluator-optimizer iterative pattern.
+    
+    Args:
+        original_resume: The original resume content in Markdown format
+        job_description: The job description text
+        evaluation: The initial evaluation dictionary
+        feedback: The feedback dictionary from the evaluator
+        customization_level: Level of customization (affects optimization detail)
+        industry: Optional industry name for industry-specific guidance
+        
+    Returns:
+        Improved CustomizationPlan based on feedback
+    """
+    # Start timer for performance tracking
+    start_time = time.time()
+    
+    # Create a span in OpenTelemetry for tracing
+    with logfire.span("optimize_resume_with_feedback_operation") as span:
+        span.set_attribute("resume_length", len(original_resume))
+        span.set_attribute("job_description_length", len(job_description))
+        span.set_attribute("customization_level", customization_level.value)
+        span.set_attribute("industry", industry if industry else "not specified")
+        
+        # Log operation start
+        logfire.info(
+            "Starting resume optimization with feedback",
+            resume_length=len(original_resume),
+            job_description_length=len(job_description),
+            customization_level=customization_level.name,
+            industry=industry if industry else "not specified"
+        )
+        
+        # Create the optimizer agent specifically for feedback response
+        optimizer_agent = create_resume_optimizer_agent(
+            customization_level=customization_level,
+            industry=industry,
+            is_feedback_response=True
+        )
+        
+        # Build the user message
+        user_message = f"""
+        Here's the original resume content:
+        
+        {original_resume}
+        
+        Here's the job description to optimize for:
+        
+        {job_description}
+        
+        Here's the initial evaluation of how well the resume matches the job:
+        
+        {json.dumps(evaluation, indent=2)}
+        
+        Here's the feedback on your previous optimization plan:
+        
+        {json.dumps(feedback, indent=2)}
+        
+        Please create an improved optimization plan that addresses all feedback, especially ensuring that ALL original experience is preserved.
+        """
+        
+        try:
+            # Run the agent
+            response_text = await _run_agent(
+                agent=optimizer_agent,
+                message=user_message
+            )
+            
+            # Calculate elapsed time
+            elapsed_time = time.time() - start_time
+            
+            try:
+                # Extract JSON from the response text
+                # Sometimes the model wraps JSON in markdown code blocks
+                if "```json" in response_text:
+                    json_str = response_text.split("```json")[1].split("```")[0].strip()
+                elif "```" in response_text:
+                    json_str = response_text.split("```")[1].split("```")[0].strip()
+                else:
+                    json_str = response_text.strip()
+                
+                optimization_result = json.loads(json_str)
+                
+                # Convert to Pydantic model for validation and consistency
+                plan = CustomizationPlan(
+                    summary=optimization_result.get("summary", "Plan summary not provided"),
+                    job_analysis=optimization_result.get("job_analysis", "Job analysis not provided"),
+                    keywords_to_add=optimization_result.get("keywords_to_add", []),
+                    formatting_suggestions=optimization_result.get("formatting_suggestions", []),
+                    recommendations=[
+                        RecommendationItem(
+                            section=rec.get("section", "Unknown"),
+                            what=rec.get("what", ""),
+                            why=rec.get("why", ""),
+                            before_text=rec.get("before_text"),
+                            after_text=rec.get("after_text"),
+                            description=rec.get("description", "") + (
+                                f"\n\nAuthenticity check: {rec.get('authenticity_check', 'Verified')}" 
+                                if rec.get('authenticity_check') else ""
+                            ) + (
+                                f"\n\nPreservation check: {rec.get('preservation_check', 'Verified')}" 
+                                if rec.get('preservation_check') else ""
+                            )
+                        )
+                        for rec in optimization_result.get("recommendations", [])
+                    ]
+                )
+                
+                # Add authenticity statement if available
+                if optimization_result.get("authenticity_statement"):
+                    plan.summary = f"{plan.summary}\n\n**Authenticity Statement**: {optimization_result.get('authenticity_statement')}"
+                
+                # Add experience preservation statement if available
+                if optimization_result.get("experience_preservation_statement"):
+                    plan.summary = f"{plan.summary}\n\n**Experience Preservation**: {optimization_result.get('experience_preservation_statement')}"
+                
+                # Add feedback addressed statement if available
+                if optimization_result.get("feedback_addressed"):
+                    plan.summary = f"{plan.summary}\n\n**Feedback Addressed**: {optimization_result.get('feedback_addressed')}"
+                
+                # Log success
+                logfire.info(
+                    "Resume optimization with feedback completed successfully",
+                    response_length=len(response_text),
+                    duration_seconds=round(elapsed_time, 2),
+                    recommendation_count=len(plan.recommendations)
+                )
+                
+                return plan
+                
+            except (json.JSONDecodeError, ValueError) as err:
+                # Log parsing error but continue with a fallback
+                logfire.warning(
+                    "Failed to parse optimization with feedback response as a valid CustomizationPlan",
+                    error=str(err),
+                    response_text=response_text[:500] + ("..." if len(response_text) > 500 else "")
+                )
+                
+                # Create a fallback plan
+                return CustomizationPlan(
+                    summary="Failed to generate a complete optimization plan from feedback. Here is a basic updated plan.",
+                    job_analysis="Please review the optimization suggestions carefully as they may not fully address all feedback.",
+                    keywords_to_add=feedback.get("keyword_alignment_feedback", [])[:5],
+                    formatting_suggestions=[
+                        suggestion.get("suggestion", "Fix formatting issues") 
+                        for suggestion in feedback.get("formatting_feedback", [])[:3]
+                    ],
+                    recommendations=[
+                        RecommendationItem(
+                            section="General",
+                            what="Address feedback",
+                            why="To improve optimization based on evaluator feedback",
+                            before_text=None,
+                            after_text=None,
+                            description="Unable to fully parse the optimization improvements. Please review the feedback manually."
+                        )
+                    ]
+                )
+                
+        except Exception as e:
+            # Calculate elapsed time
+            elapsed_time = time.time() - start_time
+            
+            # Log error
+            logfire.error(
+                "Error generating optimization plan with feedback",
+                error=str(e),
+                error_type=type(e).__name__,
+                duration_seconds=round(elapsed_time, 2)
+            )
+            
+            # Re-raise the exception
+            raise e
 
 @log_function_call
 async def evaluate_resume_job_match(
@@ -376,7 +750,38 @@ async def evaluate_resume_job_match(
         
         # If we have basic analysis results, add them to the prompt
         if basic_analysis:
-            basic_analysis_str = json.dumps(basic_analysis, indent=2)
+            # Convert to dict for JSON serialization
+            basic_analysis_dict = {}
+            
+            # Copy regular fields
+            for key, value in basic_analysis.items():
+                if key in ["resume_id", "job_description_id", "match_score", "job_type", "confidence", "keyword_density"]:
+                    basic_analysis_dict[key] = value
+                    
+            # Handle complex objects
+            if "matching_keywords" in basic_analysis:
+                basic_analysis_dict["matching_keywords"] = [
+                    {"keyword": k.keyword, "count_in_resume": k.count_in_resume, "count_in_job": k.count_in_job, "is_match": k.is_match}
+                    for k in basic_analysis.get("matching_keywords", [])
+                ]
+                
+            if "missing_keywords" in basic_analysis:
+                basic_analysis_dict["missing_keywords"] = [
+                    {"keyword": k.keyword, "count_in_resume": k.count_in_resume, "count_in_job": k.count_in_job, "is_match": k.is_match}
+                    for k in basic_analysis.get("missing_keywords", [])
+                ]
+                
+            if "improvements" in basic_analysis:
+                basic_analysis_dict["improvements"] = [
+                    {"category": imp.category, "suggestion": imp.suggestion, "priority": imp.priority}
+                    for imp in basic_analysis.get("improvements", [])
+                ]
+                
+            if "section_scores" in basic_analysis:
+                basic_analysis_dict["section_scores"] = basic_analysis.get("section_scores", [])
+            
+            # Serialize to string
+            basic_analysis_str = json.dumps(basic_analysis_dict, indent=2)
             user_message += f"""
             
             Here are the results of a basic keyword analysis:

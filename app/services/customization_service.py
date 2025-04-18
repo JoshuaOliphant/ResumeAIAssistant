@@ -16,12 +16,12 @@ from app.models.job import JobDescription
 from app.schemas.customize import (
     CustomizationLevel, 
     CustomizationPlanRequest,
-    CustomizationPlan, 
-    RecommendationItem
+    CustomizationPlan
 )
 
 from app.core.logging import log_function_call
-from app.services import claude_service as claude
+from app.services import openai_agents_service as ai_service
+from app.services.prompts import MAX_FEEDBACK_ITERATIONS
 
 
 class CustomizationService:
@@ -126,6 +126,9 @@ class CustomizationService:
             keywords_added_count=len(plan.keywords_to_add),
             formatting_suggestions_count=len(plan.formatting_suggestions)
         )
+        
+        # Just store the plan for future reference without implementing feedback loop here
+        # The feedback loop will happen during the actual customization process
         
         # Store the plan for future reference
         await self._store_plan(
@@ -258,8 +261,8 @@ class CustomizationService:
             industry=industry if industry else "not specified"
         )
         
-        # Call Claude evaluator function
-        return await claude.evaluate_resume_job_match(
+        # Call OpenAI evaluator function
+        return await ai_service.evaluate_resume_job_match(
             resume_content=resume_content,
             job_description=job_description,
             basic_analysis=basic_analysis,
@@ -297,14 +300,106 @@ class CustomizationService:
             industry=industry if industry else "not specified"
         )
         
-        # Call Claude optimizer function
-        return await claude.generate_optimization_plan(
+        # Call OpenAI optimizer function
+        return await ai_service.generate_optimization_plan(
             resume_content=resume_content,
             job_description=job_description,
             evaluation=evaluation,
             customization_level=level,
             industry=industry
         )
+    
+    async def _implement_optimization_plan(self, resume_content: str, plan: CustomizationPlan) -> str:
+        """
+        Implement an optimization plan by applying its recommendations to the resume.
+        
+        Args:
+            resume_content: Original resume content
+            plan: Customization plan with recommendations
+            
+        Returns:
+            Optimized resume content with recommendations applied
+        """
+        # For now, we'll use the OpenAI implementation service to apply the recommendations
+        # Since this is just for evaluation purposes in the feedback loop, we don't need to store versions
+        
+        # Create a simplified implementation message
+        implementation_message = {
+            "resume": resume_content,
+            "plan": {
+                "summary": plan.summary,
+                "recommendations": [
+                    {
+                        "section": rec.section,
+                        "what": rec.what,
+                        "before_text": rec.before_text,
+                        "after_text": rec.after_text
+                    }
+                    for rec in plan.recommendations
+                ]
+            }
+        }
+        
+        # Define a basic prompt for implementing the changes
+        prompt = """
+        You are an expert resume writer implementing optimization recommendations.
+        Apply ALL of the recommendations from the provided plan to the resume content.
+        
+        Important requirements:
+        1. Make ONLY the changes specified in the recommendations
+        2. Replace each "before_text" with its corresponding "after_text"
+        3. Preserve all content that is not explicitly changed by a recommendation
+        4. Maintain the overall structure and formatting of the resume
+        5. Return the complete optimized resume in Markdown format
+        6. NEVER remove any experience that is not explicitly part of a recommendation
+        
+        For each recommendation:
+        - Locate the exact "before_text" in the resume
+        - Replace it with the exact "after_text"
+        - Ensure the replacement is done correctly
+        
+        Return ONLY the optimized resume with all recommendations applied.
+        """
+        
+        try:
+            # Create a temporary agent to implement the changes
+            implementation_agent = ai_service.create_cover_letter_agent()  # Reuse this agent type
+            
+            # Build the agent message with the resume and plan
+            message = f"""
+            {prompt}
+            
+            # Original Resume
+            
+            {resume_content}
+            
+            # Recommendations to Apply
+            
+            {json.dumps(implementation_message["plan"], indent=2)}
+            """
+            
+            # Run the agent to implement the changes
+            optimized_content = await ai_service._run_agent(
+                agent=implementation_agent,
+                message=message
+            )
+            
+            logfire.info(
+                "Optimization plan implementation completed",
+                original_length=len(resume_content),
+                optimized_length=len(optimized_content)
+            )
+            
+            return optimized_content
+            
+        except Exception as e:
+            logfire.error(
+                "Error implementing optimization plan",
+                error=str(e),
+                error_type=type(e).__name__
+            )
+            # In case of error, return the original content to avoid breaking the feedback loop
+            return resume_content
     
     async def _store_plan(self, resume_id: str, job_id: str, plan: CustomizationPlan) -> None:
         """
@@ -342,11 +437,11 @@ class CustomizationService:
                 job_description_id=job_id,
                 user_id=user_id,
                 customization_strength=2,  # Default to balanced
-                summary=plan.summary,
-                job_analysis=plan.job_analysis,
-                keywords_to_add=plan.keywords_to_add,
-                formatting_suggestions=plan.formatting_suggestions,
-                recommendations=recommendations_json
+                summary=plan.summary or "No summary provided",
+                job_analysis=plan.job_analysis or "No job analysis provided",
+                keywords_to_add=plan.keywords_to_add or [],
+                formatting_suggestions=plan.formatting_suggestions or [],
+                recommendations=recommendations_json or []
             )
             
             # Add and commit to database

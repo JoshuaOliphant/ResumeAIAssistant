@@ -31,11 +31,11 @@ class Settings(BaseSettings):
     
     # OpenAI API
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
-    # Default to gpt-4o-2024-05-13 for best performance, but allow fallback to other models
-    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o-2024-05-13")
-    # Use GPT-4o for evaluator and optimizer tasks too, since o3 might not be available
-    OPENAI_EVALUATOR_MODEL: str = os.getenv("OPENAI_EVALUATOR_MODEL", "gpt-4o-2024-05-13")
-    OPENAI_OPTIMIZER_MODEL: str = os.getenv("OPENAI_OPTIMIZER_MODEL", "gpt-4o-2024-05-13")
+    # Default to o4-mini for cost efficiency with strong reasoning capabilities
+    OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4.1")
+    # Use o4-mini for evaluator and optimizer tasks too for consistent performance and cost
+    OPENAI_EVALUATOR_MODEL: str = os.getenv("OPENAI_EVALUATOR_MODEL", "gpt-4.1")
+    OPENAI_OPTIMIZER_MODEL: str = os.getenv("OPENAI_OPTIMIZER_MODEL", "gpt-4.1")
     
     # Database - SQLite only
     DATABASE_URL: str = "sqlite:///./resume_app.db"

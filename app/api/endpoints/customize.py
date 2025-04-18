@@ -1,7 +1,10 @@
 import uuid
+import time
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 import logfire
+import traceback
+from app.services.prompts import MAX_FEEDBACK_ITERATIONS
 
 from app.db.session import get_db
 from app.models.resume import Resume, ResumeVersion
@@ -12,7 +15,7 @@ from app.schemas.customize import (
     CustomizationPlanRequest,
     CustomizationPlan
 )
-from app.services.claude_service import customize_resume
+from app.services import openai_agents_service
 from app.services.customization_service import get_customization_service, CustomizationService
 
 router = APIRouter()
@@ -24,7 +27,7 @@ async def customize_resume_endpoint(
     db: Session = Depends(get_db)
 ):
     """
-    Customize a resume for a specific job description using Claude AI.
+    Customize a resume for a specific job description using OpenAI's AI models.
     
     - **resume_id**: ID of the resume to customize
     - **job_description_id**: ID of the job description to customize for
@@ -49,12 +52,155 @@ async def customize_resume_endpoint(
     if not job:
         raise HTTPException(status_code=404, detail="Job description not found")
     
-    # Call Claude to customize the resume
-    customized_content = await customize_resume(
-        resume_content=resume_version.content,
-        job_description=job.description,
+    # Get the customization plan first
+    plan_request = CustomizationPlanRequest(
+        resume_id=customization_request.resume_id,
+        job_description_id=customization_request.job_description_id,
         customization_strength=customization_request.customization_strength,
-        focus_areas=customization_request.focus_areas
+        industry=customization_request.focus_areas
+    )
+    
+    # Get the customization service
+    customization_service = get_customization_service(db)
+    
+    # Generate the plan
+    plan = await customization_service.generate_customization_plan(plan_request)
+    
+    # Now, implement the plan to get the initial optimized resume
+    try:
+        optimized_resume = await customization_service._implement_optimization_plan(
+            resume_version.content, 
+            plan
+        )
+    except Exception as e:
+        logfire.error(
+            "Error implementing optimization plan",
+            error=str(e),
+            error_type=type(e).__name__,
+            traceback=traceback.format_exception(type(e), e, e.__traceback__),
+            resume_id=customization_request.resume_id,
+            job_id=customization_request.job_description_id
+        )
+        # In case of error, use the original content
+        optimized_resume = resume_version.content
+    
+    # Implement the iterative feedback loop for up to MAX_FEEDBACK_ITERATIONS iterations
+    iterations = 0
+    while iterations < MAX_FEEDBACK_ITERATIONS:
+        # Log the iteration count
+        logfire.info(
+            f"Starting feedback iteration {iterations + 1}/{MAX_FEEDBACK_ITERATIONS}",
+            resume_id=customization_request.resume_id,
+            job_id=customization_request.job_description_id,
+            iteration=iterations + 1
+        )
+        
+        # Get feedback from the evaluator on the optimized resume
+        
+        start_time_feedback = time.time()
+        feedback = await openai_agents_service.evaluate_optimization_plan(
+            original_resume=resume_version.content,
+            job_description=job.description,
+            optimized_resume=optimized_resume,
+            customization_level=customization_request.customization_strength,
+            industry=customization_request.focus_areas
+        )
+        
+        # Log feedback metrics
+        elapsed_time_feedback = time.time() - start_time_feedback
+        logfire.info(
+            f"Feedback iteration {iterations + 1} evaluation completed",
+            resume_id=customization_request.resume_id,
+            job_id=customization_request.job_description_id,
+            duration_seconds=round(elapsed_time_feedback, 2),
+            requires_iteration=feedback.get("requires_iteration", False),
+            experience_issues_count=len(feedback.get("experience_preservation_issues", [])),
+            keyword_feedback_count=len(feedback.get("keyword_alignment_feedback", []))
+        )
+        
+        # If no further iteration is required, break out of the loop
+        if not feedback.get("requires_iteration", False):
+            logfire.info(
+                f"No further iterations required after iteration {iterations + 1}",
+                resume_id=customization_request.resume_id,
+                job_id=customization_request.job_description_id
+            )
+            break
+            
+        # If we have experience preservation issues, these are critical to fix
+        if feedback.get("experience_preservation_issues"):
+            logfire.warning(
+                f"Experience preservation issues found in iteration {iterations + 1}",
+                resume_id=customization_request.resume_id,
+                job_id=customization_request.job_description_id,
+                issues_count=len(feedback.get("experience_preservation_issues", []))
+            )
+        
+        # Generate an improved plan based on the feedback
+        start_time_improved = time.time()
+        improved_plan = await openai_agents_service.optimize_resume_with_feedback(
+            original_resume=resume_version.content,
+            job_description=job.description,
+            evaluation={},  # We don't need the full evaluation for feedback response
+            feedback=feedback,
+            customization_level=customization_request.customization_strength,
+            industry=customization_request.focus_areas
+        )
+        
+        # Log improved plan metrics
+        elapsed_time_improved = time.time() - start_time_improved
+        logfire.info(
+            f"Improved plan generated for iteration {iterations + 1}",
+            resume_id=customization_request.resume_id,
+            job_id=customization_request.job_description_id,
+            duration_seconds=round(elapsed_time_improved, 2),
+            recommendations_count=len(improved_plan.recommendations)
+        )
+        
+        # Update the plan with the improved one
+        plan = improved_plan
+        
+        # Implement the improved plan
+        try:
+            optimized_resume = await customization_service._implement_optimization_plan(
+                resume_version.content, 
+                plan
+            )
+        except Exception as e:
+            logfire.error(
+                f"Error implementing improved plan in iteration {iterations + 1}",
+                error=str(e),
+                error_type=type(e).__name__,
+                traceback=traceback.format_exception(type(e), e, e.__traceback__),
+                resume_id=customization_request.resume_id,
+                job_id=customization_request.job_description_id,
+                iteration=iterations + 1
+            )
+            # In case of error, use the previous optimized resume
+            # (This avoids breaking the loop if implementation fails)
+            # optimized_resume remains unchanged
+        
+        # Increment iteration counter
+        iterations += 1
+    
+    # If we reached the maximum iterations, log this
+    if iterations == MAX_FEEDBACK_ITERATIONS:
+        logfire.info(
+            f"Reached maximum feedback iterations ({MAX_FEEDBACK_ITERATIONS})",
+            resume_id=customization_request.resume_id,
+            job_id=customization_request.job_description_id
+        )
+    
+    # The final optimized resume is our customized content
+    customized_content = optimized_resume
+    
+    # Log the result of the customization process
+    logfire.info(
+        "Resume customization completed with feedback loop",
+        resume_id=customization_request.resume_id,
+        job_id=customization_request.job_description_id,
+        iterations_completed=iterations,
+        final_content_length=len(customized_content)
     )
     
     # Create a new resume version for the customized content
@@ -140,9 +286,11 @@ async def generate_customization_plan(
             
     except Exception as e:
         # Handle unexpected errors
-        logfire.exception(
+        logfire.error(
             "Unexpected error generating customization plan",
             error=str(e),
+            error_type=type(e).__name__,
+            traceback=traceback.format_exception(type(e), e, e.__traceback__),
             resume_id=plan_request.resume_id,
             job_id=plan_request.job_description_id
         )

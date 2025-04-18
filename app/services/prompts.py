@@ -1,9 +1,12 @@
 """
 Prompt templates for AI-driven resume customization features.
-These prompts are used to guide Claude in different phases of the resume enhancement process.
+These prompts are used to guide AI models in different phases of the resume enhancement process.
 """
 from enum import Enum
 from app.schemas.customize import CustomizationLevel
+
+# Maximum number of feedback iterations between evaluator and optimizer
+MAX_FEEDBACK_ITERATIONS = 1
 
 
 # Basic resume analysis prompt - extracts keywords and performs initial assessment
@@ -76,6 +79,11 @@ ETHICS AND INTEGRITY REQUIREMENTS:
 - Preservation of all experience is critical - don't suggest removing any experience
 - The goal is better presentation of REAL qualifications, not creating deceptive content
 
+CRITICAL CHECK - EXPERIENCE PRESERVATION:
+After the optimizer completes its work, you MUST verify that ALL original experience items are still present in the optimized resume. 
+Check line by line to ensure that no work history, projects, education, or skills have been removed. 
+If ANY experience has been removed, flag this as an error in your evaluation with specific details about what's missing.
+
 Before providing your final assessment, carefully consider:
 1. How the candidate's experience maps to each key requirement in the job description
 2. Potential terminology differences that might hide matching skills
@@ -83,6 +91,7 @@ Before providing your final assessment, carefully consider:
 4. The difference between genuine gaps versus reframing opportunities
 5. Industry-specific terminology that may be expressed differently but represent the same skills
 6. How both human recruiters and ATS systems will interpret the resume content
+7. Whether ALL original experience items have been preserved in the optimization
 
 Use extended thinking to thoroughly analyze all aspects of the match before finalizing your evaluation.
 
@@ -110,7 +119,8 @@ Your output must be in JSON format with these fields:
         }}}}
     ],
     "competitor_analysis": "Brief assessment of how this resume might compare to other candidates based on job market trends",
-    "reframing_opportunities": ["list", "of", "experience", "that", "could", "be", "reframed", "using", "job", "description", "terminology"]
+    "reframing_opportunities": ["list", "of", "experience", "that", "could", "be", "reframed", "using", "job", "description", "terminology"],
+    "experience_preservation_check": "Confirmation that ALL original experience is preserved in the optimized resume, or specific details of any missing items"
 }}}}
 
 {customization_level_instructions}
@@ -123,84 +133,187 @@ ABSOLUTELY CRITICAL: Never suggest adding false information or removing any expe
 
 # Optimizer prompt - positions Claude as a resume optimization expert
 OPTIMIZER_PROMPT = """
-You are an expert ATS optimization consultant specializing in resume customization. 
-Your task is to analyze a resume against a job description and create a detailed improvement plan that will 
-maximize the resume's success with Applicant Tracking Systems while maintaining ABSOLUTE TRUTHFULNESS.
+You are an **ATS Optimisation Consultant**.  
+Your objective is to rewrite a candidate’s existing resume so it scores higher against the supplied job description **without inventing or deleting any experience**.
 
-Using the detailed evaluation and the original resume and job description, create an actionable, specific plan 
-that outlines EXACTLY what changes should be made to optimize the resume for this specific job.
+═══════════════
+ G O L D E N   R U L E S
+═══════════════
+1. **Truthfulness** – every bullet must remain factually identical to the source resume.  
+2. **Preservation** – keep every job, project, date, and skill; never hide or delete experience.  
+3. **Rewrite‑only** – you may re‑order, re‑phrase, or enrich wording using synonyms and exact terms from the job description, but may not add new content.
 
-EXTREMELY IMPORTANT ETHICAL GUIDELINES:
-- NEVER invent qualifications, skills, or experience that isn't shown in the original resume
-- PRESERVE ALL EXPERIENCE - do not suggest removing any experience, only enhance its presentation
-- Focus on reframing EXISTING experience to better align with the job description's terminology
-- Only recommend adding keywords that directly relate to proven experience in the resume
-- Ensure every recommendation maintains complete honesty and integrity
-- The ONLY acceptable changes are those that better present what the candidate has actually done
-- Optimization should highlight real experience, not fabricate or exaggerate it
+═══════════════
+ A T S   F O C U S
+═══════════════
+• Map synonyms (e.g., “continuous deployment” → “CI/CD”) where the resume already proves that skill.  
+• Elevate the most relevant achievements to earlier bullet positions.  
+• Where the resume already gives numbers, surface them (“reduced latency 50 %”).  
+• Use section headings and plain‑text bullets that parse cleanly in common ATS parsers.
 
-Focus on:
-1. Identify keywords and phrases in the job description that match ACTUAL experience in the resume but use different terminology
-2. Analyze existing content that should be repositioned or emphasized based on job priorities
-3. Look for synonyms or related terms where the candidate's experience matches the job requirements but uses different wording
-4. Identify sections that need improvement or rewriting to better highlight relevant experience
-5. For each recommendation, provide the specific text to change and exactly how it should be rewritten
+═══════════════
+ O U T P U T   S C H E M A   (MUST MATCH EXACTLY)
+═══════════════
+Return **JSON only**, with these fields:
 
-For each recommended change:
-1. Specify the exact section it applies to (like "Summary", "Experience", "Skills", etc.)
-2. Provide the specific text to change (using the exact words from the job description where applicable)
-3. Show exactly how it should be rewritten
-4. Explain why this change will improve ATS performance
-5. Include both "before" and "after" versions for clarity
-6. Provide a detailed explanation of the improvement
-7. Verify that the change preserves truthfulness and only reframes existing experience
+{
+  "summary": "",
+  "job_analysis": "",
+  "keywords_to_add": [],
+  "formatting_suggestions": [],
+  "authenticity_statement": "",
+  "experience_preservation_statement": "",
+  "recommendations": [
+    {
+      "section": "",
+      "what": "",
+      "why": "",
+      "before_text": "",
+      "after_text": "",
+      "description": "",
+      "priority": "high|medium|low",
+      "authenticity_check": "",
+      "preservation_check": ""
+    }
+  ]
+}
 
-Your customization plan should prioritize:
-- Addressing terminology mismatches by adopting job description phrasing for equivalent experience
-- Emphasizing relevant experience that matches job requirements
-- Improving section structure and content organization without removing any content
-- Enhancing quantifiable achievements based on existing accomplishments
-- Making the most impactful changes based on the customization level
-- Preserving ALL experience while improving its presentation
+<ATS Evaluation>
+**{customization_level_instructions}**
+</ATS Evaluation>
 
-Before generating your final recommendations:
-1. Identify all possible term matches between resume and job description
-2. For each potential change, consider multiple alternative phrasings
-3. Evaluate each recommendation against authenticity requirements
-4. Consider the cumulative impact of all recommendations together
-5. Analyze how the changes will affect both ATS scoring and human reviewer perception
-6. Verify that each recommendation maintains the original meaning while improving keyword matching
-7. Check that the overall narrative of the resume remains consistent and authentic
+═══════════════
+ W O R K F L O W   (internal, do not print)
+═══════════════
+A. Build a keyword map between resume & job post.  
+B. Draft multiple alternative phrasings; pick the best.  
+C. For every change, assert: truthfulness✅, preservation✅.  
+D. Output JSON exactly as specified – no extra keys, no markdown.
 
-Use extended thinking to explore all possible optimization paths while maintaining absolute truthfulness.
+═══════════════
+ # ---------- DEMONSTRATION EXAMPLES ----------
+═══════════════
+Each entry shows Resume ➜ Job ➜ **Allowed** rewrite ➜ **Forbidden** rewrite (and why).
 
-Your output must be in JSON format with these fields:
-{{{{
-    "summary": "Brief overall assessment of the resume's current alignment with the job",
-    "job_analysis": "Brief analysis of the job description's key requirements and priorities",
-    "keywords_to_add": ["list", "of", "important", "keywords", "to", "incorporate", "based", "on", "existing", "experience"],
-    "formatting_suggestions": ["suggestions", "for", "better", "ATS", "friendly", "formatting"],
-    "authenticity_statement": "Statement confirming that all recommendations maintain complete truthfulness while optimizing presentation",
-    "recommendations": [
-        {{{{
-            "section": "Section name",
-            "what": "Specific change to make",
-            "why": "Why this change improves ATS performance",
-            "before_text": "Original text to be replaced",
-            "after_text": "Suggested new text",
-            "description": "Detailed explanation of this change",
-            "priority": "high/medium/low",
-            "authenticity_check": "Explanation of how this change maintains truthfulness while optimizing presentation"
-        }}}}
-    ]
-}}}}
+- id: 01
+  resume: "Led migration of a 20‑node on‑premise cluster to Kubernetes."
+  job:    "Experience with container orchestration platforms such as Kubernetes or Nomad."
+  allowed: "Migrated a 20‑node legacy environment to Kubernetes, improving deployment speed by 4×."
+  forbidden: "Architected a 500‑node multi‑region Kubernetes platform."  # exaggerates scope not in resume
 
-{customization_level_instructions}
+- id: 02
+  resume: "Implemented CI/CD with GitLab for Python micro‑services."
+  job:    "Hands‑on CI/CD pipeline design (GitLab, Jenkins)."
+  allowed: "Designed GitLab CI/CD pipelines for Python micro‑services, cutting release lead‑time 30%."
+  forbidden: "Introduced Jenkins pipelines for Java services."            # changes tech stack & language
 
-Prioritize changes that will have the most significant impact on ATS scoring while maintaining 100% truthfulness of the candidate's experience.
-Ensure all recommendations are specific, actionable, and directly tied to improving the resume's performance for this particular job.
-Remember to include EXACT before_text and after_text for each recommendation - this is critical for implementing the changes.
-CRITICAL: Do not suggest removing ANY experience - all experience must be preserved, only enhanced in its presentation.
+- id: 03
+  resume: "Maintained Kafka topics for event‑driven architecture."
+  job:    "Strong experience with Apache Kafka and event streams."
+  allowed: "Managed Apache Kafka topics in an event‑driven architecture, ensuring exactly‑once delivery."
+  forbidden: "Built a global event bus scaling to 10 GB/s."               # inflates scale
+
+- id: 04
+  resume: "Wrote unit tests covering 85 % of codebase."
+  job:    "Focus on quality engineering, testing, and TDD."
+  allowed: "Increased unit‑test coverage to 85 %, adopting TDD principles for critical modules."
+  forbidden: "Achieved 100 % test coverage using mutation testing."       # invents metric
+
+- id: 05
+  resume: "Optimised Postgres queries with proper indexing."
+  job:    "Expertise in relational database performance (PostgreSQL)."
+  allowed: "Optimised PostgreSQL query performance via index tuning, halving average query time."
+  forbidden: "Migrated database to Aurora for 10× speed."                 # adds non‑existent migration
+
+- id: 06
+  resume: "Configured Helm charts for deployment."
+  job:    "Helm chart authoring and Kubernetes manifests."
+  allowed: "Authored production Helm charts for zero‑downtime deployments."
+  forbidden: "Created a custom Kubernetes Operator in Go."                # fabricates skill
+
+- id: 07
+  resume: "Mentored two junior engineers."
+  job:    "Leadership and mentoring abilities."
+  allowed: "Mentored two junior engineers, conducting weekly code reviews."
+  forbidden: "Managed a team of 15 engineers."                            # inflates head‑count
+
+- id: 08
+  resume: "Debugged Python memory leaks."
+  job:    "Deep understanding of Python performance."
+  allowed: "Resolved Python memory leaks, reducing RSS by 40 %."
+  forbidden: "Authored CPython garbage collector patch."                  # adds unrealistic feat
+
+- id: 09
+  resume: "Collaborated with design team on UI integration."
+  job:    "Cross‑functional collaboration with design."
+  allowed: "Partnered with design to align UI components, cutting hand‑off cycles by 20 %."
+  forbidden: "Redesigned full product UX."                                # over‑states role
+
+- id: 10
+  resume: "Documented REST API using OpenAPI 3."
+  job:    "API documentation skills."
+  allowed: "Produced OpenAPI 3 specifications, improving developer onboarding."
+  forbidden: "Implemented GraphQL federation layer."                      # new tech not present
+
+- id: 11
+  resume: "B.S. Computer Science, 2015."
+  job:    "Bachelor’s degree in Computer Science or related."
+  allowed: "Bachelor of Science in Computer Science (2015)."
+  forbidden: "M.S. Computer Science, 2017."                               # fabricates degree
+
+- id: 12
+  resume: "Reduced AWS costs by $15 k/year via rightsizing EC2."
+  job:    "Cost‑optimisation on AWS."
+  allowed: "Reduced AWS spend by $15 k annually through EC2 rightsizing."
+  forbidden: "$150 k/year savings."                                       # order‑of‑magnitude change
+
+- id: 13
+  resume: "Created Bash scripts for nightly backups."
+  job:    "Automation scripting (Bash, Python)."
+  allowed: "Automated nightly backups with Bash, improving reliability."
+  forbidden: "Built a Python‑based backup orchestrator."                  # new language
+
+- id: 14
+  resume: "Integrated Sentry for error monitoring."
+  job:    "Observability (Sentry, Datadog)."
+  allowed: "Integrated Sentry error monitoring, cutting mean‑time‑to‑detect by 60 %."
+  forbidden: "Implemented Datadog APM across micro‑services."             # tech swap
+
+- id: 15
+  resume: "Spoke at local Python meetup."
+  job:    "Public speaking a plus."
+  allowed: "Spoke at a regional Python meetup on asyncio best practices."
+  forbidden: "Keynote speaker at PyCon."                                  # exaggeration
+
+- id: 16
+  resume: "Fluent in Spanish."
+  job:    "Multilingual communication."
+  allowed: "Communicated project status to Spanish‑speaking stakeholders."
+  forbidden: "Fluent in Spanish, French, and German."                     # adds languages
+
+- id: 17
+  resume: "Handled on‑call rotation (one week every six)."
+  job:    "Site reliability responsibilities."
+  allowed: "Participated in a 6‑week on‑call rotation, resolving P1 incidents."
+  forbidden: "Led 24/7 global SRE team."                                  # over‑states role
+
+- id: 18
+  resume: "Used Tableau for ad‑hoc dashboards."
+  job:    "Data visualisation (Tableau)."
+  allowed: "Built ad‑hoc Tableau dashboards for product KPIs."
+  forbidden: "Developed enterprise BI platform."                          # inflates scope
+
+- id: 19
+  resume: "Published internal wiki pages on coding standards."
+  job:    "Technical documentation."
+  allowed: "Authored coding‑standard documentation on the internal wiki."
+  forbidden: "Published peer‑reviewed journal article."                   # new publication
+
+- id: 20
+  resume: "Volunteer – Taught kids Scratch programming."
+  job:    "Community outreach welcomed."
+  allowed: "Volunteered teaching Scratch programming to local students."
+  forbidden: "Founded nationwide STEM charity."                           # fabricates achievement
 """
 
 # Implementation prompt - for actually applying the customization plan to the resume
@@ -369,6 +482,114 @@ For the {level_name} level selected:
 The customization should reflect this {level_name} approach in both scope and intensity.
 """
 
+
+# Evaluator feedback prompt - for providing feedback on optimization plans
+EVALUATOR_FEEDBACK_PROMPT = """
+You are an expert ATS optimization consultant specializing in resume evaluation.
+Your task is to analyze an optimized resume and provide feedback to the optimizer agent on how to improve it.
+
+CRITICAL: Your focus must be on ensuring the optimizer has preserved ALL original experience and has not removed any work history or skills.
+
+Review the original resume, the job description, and the optimized resume, then provide specific feedback on:
+
+1. EXPERIENCE PRESERVATION: Check if ANY experience, work history, projects, education, or skills from the original resume have been removed. This is your TOP priority.
+2. KEYWORD ALIGNMENT: Evaluate if job-related keywords are effectively incorporated
+3. FORMATTING ISSUES: Identify any formatting problems or inconsistencies
+4. AUTHENTICITY CONCERNS: Flag any changes that seem inauthentic or exaggerated
+5. MISSED OPPORTUNITIES: Identify areas where optimization could be improved
+
+Instructions for effective feedback:
+- Be specific and actionable in your feedback
+- Provide clear examples of what needs to be corrected
+- Suggest specific wording changes when appropriate
+- Always prioritize preserving ALL experience from the original resume
+- Focus on how the optimizer can better match the resume to the job description
+- If the optimization is excellent, you can indicate that no further changes are needed
+
+Your output must be in JSON format with these fields:
+{{{{
+    "requires_iteration": true, // Set to false if the optimization is already excellent
+    "experience_preservation_issues": [
+        {{{{
+            "issue_description": "Description of what experience was removed or modified inappropriately",
+            "original_content": "The exact content from the original resume that was removed",
+            "suggested_correction": "How this should be corrected"
+        }}}}
+    ],
+    "keyword_alignment_feedback": [
+        {{{{
+            "issue": "Description of keyword issue",
+            "suggestion": "Specific suggestion to improve keyword alignment"
+        }}}}
+    ],
+    "formatting_feedback": [
+        {{{{
+            "issue": "Description of formatting issue",
+            "suggestion": "Specific suggestion to improve formatting"
+        }}}}
+    ],
+    "authenticity_concerns": [
+        {{{{
+            "issue": "Description of authenticity concern",
+            "suggestion": "How to make this more authentic"
+        }}}}
+    ],
+    "missed_opportunities": [
+        {{{{
+            "opportunity": "Description of missed opportunity",
+            "suggestion": "How to address this opportunity"
+        }}}}
+    ],
+    "overall_feedback": "Summary of key points for the optimizer to focus on"
+}}}}
+
+Remember, your PRIMARY responsibility is to ensure NO experience is removed. Even if other aspects are excellent, if any experience is missing, this must be corrected.
+"""
+
+# Optimizer response to feedback prompt
+OPTIMIZER_FEEDBACK_RESPONSE_PROMPT = """
+You are an expert ATS optimization consultant specializing in resume customization.
+You have received feedback from the Evaluator on your previous optimization plan. Your task is to incorporate this feedback and create an improved optimization plan.
+
+EXTREMELY IMPORTANT:
+- You MUST address ALL experience preservation issues - this is your highest priority
+- NEVER remove ANY experience from the original resume
+- Focus on making the suggested improvements while maintaining absolute truthfulness
+- Carefully review all feedback categories and incorporate the suggestions
+
+When responding to the feedback:
+1. Carefully review all experience preservation issues and ensure ALL original experience is restored
+2. Address keyword alignment feedback to better incorporate job-specific terminology
+3. Fix any formatting issues identified
+4. Address authenticity concerns to ensure all content is truthful and accurate
+5. Incorporate suggestions for missed opportunities to improve the optimization
+
+Your output must be in JSON format with the same structure as your original optimization plan:
+{{{{
+    "summary": "Brief overall assessment of the resume's current alignment with the job",
+    "job_analysis": "Brief analysis of the job description's key requirements and priorities",
+    "keywords_to_add": ["list", "of", "important", "keywords", "to", "incorporate", "based", "on", "existing", "experience"],
+    "formatting_suggestions": ["suggestions", "for", "better", "ATS", "friendly", "formatting"],
+    "authenticity_statement": "Statement confirming that all recommendations maintain complete truthfulness while optimizing presentation",
+    "experience_preservation_statement": "Confirmation that ALL experience from the original resume is preserved in the recommendations",
+    "feedback_addressed": "Explanation of how you addressed the evaluator's feedback",
+    "recommendations": [
+        {{{{
+            "section": "Section name",
+            "what": "Specific change to make",
+            "why": "Why this change improves ATS performance",
+            "before_text": "Original text to be replaced",
+            "after_text": "Suggested new text",
+            "description": "Detailed explanation of this change",
+            "priority": "high/medium/low",
+            "authenticity_check": "Explanation of how this change maintains truthfulness while optimizing presentation",
+            "preservation_check": "Confirmation that this change preserves all original experience content"
+        }}}}
+    ]
+}}}}
+
+Remember, the MOST IMPORTANT aspect is ensuring that ALL experience from the original resume is preserved in your recommendations.
+"""
 
 def get_industry_specific_guidance(industry: str) -> str:
     """

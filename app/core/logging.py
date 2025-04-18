@@ -1,15 +1,12 @@
 import os
 import logfire
-import httpx
-import anthropic
 import traceback
 from fastapi import FastAPI
 from sqlalchemy import Engine
-from typing import Optional, Dict, Any, Callable, List, Union
+from typing import Optional, Callable, List
+import httpx
 from app.core.config import settings
 from functools import wraps
-import openai
-from openai import OpenAI
 
 def configure_logging(
     service_name: str = "resume-ai-assistant", 
@@ -166,24 +163,34 @@ def setup_httpx_instrumentation(
         # Define default hooks if not provided
         if capture_headers and not request_hook:
             def default_request_hook(span, request):
-                # Get headers but exclude potential sensitive information
-                safe_headers = {
-                    k: v for k, v in request.headers.items() 
-                    if k.lower() not in ("authorization", "cookie", "x-api-key")
-                }
-                span.set_attribute("http.request.headers", str(safe_headers))
+                try:
+                    # Get headers but exclude potential sensitive information
+                    safe_headers = {
+                        k: v for k, v in request.headers.items() 
+                        if k.lower() not in ("authorization", "cookie", "x-api-key")
+                    }
+                    span.set_attribute("http.request.headers", str(safe_headers))
+                except Exception:
+                    # If we can't set the attribute, just continue without it
+                    pass
             
             request_hook = default_request_hook
         
         if capture_headers and not response_hook:
             def default_response_hook(span, request, response):
-                # Get response headers
-                safe_headers = {
-                    k: v for k, v in response.headers.items()
-                    if k.lower() not in ("set-cookie", "authorization", "x-api-key")
-                }
-                span.set_attribute("http.response.headers", str(safe_headers))
-                span.set_attribute("http.response.size", len(response.content) if hasattr(response, "content") else 0)
+                try:
+                    # Get response headers
+                    safe_headers = {
+                        k: v for k, v in response.headers.items()
+                        if k.lower() not in ("set-cookie", "authorization", "x-api-key")
+                    }
+                    span.set_attribute("http.response.headers", str(safe_headers))
+                    
+                    if hasattr(response, "content"):
+                        span.set_attribute("http.response.size", len(response.content))
+                except Exception:
+                    # If we can't set the attribute, just continue without it
+                    pass
             
             response_hook = default_response_hook
         
@@ -207,55 +214,6 @@ def setup_httpx_instrumentation(
             traceback=traceback.format_exception(type(e), e, e.__traceback__)
         )
 
-def setup_anthropic_instrumentation(client: Optional[anthropic.Anthropic] = None) -> None:
-    """
-    Set up Anthropic instrumentation with Logfire
-    
-    Args:
-        client: Optional Anthropic client instance (if None, instrument all clients)
-    """
-    try:
-        # Using the correct parameter name and allowing context manager to complete
-        with logfire.instrument_anthropic(anthropic_client=client):
-            pass
-        
-        logfire.info(
-            "Anthropic instrumentation set up successfully",
-            global_instrumentation=client is None
-        )
-    except Exception as e:
-        logfire.error(
-            "Failed to set up Anthropic instrumentation",
-            error=str(e),
-            error_type=type(e).__name__,
-            traceback=traceback.format_exception(type(e), e, e.__traceback__)
-        )
-
-def setup_openai_instrumentation(client: Optional[OpenAI] = None) -> None:
-    """
-    Set up OpenAI instrumentation with Logfire
-    
-    Args:
-        client: Optional OpenAI client instance (if None, instrument all clients)
-    """
-    try:
-        # Instrument OpenAI client
-        logfire.instrument_openai(openai_client=client)
-        
-        logfire.info(
-            "OpenAI instrumentation set up successfully",
-            global_instrumentation=client is None,
-            agent_support=True,
-            models=[settings.OPENAI_MODEL, settings.OPENAI_EVALUATOR_MODEL, settings.OPENAI_OPTIMIZER_MODEL]
-        )
-    except Exception as e:
-        logfire.error(
-            "Failed to set up OpenAI instrumentation",
-            error=str(e),
-            error_type=type(e).__name__,
-            traceback=traceback.format_exception(type(e), e, e.__traceback__)
-        )
-
 def log_function_call(func):
     """
     Decorator to log function calls with input arguments and return values
@@ -266,83 +224,122 @@ def log_function_call(func):
     @wraps(func)
     def wrapper(*args, **kwargs):
         # Prepare args for logging - avoid logging huge objects
-        safe_args = [f"<{type(arg).__name__}>" if isinstance(arg, (dict, list)) and len(str(arg)) > 100 
-                     else arg for arg in args]
-        safe_kwargs = {k: f"<{type(v).__name__}>" if isinstance(v, (dict, list)) and len(str(v)) > 100 
-                       else v for k, v in kwargs.items()}
+        try:
+            safe_args = [f"<{type(arg).__name__}>" if isinstance(arg, (dict, list)) and len(str(arg)) > 100 
+                         else arg for arg in args]
+            safe_kwargs = {k: f"<{type(v).__name__}>" if isinstance(v, (dict, list)) and len(str(v)) > 100 
+                           else v for k, v in kwargs.items()}
+        except:
+            # If we can't serialize args/kwargs, use generic placeholders
+            safe_args = [f"<{type(arg).__name__}>" for arg in args]
+            safe_kwargs = {k: f"<{type(v).__name__}>" for k, v in kwargs.items()}
         
         # Create a span for this function call
-        with logfire.span(f"function.{func.__name__}") as span:
-            span.set_attribute("function.name", func.__name__)
-            span.set_attribute("function.module", func.__module__)
-            
-            # Set span attributes for arguments (safely)
-            for i, arg in enumerate(safe_args):
-                if i == 0 and arg == 'self':
-                    continue  # Skip 'self' for methods
+        try:
+            with logfire.span(f"function.{func.__name__}") as span:
                 try:
-                    span.set_attribute(f"function.arg.{i}", str(arg))
+                    span.set_attribute("function.name", func.__name__)
+                    span.set_attribute("function.module", func.__module__)
+                    
+                    # Set span attributes for arguments (safely)
+                    for i, arg in enumerate(safe_args):
+                        if i == 0 and arg == 'self':
+                            continue  # Skip 'self' for methods
+                        try:
+                            span.set_attribute(f"function.arg.{i}", str(arg))
+                        except:
+                            # Skip if we can't set this attribute
+                            pass
+                    
+                    # Set span attributes for keyword arguments (safely)
+                    for k, v in safe_kwargs.items():
+                        if k in ('self', 'cls'):
+                            continue  # Skip 'self'/'cls' for methods
+                        try:
+                            span.set_attribute(f"function.kwarg.{k}", str(v))
+                        except:
+                            # Skip if we can't set this attribute
+                            pass
                 except:
-                    span.set_attribute(f"function.arg.{i}", f"<unprintable {type(arg).__name__}>")
-            
-            # Set span attributes for keyword arguments (safely)
-            for k, v in safe_kwargs.items():
-                if k in ('self', 'cls'):
-                    continue  # Skip 'self'/'cls' for methods
+                    # Continue even if we can't set some span attributes
+                    pass
+                
                 try:
-                    span.set_attribute(f"function.kwarg.{k}", str(v))
+                    # Log function entry
+                    logfire.info(
+                        f"Function call: {func.__name__}",
+                        function=func.__name__,
+                        module=func.__module__,
+                        args=safe_args,
+                        kwargs=safe_kwargs,
+                        event="function_entry"
+                    )
                 except:
-                    span.set_attribute(f"function.kwarg.{k}", f"<unprintable {type(v).__name__}>")
-            
+                    # Continue even if we can't log the function entry
+                    pass
+                
+                try:
+                    # Call the function
+                    result = func(*args, **kwargs)
+                    
+                    # Prepare result for logging
+                    try:
+                        safe_result = f"<{type(result).__name__}>" if isinstance(result, (dict, list)) and len(str(result)) > 100 else result
+                        
+                        # Log function exit
+                        logfire.info(
+                            f"Function return: {func.__name__}",
+                            function=func.__name__,
+                            result=safe_result,
+                            event="function_exit"
+                        )
+                        
+                        # Set result attribute on span
+                        try:
+                            span.set_attribute("function.result", str(safe_result))
+                        except:
+                            # Skip if we can't set this attribute
+                            pass
+                    except:
+                        # If we can't log the result, just continue
+                        pass
+                    
+                    return result
+                except Exception as e:
+                    # Log exception
+                    try:
+                        logfire.error(
+                            f"Function exception: {func.__name__}",
+                            function=func.__name__,
+                            exception_type=type(e).__name__,
+                            exception=str(e),
+                            event="function_exception"
+                        )
+                        
+                        # Set exception attributes on span
+                        span.set_attribute("error", True)
+                        span.set_attribute("error.type", type(e).__name__)
+                        span.set_attribute("error.message", str(e))
+                    except:
+                        # If logging fails, just continue
+                        pass
+                    
+                    raise
+        except Exception as span_error:
+            # If setting up the span fails for any reason, still execute the function
             try:
-                # Log function entry
-                logfire.info(
-                    f"Function call: {func.__name__}",
+                # Log that span creation failed
+                logfire.warning(
+                    f"Failed to create span for {func.__name__}",
                     function=func.__name__,
-                    module=func.__module__,
-                    args=safe_args,
-                    kwargs=safe_kwargs,
-                    event="function_entry"
+                    error=str(span_error)
                 )
-                
-                # Call the function
-                result = func(*args, **kwargs)
-                
-                # Prepare result for logging
-                safe_result = f"<{type(result).__name__}>" if isinstance(result, (dict, list)) and len(str(result)) > 100 else result
-                
-                # Log function exit
-                logfire.info(
-                    f"Function return: {func.__name__}",
-                    function=func.__name__,
-                    result=safe_result,
-                    event="function_exit"
-                )
-                
-                # Set result attribute on span
-                try:
-                    span.set_attribute("function.result", str(safe_result))
-                except:
-                    span.set_attribute("function.result", f"<unprintable {type(result).__name__}>")
-                
-                return result
-            except Exception as e:
-                # Log exception
-                logfire.error(
-                    f"Function exception: {func.__name__}",
-                    function=func.__name__,
-                    exception_type=type(e).__name__,
-                    exception=str(e),
-                    event="function_exception",
-                    traceback=traceback.format_exception(type(e), e, e.__traceback__)
-                )
-                
-                # Set exception attributes on span
-                span.set_attribute("error", True)
-                span.set_attribute("error.type", type(e).__name__)
-                span.set_attribute("error.message", str(e))
-                
-                raise
+            except:
+                # If logging fails, just continue
+                pass
+            
+            # Call the function without logging
+            return func(*args, **kwargs)
     
     return wrapper
 

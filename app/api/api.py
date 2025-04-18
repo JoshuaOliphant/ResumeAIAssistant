@@ -2,10 +2,8 @@ from fastapi import FastAPI, APIRouter, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-import os
 from pathlib import Path
 import sys
-import time
 import logfire
 from fastapi.responses import JSONResponse
 
