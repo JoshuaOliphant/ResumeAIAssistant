@@ -63,12 +63,23 @@ if settings.ANTHROPIC_API_KEY:
     os.environ["ANTHROPIC_API_KEY"] = settings.ANTHROPIC_API_KEY
 if settings.OPENAI_API_KEY:
     os.environ["OPENAI_API_KEY"] = settings.OPENAI_API_KEY
+if settings.GEMINI_API_KEY:
+    os.environ["GOOGLE_API_KEY"] = settings.GEMINI_API_KEY
 
-# Define config for model providers
-EVALUATOR_MODEL = getattr(settings, "PYDANTICAI_EVALUATOR_MODEL", DEFAULT_MODEL)
-OPTIMIZER_MODEL = getattr(settings, "PYDANTICAI_OPTIMIZER_MODEL", DEFAULT_MODEL)
-COVER_LETTER_MODEL = getattr(settings, "PYDANTICAI_COVER_LETTER_MODEL", DEFAULT_MODEL)
-THINKING_BUDGET = getattr(settings, "PYDANTICAI_THINKING_BUDGET", 15000)
+# Import model config function
+from app.core.config import get_pydanticai_model_config
+
+# Define config for model providers using settings
+EVALUATOR_MODEL = settings.PYDANTICAI_EVALUATOR_MODEL
+OPTIMIZER_MODEL = settings.PYDANTICAI_OPTIMIZER_MODEL
+COVER_LETTER_MODEL = settings.PYDANTICAI_COVER_LETTER_MODEL
+THINKING_BUDGET = settings.PYDANTICAI_THINKING_BUDGET
+TEMPERATURE = settings.PYDANTICAI_TEMPERATURE
+MAX_TOKENS = settings.PYDANTICAI_MAX_TOKENS
+FALLBACK_MODELS = settings.PYDANTICAI_FALLBACK_MODELS
+
+# Get the complete model provider configuration
+MODEL_CONFIG = get_pydanticai_model_config()
 
 # Log initialization
 logfire.info(
@@ -77,7 +88,10 @@ logfire.info(
     evaluator_model=EVALUATOR_MODEL,
     optimizer_model=OPTIMIZER_MODEL,
     cover_letter_model=COVER_LETTER_MODEL,
-    thinking_budget=THINKING_BUDGET
+    thinking_budget=THINKING_BUDGET,
+    temperature=TEMPERATURE,
+    max_tokens=MAX_TOKENS,
+    providers=list(MODEL_CONFIG.keys())
 )
 
 # Import prompts
@@ -181,15 +195,13 @@ def create_resume_evaluator_agent(customization_level: CustomizationLevel = Cust
             EVALUATOR_MODEL,
             output_type=ResumeEvaluation,
             system_prompt=prompt_template,
-            thinking_config=thinking_config
+            thinking_config=thinking_config,
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS
         )
         
         # Add fallback configurations
-        evaluator_agent.fallback_config = [
-            "anthropic:claude-3-5-sonnet-20241022",
-            "openai:gpt-4.1",
-            "google:gemini-2.5-flash-preview-04-17"
-        ]
+        evaluator_agent.fallback_config = FALLBACK_MODELS
         
         logfire.info(
             "Resume Evaluator Agent created successfully",
@@ -252,15 +264,13 @@ def create_resume_optimizer_agent(customization_level: CustomizationLevel = Cust
             OPTIMIZER_MODEL,
             output_type=CustomizationPlan,
             system_prompt=prompt_template,
-            thinking_config=thinking_config
+            thinking_config=thinking_config,
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS
         )
         
         # Add fallback configurations
-        optimizer_agent.fallback_config = [
-            "anthropic:claude-3-5-sonnet-20241022",
-            "openai:gpt-4.1",
-            "google:gemini-2.5-pro-preview-03-25"
-        ]
+        optimizer_agent.fallback_config = FALLBACK_MODELS
         
         logfire.info(
             "Resume Optimizer Agent created successfully",
@@ -325,15 +335,13 @@ def create_cover_letter_agent() -> Agent:
             COVER_LETTER_MODEL,
             output_type=CoverLetter,
             system_prompt=system_prompt,
-            thinking_config=thinking_config
+            thinking_config=thinking_config,
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS
         )
         
         # Add fallback configurations
-        cover_letter_agent.fallback_config = [
-            "anthropic:claude-3-5-sonnet-20241022",
-            "openai:gpt-4.1",
-            "google:gemini-2.5-flash-preview-04-17"
-        ]
+        cover_letter_agent.fallback_config = FALLBACK_MODELS
         
         logfire.info(
             "Cover Letter Agent created successfully",
@@ -716,7 +724,9 @@ async def customize_resume(
         customization_agent = Agent(
             DEFAULT_MODEL,
             output_format="text",  # Use text format for direct output
-            system_prompt=system_prompt
+            system_prompt=system_prompt,
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS
         )
         
         # Build the user message
