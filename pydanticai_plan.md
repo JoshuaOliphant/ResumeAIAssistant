@@ -26,9 +26,12 @@ The application uses an "evaluator-optimizer" pattern where:
 
 Key components include:
 - `claude_service.py`: Core Claude API integration
+- `openai_agents_service.py`: OpenAI Agents integration for the same features
 - `prompts.py`: Detailed system prompts for different tasks
 - `customization_service.py`: Business logic for the evaluator-optimizer pattern
 - `ats.py` & `customize.py`: API endpoints
+
+The application currently supports both Claude (via direct API) and OpenAI (via Agents SDK) as providers, with schema definitions for structured outputs already implemented using Pydantic.
 
 ## PydanticAI Features Overview
 
@@ -75,21 +78,26 @@ PydanticAI offers several advanced capabilities that can enhance the application
 ### Supported Models
 
 1. **OpenAI Models**:
-   - GPT-4o, GPT-4o-mini, o3, o3-mini
+   - GPT-4o, GPT-4o-mini, GPT-4.1
    - Support for context windows up to 128K tokens
    - Function calling for structured outputs
    - Varying price points for cost optimization
 
 2. **Anthropic Models**:
+   - Claude 3.7 Sonnet (latest as of February 2025)
+   - Claude 3.5 Sonnet (version 2, updated October 2024)
+   - Claude 3.5 Haiku (updated October 2024)
    - Claude 3 Series (Opus, Sonnet, Haiku)
-   - Claude 3.5 Sonnet
+   - Extended thinking capability (Claude 3.7)
    - Large context windows
    - Strong reasoning capabilities
 
 3. **Google Gemini Models**:
-   - Gemini 1.5 Pro, Flash
-   - Multimodal capabilities
-   - Competitive pricing
+   - Gemini 2.5 Pro (most advanced reasoning, released March 2025)
+   - Gemini 2.5 Flash (excellent price/performance, released April 2025)
+   - Gemini 2.0 Flash (multimodal capabilities)
+   - Long context support up to 1M tokens
+   - Integrated thinking budget controls
 
 4. **Additional Providers**:
    - Mistral, Cohere, Groq, Ollama
@@ -110,55 +118,58 @@ The migration will follow these principles:
 
 ## Implementation Plan
 
+The implementation plan builds on the existing codebase, which already has well-defined schemas and model integration patterns through `claude_service.py` and `openai_agents_service.py`.
+
 ### Phase 1: PydanticAI Core Integration
 1. **Environment Setup**
    - Install PydanticAI and dependencies
-   - Configure environment variables for API keys
-   - Set up logging and monitoring with Pydantic Logfire
-   - Create `pydanticai_service.py` module as the foundation
+   - Configure environment variables for API keys (reusing existing structure)
+   - Set up enhanced logging with Pydantic Logfire integration
+   - Create `pydanticai_service.py` module leveraging existing patterns
 
-2. **Schema Definition**
-   - Define Pydantic models for all structured outputs:
-     - `ResumeEvaluation` for resume analysis
-     - `OptimizationPlan` for customization plans
-     - `CustomizedResume` for modified resumes
-     - `CoverLetter` for generated cover letters
-   - Implement validation rules for each schema
-   - Create comprehensive docstrings for schema clarity
+2. **Schema Implementation**
+   - Reuse existing Pydantic models from app.schemas:
+     - `ResumeCustomizationRequest/Response` from customize.py
+     - `RecommendationItem` and `CustomizationPlan` from customize.py
+     - `ATSAnalysisResponse` from ats.py
+   - Adapt/extend models as needed for PydanticAI compatibility
+   - Ensure validation rules match existing schema definitions
 
 3. **Basic Agent Implementation**
-   - Create the base agent architecture
-   - Implement prompt templates with Jinja2
+   - Create the base agent architecture based on current service implementations
+   - Implement prompt templates reusing templates from prompts.py
    - Configure model providers (starting with Anthropic)
-   - Set up error handling and retry logic
+   - Set up error handling and retry logic matching existing patterns
    - Create utility functions for token counting and rate limiting
 
 ### Phase 2: Evaluator-Optimizer Implementation
 1. **Evaluator Agent**
    - Define the `ResumeEvaluator` agent with structured output
-   - Implement the existing evaluator prompts
+   - Implement the existing evaluator prompts from prompts.py
    - Add custom tools for keyword extraction
    - Create validation logic for evaluation outputs
-   - Implement comprehensive logging
+   - Implement comprehensive logging matching existing patterns
+   - Support extended thinking for Claude 3.7 Sonnet
 
 2. **Optimizer Agent**
    - Define the `ResumeOptimizer` agent with structured output
-   - Implement the existing optimizer prompts
+   - Implement the existing optimizer prompts from prompts.py
    - Add dependency injection for evaluation results
    - Create validation logic for optimization plans
    - Add tracing for optimization steps
+   - Support extended thinking for complex optimization tasks
 
 3. **Agent Workflow Integration**
-   - Implement the evaluator-optimizer workflow
-   - Define iteration mechanisms and stopping criteria
+   - Implement the evaluator-optimizer workflow based on customization_service.py
+   - Define iteration mechanisms and stopping criteria (matching existing behavior)
    - Create error handling for the complete workflow
    - Implement performance metrics collection
    - Add detailed logging for each step
 
 ### Phase 3: Extension and Optimization
 1. **Model Provider Expansion**
-   - Add support for OpenAI models
-   - Implement Gemini integration
+   - Add optimal configuration for Claude 3.7 Sonnet with extended thinking
+   - Implement Gemini 2.5 integration with thinking budgets
    - Add model fallback chains
    - Create model selection strategies
    - Implement A/B testing capabilities
@@ -179,46 +190,27 @@ The migration will follow these principles:
 
 ## Evaluator-Optimizer Implementation with PydanticAI
 
-The evaluator-optimizer pattern is perfect for implementation with PydanticAI's type-safe design and structured outputs. Here's a detailed implementation approach:
+The evaluator-optimizer pattern is perfect for implementation with PydanticAI's type-safe design and structured outputs. Here's a detailed implementation approach using the existing schema definitions:
 
 ### Schema Definition
 
 ```python
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Literal
-
-class KeywordMatch(BaseModel):
-    keyword: str
-    found_in_resume: bool
-    importance: Literal["critical", "important", "nice-to-have"]
-    context: Optional[str] = None
+from app.schemas.customize import CustomizationLevel, CustomizationPlan, RecommendationItem
+from app.schemas.ats import KeywordMatch, ATSImprovement, SectionScore
 
 class ResumeEvaluation(BaseModel):
-    score: int = Field(..., ge=0, le=100, description="Overall match score from 0-100")
-    keyword_matches: List[KeywordMatch] = Field(..., description="Detailed keyword match analysis")
-    missing_keywords: List[str] = Field(..., description="Important keywords from job description missing in resume")
-    suggestions: List[str] = Field(..., description="Specific suggestions for improvement")
-    passes_ats: bool = Field(..., description="Whether the resume would pass an ATS system")
-    strengths: List[str] = Field(..., description="Resume strengths relative to the job")
-    weaknesses: List[str] = Field(..., description="Areas of improvement needed")
-
-class SectionChange(BaseModel):
-    section_name: str = Field(..., description="Name of the section to modify")
-    original_content: str = Field(..., description="Original content in this section")
-    modified_content: str = Field(..., description="Proposed modified content")
-    rationale: str = Field(..., description="Explanation for the changes")
-
-class OptimizationPlan(BaseModel):
-    sections_to_modify: List[SectionChange] = Field(..., description="Specific sections to change")
-    new_sections_to_add: List[SectionChange] = Field(..., description="New sections to add")
-    overall_strategy: str = Field(..., description="Overall customization strategy")
-    customization_level: Literal["light", "moderate", "heavy"] = Field(..., description="Level of changes applied")
-
-class CustomizedResume(BaseModel):
-    original_resume: str = Field(..., description="The original resume text")
-    customized_resume: str = Field(..., description="The customized resume text")
-    changes_made: List[SectionChange] = Field(..., description="Details of changes made")
-    customization_level: Literal["light", "moderate", "heavy"] = Field(..., description="Level of customization applied")
+    overall_assessment: str = Field(..., description="Detailed evaluation of resume-job match")
+    match_score: int = Field(..., ge=0, le=100, description="Score from 0-100")
+    job_key_requirements: List[str] = Field(..., description="Most important job requirements")
+    strengths: List[str] = Field(..., description="Candidate strengths relative to job")
+    gaps: List[str] = Field(..., description="Missing skills or experiences")
+    term_mismatches: List[Dict[str, str]] = Field(..., description="Terminology equivalence")
+    section_evaluations: List[Dict[str, Any]] = Field(..., description="Section-level evaluations")
+    competitor_analysis: str = Field(..., description="Market comparison")
+    reframing_opportunities: List[str] = Field(..., description="Experience reframing ideas")
+    experience_preservation_check: str = Field(..., description="Verification of experience preservation")
 ```
 
 ### Agent Implementation
@@ -226,10 +218,14 @@ class CustomizedResume(BaseModel):
 ```python
 from pydanticai import Agent, tool
 from typing import Any, Dict
+from app.core.config import settings
+from app.core.logging import log_function_call
+from app.schemas.customize import CustomizationLevel, CustomizationPlan, RecommendationItem
 
 # Initialize the evaluator agent
 evaluator_agent = Agent(
-    'anthropic:claude-3-5-sonnet',  # Can be configured based on settings
+    # Support latest Claude model with extended thinking for better evaluation
+    'anthropic:claude-3-7-sonnet-20250219',  # Can be configured based on settings
     output_type=ResumeEvaluation,
     system_prompt="""
     You are an expert resume evaluator and ATS specialist. Your job is to analyze how well a resume matches a job description.
@@ -242,7 +238,9 @@ evaluator_agent = Agent(
     5. Strengths and weaknesses of the resume
     
     Be thorough in your analysis and provide actionable feedback.
-    """
+    """,
+    # Configure extended thinking for complex analysis
+    thinking_config={"budget_tokens": 15000, "type": "enabled"}
 )
 
 # Define custom tools
@@ -280,8 +278,9 @@ def simulate_ats(resume: str, job_description: str) -> Dict[str, Any]:
 
 # Initialize the optimizer agent
 optimizer_agent = Agent(
-    'anthropic:claude-3-5-sonnet',  # Can be configured based on settings
-    output_type=OptimizationPlan,
+    # Also support latest Claude model with extended thinking
+    'anthropic:claude-3-7-sonnet-20250219',  # Can be configured based on settings
+    output_type=CustomizationPlan,
     system_prompt="""
     You are an expert resume optimizer. Your job is to create a detailed plan to improve a resume based on:
     
@@ -295,59 +294,152 @@ optimizer_agent = Agent(
     3. A rationale for the changes
     
     Focus on addressing the missing keywords and suggestions from the evaluation.
-    """
+    """,
+    # Configure extended thinking for complex optimization
+    thinking_config={"budget_tokens": 15000, "type": "enabled"}
 )
+
+# Add a model fallback configuration
+evaluator_agent.fallback_config = [
+    # First fallback to Claude 3.5 Sonnet
+    'anthropic:claude-3-5-sonnet-20241022',
+    # Then try Gemini 2.5 Flash
+    'google:gemini-2.5-flash-preview-04-17',
+    # Final fallback to OpenAI
+    'openai:gpt-4.1'
+]
+
+optimizer_agent.fallback_config = [
+    # First fallback to Claude 3.5 Sonnet
+    'anthropic:claude-3-5-sonnet-20241022',
+    # Then try Gemini 2.5 Pro for complex reasoning
+    'google:gemini-2.5-pro-preview-03-25',
+    # Final fallback to OpenAI
+    'openai:gpt-4.1'
+]
 ```
 
 ### Workflow Implementation
 
 ```python
+@log_function_call
 async def evaluate_resume_job_match(
     resume: str, 
     job_description: str,
+    basic_analysis: Optional[Dict] = None,
+    customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
     industry: Optional[str] = None
-) -> ResumeEvaluation:
+) -> Dict:
     """
     Evaluate how well a resume matches a job description.
     
     Args:
         resume: The resume text
         job_description: The job description
+        basic_analysis: Optional basic keyword analysis results
+        customization_level: Level of customization
         industry: Optional industry context
         
     Returns:
         Structured evaluation of the resume-job match
     """
-    # Build the input prompt
-    prompt = f"""
-    Resume:
-    {resume}
+    # Import prompts dynamically to match existing behavior
+    from app.services.prompts import get_customization_level_instructions, get_industry_specific_guidance
     
-    Job Description:
-    {job_description}
-    """
+    # Start timer for performance tracking
+    start_time = time.time()
     
-    if industry:
-        prompt += f"\nIndustry: {industry}"
-    
-    # Run the evaluator agent
-    result = await evaluator_agent.run(
-        prompt,
-        deps={
+    # Create a span in OpenTelemetry for tracing
+    with logfire.span("evaluate_resume_job_match_operation") as span:
+        span.set_attribute("resume_length", len(resume))
+        span.set_attribute("job_description_length", len(job_description))
+        span.set_attribute("customization_level", customization_level.value)
+        span.set_attribute("industry", industry if industry else "not specified")
+        
+        # Log operation start
+        logfire.info(
+            "Starting resume-job match evaluation",
+            resume_length=len(resume),
+            job_description_length=len(job_description),
+            customization_level=customization_level.name,
+            industry=industry if industry else "not specified"
+        )
+        
+        # Get customization level specific instructions
+        customization_instructions = get_customization_level_instructions(customization_level)
+        
+        # Get industry-specific guidance if industry is provided
+        industry_guidance = ""
+        if industry:
+            industry_guidance = get_industry_specific_guidance(industry)
+            if industry_guidance:
+                customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
+        
+        # Build the input prompt
+        prompt = f"""
+        Resume:
+        {resume}
+        
+        Job Description:
+        {job_description}
+        """
+        
+        if industry:
+            prompt += f"\nIndustry: {industry}"
+        
+        if basic_analysis:
+            basic_analysis_str = json.dumps(basic_analysis, indent=2)
+            prompt += f"\n\nBasic Analysis:\n{basic_analysis_str}"
+        
+        # Configure the agent with additional context (using dependency injection)
+        # This ensures the tools have access to the necessary data
+        context = {
             "extract_keywords_context": {"job_description": job_description},
-            "simulate_ats_context": {"resume": resume, "job_description": job_description}
+            "simulate_ats_context": {"resume": resume, "job_description": job_description},
+            "customization_level": customization_level.value,
+            "industry": industry
         }
-    )
-    
-    # Result is already a validated ResumeEvaluation instance
-    return result
+        
+        try:
+            # Run the evaluator agent
+            result = await evaluator_agent.run(
+                prompt,
+                deps=context
+            )
+            
+            # Convert to dict for API compatibility
+            evaluation_result = result.dict()
+            
+            # Log success
+            logfire.info(
+                "Resume-job evaluation completed successfully",
+                response_length=len(str(evaluation_result)),
+                duration_seconds=round(time.time() - start_time, 2),
+                match_score=evaluation_result.get("match_score")
+            )
+            
+            return evaluation_result
+            
+        except Exception as e:
+            # Log error
+            logfire.error(
+                "Error evaluating resume job match",
+                error=str(e),
+                error_type=type(e).__name__,
+                duration_seconds=round(time.time() - start_time, 2)
+            )
+            
+            # Re-raise the exception
+            raise e
 
+@log_function_call
 async def generate_optimization_plan(
     resume: str,
     job_description: str,
-    evaluation: ResumeEvaluation,
-    customization_level: str = "moderate"
-) -> OptimizationPlan:
+    evaluation: Dict,
+    customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
+    industry: Optional[str] = None
+) -> CustomizationPlan:
     """
     Generate a plan to optimize the resume based on evaluation.
     
@@ -355,105 +447,236 @@ async def generate_optimization_plan(
         resume: The resume text
         job_description: The job description
         evaluation: The resume evaluation
-        customization_level: How much to customize ("light", "moderate", "heavy")
+        customization_level: How much to customize
+        industry: Optional industry context
         
     Returns:
         Structured optimization plan
     """
-    # Build the input prompt
-    prompt = f"""
-    Resume:
-    {resume}
+    # Import prompts dynamically to match existing behavior
+    from app.services.prompts import get_customization_level_instructions, get_industry_specific_guidance
     
-    Job Description:
-    {job_description}
+    # Start timer for performance tracking
+    start_time = time.time()
     
-    Evaluation:
-    - Score: {evaluation.score}/100
-    - Missing Keywords: {', '.join(evaluation.missing_keywords)}
-    - Suggestions: {', '.join(evaluation.suggestions)}
-    - Strengths: {', '.join(evaluation.strengths)}
-    - Weaknesses: {', '.join(evaluation.weaknesses)}
-    
-    Customization Level: {customization_level}
-    """
-    
-    # Run the optimizer agent
-    result = await optimizer_agent.run(prompt)
-    
-    # Result is already a validated OptimizationPlan instance
-    return result
+    # Create a span in OpenTelemetry for tracing
+    with logfire.span("generate_optimization_plan_operation") as span:
+        span.set_attribute("resume_length", len(resume))
+        span.set_attribute("job_description_length", len(job_description))
+        span.set_attribute("customization_level", customization_level.value)
+        span.set_attribute("industry", industry if industry else "not specified")
+        
+        # Log operation start
+        logfire.info(
+            "Starting optimization plan generation",
+            resume_length=len(resume),
+            job_description_length=len(job_description),
+            customization_level=customization_level.name,
+            industry=industry if industry else "not specified"
+        )
+        
+        # Get customization level specific instructions
+        customization_instructions = get_customization_level_instructions(customization_level)
+        
+        # Get industry-specific guidance if industry is provided
+        industry_guidance = ""
+        if industry:
+            industry_guidance = get_industry_specific_guidance(industry)
+            if industry_guidance:
+                customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
+        
+        # Build the input prompt
+        prompt = f"""
+        Resume:
+        {resume}
+        
+        Job Description:
+        {job_description}
+        
+        Evaluation:
+        - Score: {evaluation.get('match_score', 0)}/100
+        - Missing Keywords: {', '.join(evaluation.get('gaps', []))}
+        - Strengths: {', '.join(evaluation.get('strengths', []))}
+        - Overall Assessment: {evaluation.get('overall_assessment', '')}
+        
+        Customization Level: {customization_level.name.lower()}
+        """
+        
+        if industry:
+            prompt += f"\nIndustry: {industry}"
+        
+        try:
+            # Run the optimizer agent
+            result = await optimizer_agent.run(prompt)
+            
+            # Already a validated CustomizationPlan instance
+            
+            # Log success
+            logfire.info(
+                "Optimization plan generation completed successfully",
+                duration_seconds=round(time.time() - start_time, 2),
+                recommendation_count=len(result.recommendations)
+            )
+            
+            return result
+            
+        except Exception as e:
+            # Log error
+            logfire.error(
+                "Error generating optimization plan",
+                error=str(e),
+                error_type=type(e).__name__,
+                duration_seconds=round(time.time() - start_time, 2)
+            )
+            
+            # Re-raise the exception
+            raise e
 
+@log_function_call
 async def customize_resume(
-    resume: str,
+    resume_content: str,
     job_description: str,
-    customization_strength: str = "moderate",
+    customization_strength: int = 2,
+    focus_areas: Optional[str] = None,
     industry: Optional[str] = None,
     iterations: int = 1
-) -> CustomizedResume:
+) -> Dict[str, str]:
     """
     Customize a resume to better match a job description.
     
     Args:
-        resume: The resume text
+        resume_content: The resume text
         job_description: The job description
-        customization_strength: How much to customize ("light", "moderate", "heavy")
+        customization_strength: How much to customize (1-3)
+        focus_areas: Optional areas to focus on
         industry: Optional industry context
         iterations: Number of improvement iterations
         
     Returns:
-        Customized resume with details of changes
+        Dictionary with original and customized resume
     """
-    current_resume = resume
-    current_evaluation = None
-    changes_made = []
+    # Start timer for performance tracking
+    start_time = time.time()
     
-    for i in range(iterations):
-        # Step 1: Evaluate current resume
-        current_evaluation = await evaluate_resume_job_match(
-            current_resume, job_description, industry
+    # Create a span in OpenTelemetry for tracing
+    with logfire.span("customize_resume_operation") as span:
+        span.set_attribute("resume_length", len(resume_content))
+        span.set_attribute("job_description_length", len(job_description))
+        span.set_attribute("customization_strength", customization_strength)
+        span.set_attribute("iterations", iterations)
+        
+        # Log operation start
+        logfire.info(
+            "Starting resume customization",
+            resume_length=len(resume_content),
+            job_description_length=len(job_description),
+            customization_strength=customization_strength,
+            focus_areas=focus_areas,
+            iterations=iterations
         )
         
-        # Check if score is already good enough
-        if current_evaluation.score >= 90:
-            break
+        # Map integer strength to CustomizationLevel enum
+        customization_level = CustomizationLevel.BALANCED
+        if customization_strength == 1:
+            customization_level = CustomizationLevel.CONSERVATIVE
+        elif customization_strength == 3:
+            customization_level = CustomizationLevel.EXTENSIVE
+        
+        # Create a specialized customization agent
+        customization_agent = Agent(
+            # Use the lowest latency model for direct customization
+            'anthropic:claude-3-5-haiku-20241022',  
+            output_format="text",
+            system_prompt=f"""
+            You are a professional resume writer helping a job seeker customize their resume for a specific job posting.
             
-        # Step 2: Generate optimization plan
-        optimization_plan = await generate_optimization_plan(
-            current_resume, 
-            job_description,
-            current_evaluation,
-            customization_strength
+            Your task is to optimize the resume to better match the job description while maintaining truthfulness.
+            
+            Guidelines:
+            - Emphasize relevant skills and experience already present in the resume
+            - Reorder or reword content for better impact and clarity
+            - Highlight achievements, especially those with quantifiable results
+            - Use industry-specific keywords from the job description
+            - Ensure formatting is consistent in Markdown
+            - NEVER fabricate experience, skills, or qualifications that aren't in the original resume
+            - NEVER invent or add new sections unless explicitly derived from existing content
+            
+            {"Make minimal, subtle changes to better align the resume with the job description." if customization_strength == 1 else ""}
+            {"Make moderate changes to highlight relevant experience and skills that match the job description." if customization_strength == 2 else ""}
+            {"Make significant changes to strongly emphasize relevant experience and skills that match the job description." if customization_strength == 3 else ""}
+            {f"Focus especially on these areas: {focus_areas}." if focus_areas else ""}
+            
+            Return ONLY the customized resume in Markdown format, maintaining proper formatting.
+            """
         )
         
-        # Step 3: Apply changes to resume
-        # In a real implementation, this would have more sophisticated 
-        # section parsing and modification logic
-        new_resume = current_resume
+        current_resume = resume_content
         
-        for section in optimization_plan.sections_to_modify:
-            # Simple replacement - in practice would need more robust section identification
-            new_resume = new_resume.replace(
-                section.original_content, 
-                section.modified_content
-            )
-            changes_made.append(section)
+        for i in range(iterations):
+            # Build the user message
+            user_message = f"""
+            Here is my current resume in Markdown format:
             
-        # Add new sections if any
-        for new_section in optimization_plan.new_sections_to_add:
-            # In practice, would need to insert at appropriate points in the resume
-            new_resume += f"\n\n{new_section.section_name}\n{new_section.modified_content}"
-            changes_made.append(new_section)
+            {current_resume}
             
-        current_resume = new_resume
-    
-    # Create the final result
-    return CustomizedResume(
-        original_resume=resume,
-        customized_resume=current_resume,
-        changes_made=changes_made,
-        customization_level=customization_strength
-    )
+            Here is the job description I'm applying for:
+            
+            {job_description}
+            
+            Please customize my resume for this specific job.
+            """
+            
+            try:
+                # Run the agent
+                result = await customization_agent.run(user_message)
+                
+                # Update the current resume with the new version
+                current_resume = result
+                
+                # If we have more iterations, first evaluate the current result
+                if i < iterations - 1:
+                    # Run evaluation to determine if more iterations needed
+                    evaluation = await evaluate_resume_job_match(
+                        current_resume, 
+                        job_description,
+                        customization_level=customization_level,
+                        industry=industry
+                    )
+                    
+                    # Check if score is already good enough
+                    if evaluation.get("match_score", 0) >= 90:
+                        logfire.info(
+                            "Early stopping customization - good match score reached",
+                            match_score=evaluation.get("match_score", 0),
+                            iteration=i+1
+                        )
+                        break
+            except Exception as e:
+                # Log the error but return what we have so far
+                logfire.error(
+                    "Error during resume customization iteration",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    iteration=i+1,
+                    duration_seconds=round(time.time() - start_time, 2)
+                )
+                # Don't continue iterations if there was an error
+                break
+        
+        # Create the final result
+        result = {
+            "original_resume": resume_content,
+            "customized_resume": current_resume
+        }
+        
+        # Log success
+        logfire.info(
+            "Resume customization completed successfully",
+            duration_seconds=round(time.time() - start_time, 2),
+            iterations_completed=i+1
+        )
+        
+        return result
 ```
 
 ### Cover Letter Implementation
@@ -466,7 +689,7 @@ class CoverLetter(BaseModel):
     formatting_notes: Optional[str] = Field(None, description="Notes about the formatting")
 
 cover_letter_agent = Agent(
-    'anthropic:claude-3-5-sonnet',  # Can be configured based on settings
+    'anthropic:claude-3-5-sonnet-20241022',  # Can be configured based on settings
     output_type=CoverLetter,
     system_prompt="""
     You are an expert cover letter writer. Your job is to create a compelling, personalized cover letter based on:
@@ -487,254 +710,247 @@ cover_letter_agent = Agent(
     """
 )
 
+@log_function_call
 async def generate_cover_letter(
     resume: str,
     job_description: str,
-    personal_details: Optional[Dict[str, str]] = None,
-    company_research: Optional[str] = None
-) -> CoverLetter:
+    applicant_name: Optional[str] = None,
+    company_name: str = "the company",
+    hiring_manager_name: Optional[str] = None,
+    additional_context: Optional[str] = None,
+    tone: str = "professional"
+) -> Dict:
     """
     Generate a personalized cover letter based on resume and job description.
     
     Args:
         resume: The resume text
         job_description: The job description
-        personal_details: Optional dict with name, contact info, etc.
-        company_research: Optional additional company information
+        applicant_name: Optional applicant name
+        company_name: Company name
+        hiring_manager_name: Optional hiring manager name
+        additional_context: Optional additional context
+        tone: Tone of the letter
         
     Returns:
         Structured cover letter response
     """
-    # Build the input prompt
-    prompt = f"""
-    Resume:
-    {resume}
+    # Start timer for performance tracking
+    start_time = time.time()
     
-    Job Description:
-    {job_description}
-    """
-    
-    if personal_details:
-        personal_info = "\n".join([f"{k}: {v}" for k, v in personal_details.items()])
-        prompt += f"\n\nPersonal Details:\n{personal_info}"
+    # Create a span in OpenTelemetry for tracing
+    with logfire.span("generate_cover_letter_operation") as span:
+        span.set_attribute("resume_length", len(resume))
+        span.set_attribute("job_description_length", len(job_description))
+        span.set_attribute("has_applicant_name", applicant_name is not None)
+        span.set_attribute("company_name", company_name)
+        span.set_attribute("has_hiring_manager", hiring_manager_name is not None)
+        span.set_attribute("has_additional_context", additional_context is not None)
+        span.set_attribute("tone", tone)
         
-    if company_research:
-        prompt += f"\n\nCompany Information:\n{company_research}"
-    
-    # Run the cover letter agent
-    result = await cover_letter_agent.run(prompt)
-    
-    # Result is already a validated CoverLetter instance
-    return result
+        # Log operation start
+        logfire.info(
+            "Starting cover letter generation",
+            resume_length=len(resume),
+            job_description_length=len(job_description),
+            company_name=company_name,
+            tone=tone
+        )
+        
+        # Build the input prompt
+        prompt = f"""
+        Resume:
+        {resume}
+        
+        Job Description:
+        {job_description}
+        
+        Company: {company_name}
+        Tone: {tone}
+        """
+        
+        # Add personal details
+        personal_details = {}
+        if applicant_name:
+            personal_details["Applicant Name"] = applicant_name
+            prompt += f"\nApplicant Name: {applicant_name}"
+            
+        if hiring_manager_name:
+            personal_details["Hiring Manager"] = hiring_manager_name
+            prompt += f"\nHiring Manager: {hiring_manager_name}"
+            
+        if additional_context:
+            personal_details["Additional Context"] = additional_context
+            prompt += f"\nAdditional Context: {additional_context}"
+        
+        # Configure the agent with additional context
+        context = {
+            "personal_details": personal_details,
+            "tone": tone,
+            "company_name": company_name
+        }
+        
+        try:
+            # Run the cover letter agent
+            result = await cover_letter_agent.run(
+                prompt,
+                deps=context
+            )
+            
+            # Convert to dict for API compatibility
+            cover_letter_result = result.dict()
+            
+            # Log success
+            logfire.info(
+                "Cover letter generation completed successfully",
+                response_length=len(result.content),
+                duration_seconds=round(time.time() - start_time, 2)
+            )
+            
+            return cover_letter_result
+            
+        except Exception as e:
+            # Log error
+            logfire.error(
+                "Error generating cover letter",
+                error=str(e),
+                error_type=type(e).__name__,
+                duration_seconds=round(time.time() - start_time, 2)
+            )
+            
+            # Re-raise the exception
+            raise e
 ```
 
 ## Code Generation Prompts
 
-The following section contains structured prompts for generating code for the PydanticAI implementation.
+The following section contains structured prompts for generating code for the PydanticAI implementation, aligned with the existing codebase structure.
 
 ### Prompt 1: Create PydanticAI Service Module
 
 ```
-Create a new Python module called pydanticai_service.py that will replace claude_service.py using PydanticAI.
+Create a new Python module called pydanticai_service.py that will integrate with the existing services in the ResumeAIAssistant project.
+
 The module should:
 1. Import necessary dependencies:
    - PydanticAI (Agent, tool)
    - Pydantic for schema definition
    - Logging from app.core.logging
    - Configuration from app.core.config
+   - Existing schemas from app.schemas package
 2. Set up proper error handling for API key validation
-3. Initialize logging similar to the Claude service
-4. Define Pydantic schemas for all structured outputs:
-   - ResumeEvaluation
-   - OptimizationPlan
-   - CustomizedResume
-   - CoverLetter
-5. Create the basic agent implementations:
+3. Initialize logging similar to the Claude and OpenAI services
+4. Utilize existing Pydantic schemas where possible:
+   - ResumeCustomizationRequest/Response from customize.py
+   - RecommendationItem and CustomizationPlan from customize.py
+   - ATSAnalysisResponse from ats.py
+5. Create the agent implementations:
    - Resume Evaluator Agent
    - Resume Optimizer Agent
    - Cover Letter Agent
-6. Define stubs for the main API functions with the same signatures as claude_service.py:
+6. Define the main API functions with the same signatures as claude_service.py:
    - evaluate_resume_job_match
    - generate_optimization_plan
    - customize_resume
    - generate_cover_letter
 
-Include thorough documentation for the module and follow the proper project coding style.
+Include thorough documentation for the module and follow the proper project coding style. The implementation should maintain compatibility with existing services while adding model flexibility.
 ```
 
 ### Prompt 2: Update Configuration Module
 
 ```
 Update the app.core.config.py module to add PydanticAI configuration.
+
 The changes should:
 1. Add the following settings:
-   - PYDANTICAI_DEFAULT_PROVIDER: Default model provider (e.g., "anthropic")
-   - PYDANTICAI_DEFAULT_MODEL: Default model setting (e.g., "claude-3-5-sonnet")
+   - PYDANTICAI_PRIMARY_PROVIDER: Default model provider (e.g., "anthropic")
+   - PYDANTICAI_PRIMARY_MODEL: Default model setting (e.g., "claude-3-7-sonnet-20250219")
    - PYDANTICAI_EVALUATOR_MODEL: Model for evaluation tasks
    - PYDANTICAI_OPTIMIZER_MODEL: Model for optimization tasks
    - PYDANTICAI_FALLBACK_MODELS: List of models to try if primary fails
+   - PYDANTICAI_THINKING_BUDGET: Token budget for models with thinking capability
    - PYDANTICAI_TEMPERATURE: Temperature setting for agent outputs
    - PYDANTICAI_MAX_TOKENS: Maximum tokens for responses
 2. Add model configuration logic for different providers:
-   - Anthropic configuration
-   - OpenAI configuration (as fallback)
-   - Gemini configuration (as fallback)
-3. Maintain complete backward compatibility with existing Claude configuration
+   - Anthropic configuration using existing ANTHROPIC_API_KEY
+   - OpenAI configuration using existing OPENAI_API_KEY
+   - Gemini configuration (new GEMINI_API_KEY)
+3. Maintain complete backward compatibility with existing Claude and OpenAI configuration
 4. Add proper documentation for all new settings
 5. Include error checking for missing API keys
 
 Follow the existing code style and structure in the config module.
 ```
 
-### Prompt 3: Implement Resume Evaluation Schema and Agent
+### Prompt 3: Implement Evaluator-Optimizer Integration
 
 ```
-Implement the resume evaluator schema and agent using PydanticAI. The implementation should:
-1. Define a comprehensive ResumeEvaluation Pydantic model:
-   - score: int (0-100)
-   - keyword_matches: List of keyword match details
-   - missing_keywords: List of missing keywords
-   - suggestions: List of improvement suggestions
-   - passes_ats: Boolean indicating ATS compatibility
-   - strengths: List of resume strengths
-   - weaknesses: List of areas for improvement
-2. Create a ResumeEvaluator agent:
-   - Configure with the appropriate model based on settings
-   - Set up system prompt using the existing evaluator prompt
-   - Add custom tools for keyword extraction and ATS simulation
-3. Implement the evaluate_resume_job_match function:
-   - Same signature as the existing function
-   - Use the new agent to generate structured evaluation
-   - Add proper error handling and logging
-4. Add comprehensive docstrings and type hints
-5. Include unit tests for the evaluation schema
+Implement the complete evaluator-optimizer pattern with PydanticAI based on the existing implementation in customization_service.py.
 
-Follow the project's coding style and ensure backward compatibility with existing code.
+The implementation should:
+1. Create a new module called pydanticai_optimizer.py in the services directory
+2. Utilize the existing schemas in app.schemas
+3. Create PydanticAI agents for evaluation and optimization
+4. Implement the iterative workflow between evaluation and optimization
+5. Add support for progressive enhancement through multiple iterations
+6. Include proper logging and monitoring
+7. Support fallback to alternative models
+8. Maintain compatibility with the existing API
+9. Add comprehensive error handling
+
+Follow the existing code patterns in the project and ensure backward compatibility with current features.
 ```
 
-### Prompt 4: Implement Optimization Schema and Agent
+### Prompt 4: Implement Cover Letter Generation
 
 ```
-Implement the resume optimizer schema and agent using PydanticAI. The implementation should:
-1. Define a comprehensive OptimizationPlan Pydantic model:
-   - sections_to_modify: List of section changes
-   - new_sections_to_add: List of new sections
-   - overall_strategy: String describing the approach
-   - customization_level: Literal type for customization strength
-2. Define a SectionChange Pydantic model:
-   - section_name: Section identifier
-   - original_content: Original text
-   - modified_content: Proposed text
-   - rationale: Explanation for changes
-3. Create a ResumeOptimizer agent:
-   - Configure with the appropriate model based on settings
-   - Set up system prompt using the existing optimizer prompt
-   - Add any necessary tools or dependencies
-4. Implement the generate_optimization_plan function:
-   - Same signature as the existing function
-   - Use the new agent to generate structured optimization plan
-   - Add proper error handling and logging
-5. Add comprehensive docstrings and type hints
-6. Include unit tests for the optimization schema
+Implement the cover letter generation feature using PydanticAI.
 
-Follow the project's coding style and ensure backward compatibility with existing code.
+The implementation should:
+1. Create a PydanticAI agent for cover letter generation in pydanticai_service.py
+2. Use Anthropic Claude 3.5 Sonnet as the default model with fallbacks
+3. Configure the agent with a system prompt based on existing claude_service.py prompt
+4. Implement the generate_cover_letter function with the same signature
+5. Add proper error handling and logging
+6. Maintain compatibility with the existing API
+7. Support all the current personalization options
+
+Follow the existing code patterns in the project and ensure backward compatibility with current features.
 ```
 
-### Prompt 5: Implement Customization Workflow
+### Prompt 5: Update API Endpoints
 
 ```
-Implement the complete resume customization workflow using PydanticAI. The implementation should:
-1. Define a CustomizedResume Pydantic model:
-   - original_resume: The original text
-   - customized_resume: The modified text
-   - changes_made: List of section changes
-   - customization_level: The level of customization applied
-2. Implement the customize_resume function:
-   - Same signature as the existing function
-   - Use the evaluator and optimizer agents in a workflow
-   - Support multiple iterations with stopping criteria
-   - Implement section replacement logic
-   - Add proper error handling and logging
-3. Add support for different customization levels:
-   - Adjust agent behavior based on customization strength
-   - Implement appropriate prompt modifications
-4. Include industry-specific guidance:
-   - Pass industry information to agents
-   - Adjust evaluation criteria based on industry
-5. Add comprehensive docstrings and type hints
-6. Include unit tests for the customization workflow
+Update the API endpoints to support the PydanticAI service module.
 
-Follow the project's coding style and ensure backward compatibility with existing code.
+The implementation should:
+1. Update the existing endpoints to use a provider selection mechanism
+2. Add a new parameter to API endpoints for selecting the provider (claude, openai, pydanticai)
+3. Use the appropriate service module based on the provider parameter
+4. Maintain backward compatibility with existing clients
+5. Add proper error handling for each provider
+6. Add provider-specific logging and monitoring
+7. Update the API documentation to include the new provider options
+
+Follow the existing code patterns in the project and ensure backward compatibility with current features.
 ```
 
-### Prompt 6: Implement Cover Letter Generation
+### Prompt 6: Implement Model Provider Management
 
 ```
-Implement the cover letter generation feature using PydanticAI. The implementation should:
-1. Define a CoverLetter Pydantic model:
-   - content: Full cover letter text
-   - sections: Dictionary of letter sections
-   - personalization_elements: List of personalization details
-   - formatting_notes: Optional notes about formatting
-2. Create a CoverLetterGenerator agent:
-   - Configure with the appropriate model based on settings
-   - Set up system prompt using the existing cover letter prompt
-   - Add any necessary tools or dependencies
-3. Implement the generate_cover_letter function:
-   - Same signature as the existing function
-   - Use the new agent to generate structured cover letter
-   - Add proper error handling and logging
-4. Add support for personalization:
-   - Process personal details in the prompt
-   - Include company research when available
-5. Add comprehensive docstrings and type hints
-6. Include unit tests for the cover letter generation
+Create a module for managing multiple model providers with PydanticAI called model_manager.py.
 
-Follow the project's coding style and ensure backward compatibility with existing code.
-```
-
-### Prompt 7: Implement Custom Tools
-
-```
-Implement custom tools for the PydanticAI agents. The implementation should include:
-1. Keyword extraction tool:
-   - Function to extract key requirements from job descriptions
-   - Use NLP techniques to identify important terms
-   - Support prioritization (required vs preferred)
-   - Return structured keyword information
-2. ATS simulation tool:
-   - Function to simulate ATS scanning of resumes
-   - Score calculation based on keyword matches
-   - Formatting analysis for ATS compatibility
-   - Return detailed ATS results
-3. Industry guidance tool:
-   - Function to provide industry-specific resume advice
-   - Support for various industries (tech, finance, healthcare, etc.)
-   - Return tailored recommendations
-4. Text formatting tool:
-   - Function to analyze and improve resume formatting
-   - Check for consistent styling and structure
-   - Return formatting suggestions
-5. Error handling for all tools
-6. Comprehensive docstrings and type hints
-7. Unit tests for tool functionality
-
-Follow the project's coding style and ensure proper integration with the agents.
-```
-
-### Prompt 8: Implement Model Provider Management
-
-```
-Create a module for managing multiple model providers with PydanticAI. The implementation should:
+The implementation should:
 1. Create a ModelManager class:
    - Configure multiple providers (Anthropic, OpenAI, Gemini)
    - Handle API key validation and error handling
    - Support fallback chains between providers
    - Track usage and performance metrics
 2. Implement provider-specific configuration:
-   - Anthropic provider setup
-   - OpenAI provider setup
-   - Gemini provider setup
+   - Anthropic provider setup with Claude 3.7 Sonnet and extended thinking
+   - OpenAI provider setup with GPT-4.1
+   - Gemini provider setup with Gemini 2.5 models
    - Support for additional providers
 3. Create model selection strategies:
    - Cost-based selection
@@ -752,61 +968,33 @@ Create a module for managing multiple model providers with PydanticAI. The imple
 Follow the project's modular architecture and provide thorough documentation.
 ```
 
-### Prompt 9: Update API Endpoints
+### Prompt 7: Implement Integration Tests
 
 ```
-Update the API endpoints to use the new pydanticai_service module. The implementation should:
-1. Update ATS Endpoints (app/api/endpoints/ats.py):
-   - Import the pydanticai_service module
-   - Update function calls to use the new service
-   - Maintain the same API interface
-   - Add any necessary error handling
-   - Update response models if needed
-2. Update Customization Endpoints (app/api/endpoints/customize.py):
-   - Switch to the PydanticAI service
-   - Maintain the existing API contracts
-   - Add PydanticAI-specific error handling
-   - Ensure all functionality is preserved
-3. Update Cover Letter Endpoints (app/api/endpoints/cover_letter.py):
-   - Replace Claude service calls with PydanticAI calls
-   - Preserve the same interface
-   - Update error handling
-   - Ensure backward compatibility
-4. Add monitoring and telemetry:
-   - Track performance metrics
-   - Monitor token usage
-   - Log model selection details
+Create comprehensive tests for the PydanticAI integration in tests/integration/test_pydanticai.py.
 
-Follow the project's API architecture and error handling patterns.
-```
-
-### Prompt 10: Create Integration Tests
-
-```
-Create comprehensive tests for the PydanticAI integration. The implementation should include:
-1. Unit tests for schemas:
-   - Test validation for all Pydantic models
-   - Ensure proper error messages for invalid data
-   - Test edge cases and boundary values
-2. Integration tests for agents:
+The implementation should include:
+1. Unit tests for the PydanticAI service:
    - Test the evaluator agent with sample inputs
    - Test the optimizer agent with sample inputs
    - Test the cover letter agent with sample inputs
    - Verify structured output compliance
-3. Workflow tests:
+2. Integration tests for the evaluator-optimizer workflow:
    - Test the complete customization workflow
    - Verify proper handling of iterations
    - Test different customization levels
    - Validate integrated agent behavior
-4. Error handling tests:
-   - Test API key validation
-   - Test model fallback mechanisms
-   - Test rate limiting handling
-   - Verify appropriate error responses
-5. Performance tests:
-   - Measure response times across providers
-   - Compare token efficiency
-   - Test with various input sizes
+3. API endpoint tests:
+   - Test the API endpoints with the pydanticai provider parameter
+   - Verify backward compatibility with existing endpoints
+   - Test error handling and fallbacks
+4. Model fallback tests:
+   - Test fallback behavior when a model is unavailable
+   - Verify graceful degradation
+5. Performance comparison tests:
+   - Compare response quality across providers
+   - Measure response times
+   - Analyze token usage efficiency
 
 Follow the project's testing conventions with pytest and provide comprehensive documentation.
 ```
@@ -814,7 +1002,7 @@ Follow the project's testing conventions with pytest and provide comprehensive d
 ## Next Steps and Considerations
 
 - **Gradual Rollout**: Begin with Anthropic models for compatibility, then expand to other providers
-- **A/B Testing**: Implement comparison testing between Claude direct implementation and PydanticAI
+- **A/B Testing**: Implement comparison testing between Claude direct implementation, OpenAI Agents SDK, and PydanticAI
 - **Cost Monitoring**: Track token usage and costs across different providers
 - **Model Experimentation**: Test different models to find optimal price/performance balance
 - **Tool Enhancement**: Continuously improve the custom tools based on performance data
@@ -822,3 +1010,5 @@ Follow the project's testing conventions with pytest and provide comprehensive d
 - **Documentation**: Provide comprehensive documentation for the new architecture
 - **UI Integration**: Update the frontend to utilize new capabilities
 - **Performance Tuning**: Optimize prompt templates and token usage for efficiency
+- **Extended Thinking Optimization**: Fine-tune extended thinking budgets for Claude 3.7 Sonnet
+- **Thinking Budget Control**: Experiment with Gemini thinking budgets for optimal performance
