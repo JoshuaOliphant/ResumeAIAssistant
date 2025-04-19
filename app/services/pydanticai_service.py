@@ -131,6 +131,8 @@ class CoverLetter(BaseModel):
     sections: Dict[str, str] = Field(..., description="The cover letter broken down by sections")
     personalization_elements: List[str] = Field(..., description="How the letter was personalized")
     formatting_notes: Optional[str] = Field(None, description="Notes about the formatting")
+    address_block: Optional[str] = Field(None, description="Formatted address block if provided")
+    closing: Optional[str] = Field(None, description="Closing section with signature")
 
 # Define agent creation functions
 def create_resume_evaluator_agent(customization_level: CustomizationLevel = CustomizationLevel.BALANCED, 
@@ -288,18 +290,48 @@ def create_resume_optimizer_agent(customization_level: CustomizationLevel = Cust
         )
         raise e
 
-def create_cover_letter_agent() -> Agent:
+def create_cover_letter_agent(applicant_name: Optional[str] = None,
+                         company_name: str = "the company",
+                         hiring_manager_name: Optional[str] = None,
+                         additional_context: Optional[str] = None,
+                         tone: str = "professional") -> Agent:
     """
     Create an agent for generating cover letters.
     
+    Args:
+        applicant_name: Optional applicant name
+        company_name: Optional company name
+        hiring_manager_name: Optional hiring manager name
+        additional_context: Optional additional context to include
+        tone: Tone of the cover letter (professional, enthusiastic, formal, etc.)
+        
     Returns:
         PydanticAI Agent configured for cover letter generation
     """
     if not PYDANTICAI_AVAILABLE:
         raise ImportError("PydanticAI is not installed")
         
+    # Build the salutation based on available info
+    salutation_instruction = ""
+    if hiring_manager_name:
+        salutation_instruction = f"Address the letter to {hiring_manager_name}."
+    else:
+        salutation_instruction = "Use an appropriate general salutation like 'Dear Hiring Manager'."
+    
+    # Add applicant name if provided
+    applicant_instruction = ""
+    if applicant_name:
+        applicant_instruction = f"The letter should be signed by {applicant_name}."
+    else:
+        applicant_instruction = "End with an appropriate closing but without a specific name."
+    
+    # Add additional context if provided
+    context_instruction = ""
+    if additional_context:
+        context_instruction = f"Also consider this additional context: {additional_context}"
+        
     # Create system prompt for cover letter generation
-    system_prompt = """
+    system_prompt = f"""
     You are a professional resume writer helping a job seeker create a compelling cover letter for a specific job posting.
     
     Your task is to write a personalized cover letter that highlights the applicant's qualifications for the position.
@@ -308,17 +340,26 @@ def create_cover_letter_agent() -> Agent:
     - Use the provided resume to extract relevant experience, skills, and achievements
     - Match the applicant's qualifications to the job requirements
     - Keep the letter concise and focused (about 300-400 words)
-    - Use a professional and enthusiastic tone throughout the letter
+    - Use a {tone} tone throughout the letter
     - Structure the letter with a clear introduction, body, and conclusion
     - Include specific examples from the resume that demonstrate the applicant's fit for the role
-    - Mention the company name naturally in the letter
+    - Mention the company name ({company_name}) naturally in the letter
+    - {salutation_instruction}
+    - {applicant_instruction}
     - Format the letter in professional Markdown with appropriate spacing
     
-    Your response should include:
-    - The complete cover letter text
-    - A breakdown of the letter by sections
-    - A list of how the letter was personalized for this specific job and company
-    - Optional formatting notes
+    {context_instruction}
+    
+    Your response MUST include:
+    - The complete cover letter text in 'content' - this is the most important field
+    - A breakdown of the letter by sections in 'sections' (e.g., introduction, body paragraphs, conclusion)
+    - A list of how the letter was personalized for this specific job and company in 'personalization_elements'
+    - Optional formatting notes in 'formatting_notes'
+    - Optional address block in 'address_block' if appropriate
+    - Optional closing in 'closing' if appropriate
+    
+    The letter should showcase the applicant's relevant qualifications while maintaining a professional and enthusiastic tone.
+    Focus on demonstrating how the applicant's experience directly addresses the job requirements.
     """
     
     # Determine if the model supports thinking
@@ -346,7 +387,9 @@ def create_cover_letter_agent() -> Agent:
         logfire.info(
             "Cover Letter Agent created successfully",
             model=COVER_LETTER_MODEL,
-            has_thinking=thinking_config is not None
+            has_thinking=thinking_config is not None,
+            company_name=company_name,
+            tone=tone
         )
         
         return cover_letter_agent
@@ -785,7 +828,7 @@ async def generate_cover_letter(
     tone: str = "professional"
 ) -> str:
     """
-    Generate a cover letter based on a resume and job description.
+    Generate a cover letter based on a resume and job description using advanced AI.
     
     Args:
         resume_content: The content of the resume in Markdown format
@@ -814,6 +857,7 @@ async def generate_cover_letter(
         span.set_attribute("has_hiring_manager", hiring_manager_name is not None)
         span.set_attribute("has_additional_context", additional_context is not None)
         span.set_attribute("tone", tone)
+        span.set_attribute("model", COVER_LETTER_MODEL)
         
         # Log operation start
         logfire.info(
@@ -821,11 +865,18 @@ async def generate_cover_letter(
             resume_length=len(resume_content),
             job_description_length=len(job_description),
             company_name=company_name,
-            tone=tone
+            tone=tone,
+            model=COVER_LETTER_MODEL
         )
         
-        # Create the cover letter agent
-        cover_letter_agent = create_cover_letter_agent()
+        # Create the cover letter agent with all personalization options
+        cover_letter_agent = create_cover_letter_agent(
+            applicant_name=applicant_name,
+            company_name=company_name,
+            hiring_manager_name=hiring_manager_name,
+            additional_context=additional_context,
+            tone=tone
+        )
         
         # Build the user message
         user_message = f"""
@@ -840,57 +891,75 @@ async def generate_cover_letter(
         Please write a cover letter for this position that highlights my relevant qualifications.
         """
         
-        # Add personal details
-        if applicant_name:
-            user_message += f"\nMy name is: {applicant_name}"
-            
-        if hiring_manager_name:
-            user_message += f"\nThe hiring manager's name is: {hiring_manager_name}"
-            
-        if additional_context:
-            user_message += f"\nAdditional context: {additional_context}"
-            
-        user_message += f"\nPlease use a {tone} tone for the letter."
+        # Add retry mechanism for improved resilience
+        max_retries = 2
+        retry_count = 0
         
-        # Set up the dependencies
-        dependencies = {
-            "company_name": company_name,
-            "tone": tone,
-            "applicant_name": applicant_name,
-            "hiring_manager_name": hiring_manager_name
-        }
-        
-        try:
-            # Run the agent
-            result = await cover_letter_agent.run(
-                user_message,
-                deps=dependencies
-            )
-            
-            # Calculate elapsed time
-            elapsed_time = time.time() - start_time
-            
-            # Log success
-            logfire.info(
-                "Cover letter generation completed successfully",
-                response_length=len(result.content),
-                duration_seconds=round(elapsed_time, 2)
-            )
-            
-            # Return just the content for compatibility with existing APIs
-            return result.content
-            
-        except Exception as e:
-            # Calculate elapsed time
-            elapsed_time = time.time() - start_time
-            
-            # Log error
-            logfire.error(
-                "Error generating cover letter",
-                error=str(e),
-                error_type=type(e).__name__,
-                duration_seconds=round(elapsed_time, 2)
-            )
-            
-            # Re-raise the exception
-            raise e
+        while retry_count <= max_retries:
+            try:
+                # Run the agent
+                result = await cover_letter_agent.run(user_message)
+                
+                # Calculate elapsed time
+                elapsed_time = time.time() - start_time
+                
+                # Extract metadata for logging
+                sections_count = len(result.sections) if result.sections else 0
+                personalization_count = len(result.personalization_elements) if result.personalization_elements else 0
+                
+                # Log success
+                logfire.info(
+                    "Cover letter generation completed successfully",
+                    response_length=len(result.content),
+                    sections_count=sections_count,
+                    personalization_count=personalization_count,
+                    duration_seconds=round(elapsed_time, 2),
+                    attempt=retry_count + 1
+                )
+                
+                # Return just the content for compatibility with existing APIs
+                return result.content
+                
+            except Exception as e:
+                retry_count += 1
+                # Log error
+                logfire.warning(
+                    "Error generating cover letter, will retry" if retry_count <= max_retries else "Final error generating cover letter",
+                    error=str(e),
+                    error_type=type(e).__name__,
+                    duration_seconds=round(time.time() - start_time, 2),
+                    attempt=retry_count,
+                    will_retry=retry_count <= max_retries
+                )
+                
+                if retry_count > max_retries:
+                    # Re-raise the exception on final failure
+                    logfire.error(
+                        "Failed to generate cover letter after all retries",
+                        error=str(e),
+                        error_type=type(e).__name__,
+                        duration_seconds=round(time.time() - start_time, 2),
+                        attempts=retry_count
+                    )
+                    raise e
+                
+                # If using fallback models, try to use the next one in the chain
+                if retry_count == 1 and FALLBACK_MODELS:
+                    fallback_model = FALLBACK_MODELS[0]
+                    logfire.info(
+                        f"Falling back to alternate model: {fallback_model}",
+                        original_model=COVER_LETTER_MODEL,
+                        fallback_model=fallback_model
+                    )
+                    
+                    # Create a new agent with the fallback model
+                    cover_letter_agent = Agent(
+                        fallback_model,
+                        output_type=CoverLetter,
+                        system_prompt=cover_letter_agent.system_prompt,
+                        temperature=TEMPERATURE,
+                        max_tokens=MAX_TOKENS
+                    )
+                
+                # Wait briefly before retrying
+                await asyncio.sleep(1)

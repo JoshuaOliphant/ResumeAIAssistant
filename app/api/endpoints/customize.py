@@ -1,3 +1,6 @@
+"""
+API endpoints for resume customization.
+"""
 import uuid
 import time
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -15,8 +18,8 @@ from app.schemas.customize import (
     CustomizationPlanRequest,
     CustomizationPlan
 )
-from app.services import openai_agents_service
 from app.services.customization_service import get_customization_service, CustomizationService
+from app.services.pydanticai_optimizer import get_pydanticai_optimizer_service, PydanticAIOptimizerService
 
 router = APIRouter()
 
@@ -27,12 +30,12 @@ async def customize_resume_endpoint(
     db: Session = Depends(get_db)
 ):
     """
-    Customize a resume for a specific job description using OpenAI's AI models.
+    Customize a resume for a specific job description using PydanticAI.
     
     - **resume_id**: ID of the resume to customize
     - **job_description_id**: ID of the job description to customize for
     - **customization_strength**: Strength of customization (1-3)
-    - **focus_areas**: Optional comma-separated list of areas to focus on
+    - **focus_areas**: Optional comma-separated list of areas to focus on or industry
     """
     # Verify the resume exists
     resume = db.query(Resume).filter(Resume.id == customization_request.resume_id).first()
@@ -52,154 +55,41 @@ async def customize_resume_endpoint(
     if not job:
         raise HTTPException(status_code=404, detail="Job description not found")
     
-    # Get the customization plan first
-    plan_request = CustomizationPlanRequest(
+    # Log operation start
+    logfire.info(
+        "Starting resume customization with PydanticAI",
         resume_id=customization_request.resume_id,
-        job_description_id=customization_request.job_description_id,
-        customization_strength=customization_request.customization_strength,
-        industry=customization_request.focus_areas
+        job_id=customization_request.job_description_id,
+        customization_level=customization_request.customization_strength.name
     )
     
-    # Get the customization service
-    customization_service = get_customization_service(db)
+    # Use the PydanticAI optimizer service for the complete workflow
+    pydanticai_service = get_pydanticai_optimizer_service(db)
     
-    # Generate the plan
-    plan = await customization_service.generate_customization_plan(plan_request)
+    # Perform the complete customization process
+    result = await pydanticai_service.customize_resume(
+        resume_id=customization_request.resume_id,
+        job_id=customization_request.job_description_id,
+        customization_strength=customization_request.customization_strength,
+        industry=customization_request.focus_areas,
+        iterations=MAX_FEEDBACK_ITERATIONS
+    )
     
-    # Now, implement the plan to get the initial optimized resume
-    try:
-        optimized_resume = await customization_service._implement_optimization_plan(
-            resume_version.content, 
-            plan
-        )
-    except Exception as e:
-        logfire.error(
-            "Error implementing optimization plan",
-            error=str(e),
-            error_type=type(e).__name__,
-            traceback=traceback.format_exception(type(e), e, e.__traceback__),
-            resume_id=customization_request.resume_id,
-            job_id=customization_request.job_description_id
-        )
-        # In case of error, use the original content
-        optimized_resume = resume_version.content
+    # Get the content from the result
+    customized_content = result["customized_content"]
     
-    # Implement the iterative feedback loop for up to MAX_FEEDBACK_ITERATIONS iterations
-    iterations = 0
-    while iterations < MAX_FEEDBACK_ITERATIONS:
-        # Log the iteration count
-        logfire.info(
-            f"Starting feedback iteration {iterations + 1}/{MAX_FEEDBACK_ITERATIONS}",
-            resume_id=customization_request.resume_id,
-            job_id=customization_request.job_description_id,
-            iteration=iterations + 1
-        )
-        
-        # Get feedback from the evaluator on the optimized resume
-        
-        start_time_feedback = time.time()
-        feedback = await openai_agents_service.evaluate_optimization_plan(
-            original_resume=resume_version.content,
-            job_description=job.description,
-            optimized_resume=optimized_resume,
-            customization_level=customization_request.customization_strength,
-            industry=customization_request.focus_areas
-        )
-        
-        # Log feedback metrics
-        elapsed_time_feedback = time.time() - start_time_feedback
-        logfire.info(
-            f"Feedback iteration {iterations + 1} evaluation completed",
-            resume_id=customization_request.resume_id,
-            job_id=customization_request.job_description_id,
-            duration_seconds=round(elapsed_time_feedback, 2),
-            requires_iteration=feedback.get("requires_iteration", False),
-            experience_issues_count=len(feedback.get("experience_preservation_issues", [])),
-            keyword_feedback_count=len(feedback.get("keyword_alignment_feedback", []))
-        )
-        
-        # If no further iteration is required, break out of the loop
-        if not feedback.get("requires_iteration", False):
-            logfire.info(
-                f"No further iterations required after iteration {iterations + 1}",
-                resume_id=customization_request.resume_id,
-                job_id=customization_request.job_description_id
-            )
-            break
-            
-        # If we have experience preservation issues, these are critical to fix
-        if feedback.get("experience_preservation_issues"):
-            logfire.warning(
-                f"Experience preservation issues found in iteration {iterations + 1}",
-                resume_id=customization_request.resume_id,
-                job_id=customization_request.job_description_id,
-                issues_count=len(feedback.get("experience_preservation_issues", []))
-            )
-        
-        # Generate an improved plan based on the feedback
-        start_time_improved = time.time()
-        improved_plan = await openai_agents_service.optimize_resume_with_feedback(
-            original_resume=resume_version.content,
-            job_description=job.description,
-            evaluation={},  # We don't need the full evaluation for feedback response
-            feedback=feedback,
-            customization_level=customization_request.customization_strength,
-            industry=customization_request.focus_areas
-        )
-        
-        # Log improved plan metrics
-        elapsed_time_improved = time.time() - start_time_improved
-        logfire.info(
-            f"Improved plan generated for iteration {iterations + 1}",
-            resume_id=customization_request.resume_id,
-            job_id=customization_request.job_description_id,
-            duration_seconds=round(elapsed_time_improved, 2),
-            recommendations_count=len(improved_plan.recommendations)
-        )
-        
-        # Update the plan with the improved one
-        plan = improved_plan
-        
-        # Implement the improved plan
-        try:
-            optimized_resume = await customization_service._implement_optimization_plan(
-                resume_version.content, 
-                plan
-            )
-        except Exception as e:
-            logfire.error(
-                f"Error implementing improved plan in iteration {iterations + 1}",
-                error=str(e),
-                error_type=type(e).__name__,
-                traceback=traceback.format_exception(type(e), e, e.__traceback__),
-                resume_id=customization_request.resume_id,
-                job_id=customization_request.job_description_id,
-                iteration=iterations + 1
-            )
-            # In case of error, use the previous optimized resume
-            # (This avoids breaking the loop if implementation fails)
-            # optimized_resume remains unchanged
-        
-        # Increment iteration counter
-        iterations += 1
-    
-    # If we reached the maximum iterations, log this
-    if iterations == MAX_FEEDBACK_ITERATIONS:
-        logfire.info(
-            f"Reached maximum feedback iterations ({MAX_FEEDBACK_ITERATIONS})",
-            resume_id=customization_request.resume_id,
-            job_id=customization_request.job_description_id
-        )
-    
-    # The final optimized resume is our customized content
-    customized_content = optimized_resume
+    logfire.info(
+        "Resume customization completed successfully with PydanticAI",
+        resume_id=customization_request.resume_id,
+        job_id=customization_request.job_description_id,
+        customized_resume_id=result["customized_resume_id"]
+    )
     
     # Log the result of the customization process
     logfire.info(
-        "Resume customization completed with feedback loop",
+        "Resume customization completed",
         resume_id=customization_request.resume_id,
         job_id=customization_request.job_description_id,
-        iterations_completed=iterations,
         final_content_length=len(customized_content)
     )
     
@@ -232,15 +122,15 @@ async def customize_resume_endpoint(
 @router.post("/plan", response_model=CustomizationPlan)
 async def generate_customization_plan(
     plan_request: CustomizationPlanRequest,
-    customization_service: CustomizationService = Depends(get_customization_service)
+    db: Session = Depends(get_db)
 ):
     """
-    Generate a detailed resume customization plan using the evaluator-optimizer pattern.
+    Generate a detailed resume customization plan using the evaluator-optimizer pattern with PydanticAI.
     
     This endpoint implements a multi-stage AI workflow:
     1. Basic analysis (existing ATS analyzer)
-    2. Evaluation (Claude acting as ATS expert)
-    3. Optimization (Claude generating a detailed plan)
+    2. Evaluation (PydanticAI acting as ATS expert)
+    3. Optimization (PydanticAI generating a detailed plan)
     
     - **resume_id**: ID of the resume to analyze
     - **job_description_id**: ID of the job description to analyze against
@@ -250,18 +140,28 @@ async def generate_customization_plan(
     Returns a detailed customization plan with specific recommendations.
     """
     logfire.info(
-        "Generating customization plan",
+        "Generating customization plan with PydanticAI",
         resume_id=plan_request.resume_id,
         job_id=plan_request.job_description_id,
         customization_level=plan_request.customization_strength.name
     )
     
     try:
-        # Generate the plan using our service
-        plan = await customization_service.generate_customization_plan(plan_request)
+        # Use the PydanticAI optimizer service
+        pydanticai_service = get_pydanticai_optimizer_service(db)
+        
+        # Generate the plan using PydanticAI optimizer service
+        plan = await pydanticai_service.generate_customization_plan(
+            resume_id=plan_request.resume_id,
+            job_id=plan_request.job_description_id,
+            customization_strength=plan_request.customization_strength,
+            industry=plan_request.industry,
+            ats_analysis=plan_request.ats_analysis,
+            iterations=1  # Default to 1 iteration
+        )
         
         logfire.info(
-            "Customization plan generated successfully",
+            "Customization plan generated successfully with PydanticAI",
             resume_id=plan_request.resume_id,
             job_id=plan_request.job_description_id,
             recommendation_count=len(plan.recommendations)

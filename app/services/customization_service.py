@@ -20,7 +20,7 @@ from app.schemas.customize import (
 )
 
 from app.core.logging import log_function_call
-from app.services import openai_agents_service as ai_service
+from app.services import pydanticai_service as ai_service
 from app.services.prompts import MAX_FEEDBACK_ITERATIONS
 
 

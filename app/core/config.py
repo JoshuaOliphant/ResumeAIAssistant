@@ -26,8 +26,8 @@ class Settings(BaseSettings):
 
     # Claude API
     ANTHROPIC_API_KEY: Optional[str] = os.getenv("ANTHROPIC_API_KEY")
-    # the newest Anthropic model is "claude-3-5-sonnet-20241022" which was released October 22, 2024
-    CLAUDE_MODEL: str = "claude-3-7-sonnet-20250219"
+    # The newest Anthropic model is "claude-3-7-sonnet-20250501" which was released April 2025
+    CLAUDE_MODEL: str = "claude-3-7-sonnet-20250501"
     
     # OpenAI API
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY")
@@ -43,38 +43,38 @@ class Settings(BaseSettings):
     # PydanticAI Configuration
     # Default provider based on available API keys
     PYDANTICAI_PRIMARY_PROVIDER: str = os.getenv("PYDANTICAI_PRIMARY_PROVIDER", "anthropic")
-    # Default model setting - using the latest Claude model by default
+    # Default model setting - using Claude 3.7 Sonnet model by default
     PYDANTICAI_PRIMARY_MODEL: str = os.getenv(
         "PYDANTICAI_PRIMARY_MODEL", 
-        "claude-3-7-sonnet-latest"
+        "claude-3-7-sonnet-20250501"
     )
-    # Model for evaluation tasks - using a more advanced model with thinking capability
+    # Model for evaluation tasks - using Claude 3.7 Sonnet with thinking capability
     PYDANTICAI_EVALUATOR_MODEL: str = os.getenv(
         "PYDANTICAI_EVALUATOR_MODEL", 
-        "anthropic:claude-3-7-sonnet-latest"
+        "anthropic:claude-3-7-sonnet-20250501"
     )
-    # Model for optimization tasks - also using advanced model with thinking capability
+    # Model for optimization tasks - also using Claude 3.7 Sonnet with thinking capability
     PYDANTICAI_OPTIMIZER_MODEL: str = os.getenv(
         "PYDANTICAI_OPTIMIZER_MODEL", 
-        "anthropic:claude-3-7-sonnet-latest"
+        "anthropic:claude-3-7-sonnet-20250501"
     )
     # Model for cover letter generation
     PYDANTICAI_COVER_LETTER_MODEL: str = os.getenv(
         "PYDANTICAI_COVER_LETTER_MODEL",
-        "anthropic:claude-3-5-sonnet-latest "  # Use a faster model for cover letters
+        "anthropic:claude-3-7-sonnet-20250501"  # Use the best model for cover letters
     )
     # Fallback models listed in order of preference
     PYDANTICAI_FALLBACK_MODELS: List[str] = [
-        "anthropic:claude-3-5-sonnet-latest",
-        "openai:gpt-4.1",
-        "google:gemini-2.5-flash-preview-04-17"
+        "anthropic:claude-3-5-sonnet-20250501",
+        "openai:gpt-4o",
+        "openai:gpt-4-turbo"
     ]
     # Token budget for models with thinking capability
     PYDANTICAI_THINKING_BUDGET: int = os.getenv("PYDANTICAI_THINKING_BUDGET", 15000)
     # Temperature setting for agent outputs (0.0-1.0)
     PYDANTICAI_TEMPERATURE: float = os.getenv("PYDANTICAI_TEMPERATURE", 0.7)
     # Maximum tokens for responses
-    PYDANTICAI_MAX_TOKENS: int = os.getenv("PYDANTICAI_MAX_TOKENS", 4000)
+    PYDANTICAI_MAX_TOKENS: int = os.getenv("PYDANTICAI_MAX_TOKENS", 8000)
     
     # Database - SQLite only
     DATABASE_URL: str = "sqlite:///./resume_app.db"
@@ -105,10 +105,10 @@ def get_pydanticai_model_config() -> Dict[str, Any]:
         anthropic_default = (
             settings.PYDANTICAI_PRIMARY_MODEL 
             if settings.PYDANTICAI_PRIMARY_PROVIDER == "anthropic" 
-            else "claude-3-5-sonnet-latest"
+            else "claude-3-7-sonnet-latest"
         )
         
-        # Configure thinking capability for Claude 3.7 models
+        # Configure thinking capability for Claude 3.7 Sonnet model
         thinking_config = None
         if "claude-3-7" in anthropic_default:
             thinking_config = {

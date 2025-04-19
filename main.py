@@ -41,9 +41,7 @@ try:
         capture_headers=False  # Avoid capturing potentially sensitive headers
     )
     
-    # Set up API client instrumentation
-    logfire.instrument_openai()  # For OpenAI integration
-    logfire.instrument_anthropic()  # For Anthropic/Claude integration
+    logfire.instrument_pydantic_ai()
     
     logfire.info("All instrumentations set up successfully")
 except Exception as e:
