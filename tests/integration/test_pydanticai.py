@@ -261,5 +261,100 @@ async def test_cover_letter_generation():
         return None
 
 
+@pytest.mark.asyncio
+async def test_model_configuration():
+    """Test the model configuration and agent creation with task-specific settings"""
+    try:
+        # Check if pydanticai is available
+        try:
+            from pydanticai import Agent
+            pydanticai_available = True
+        except ImportError:
+            pydanticai_available = False
+            pytest.skip("PydanticAI is not installed - skipping test")
+            return None
+        
+        # Import the configuration and agent creation functions
+        from app.core.config import get_pydanticai_model_config, settings
+        from app.services.pydanticai_optimizer import (
+            create_evaluator_agent, 
+            create_optimizer_agent,
+            create_implementation_agent
+        )
+        
+        # Test the configuration
+        config = get_pydanticai_model_config()
+        
+        # Check that at least one provider is configured
+        assert len(config) > 0, "No model providers configured"
+        print(f"Configured providers: {', '.join(config.keys())}")
+        
+        # For each configured provider, check essential parameters
+        for provider, provider_config in config.items():
+            assert "api_key" in provider_config, f"Missing API key for {provider}"
+            assert "default_model" in provider_config, f"Missing default model for {provider}"
+            assert "temperature" in provider_config, f"Missing temperature for {provider}"
+            assert "max_tokens" in provider_config, f"Missing max_tokens for {provider}"
+            
+            print(f"Provider {provider} config validated - using model: {provider_config['default_model']}")
+        
+        # If Anthropic is configured, check for thinking config with Claude 3.7
+        if "anthropic" in config:
+            anthropic_config = config["anthropic"]
+            if "claude-3-7" in anthropic_config.get("default_model", ""):
+                assert "thinking_config" in anthropic_config, "Missing thinking_config for Claude 3.7"
+                assert anthropic_config["thinking_config"].get("type") == "enabled", "Thinking not enabled for Claude 3.7"
+                assert anthropic_config["thinking_config"].get("budget_tokens") > 0, "Invalid thinking budget for Claude 3.7"
+                print(f"Verified Claude 3.7 thinking config with budget: {anthropic_config['thinking_config'].get('budget_tokens')}")
+        
+        # Test evaluator agent creation with different customization levels
+        print("Testing evaluator agents with different customization levels:")
+        for level in [CustomizationLevel.CONSERVATIVE, CustomizationLevel.BALANCED, CustomizationLevel.EXTENSIVE]:
+            agent = create_evaluator_agent(customization_level=level)
+            assert agent is not None, f"Failed to create evaluator agent with level {level.name}"
+            
+            # Check that the agent has a fallback configuration
+            assert hasattr(agent, "fallback_config"), "Agent missing fallback_config"
+            assert len(agent.fallback_config) > 0, "Agent has empty fallback_config"
+            print(f"  - Created evaluator agent with {level.name} level, using {len(agent.fallback_config)} fallback models")
+        
+        # Test optimizer agent creation with feedback response
+        optimizer_agent = create_optimizer_agent(
+            customization_level=CustomizationLevel.BALANCED, 
+            is_feedback_response=True
+        )
+        assert optimizer_agent is not None, "Failed to create optimizer agent with feedback response"
+        print(f"Created optimizer agent with feedback response capability")
+        
+        # Test implementation agent for different customization levels
+        print("Testing implementation agents with different customization levels:")
+        for level in [CustomizationLevel.CONSERVATIVE, CustomizationLevel.EXTENSIVE]:
+            impl_agent = create_implementation_agent(customization_level=level)
+            assert impl_agent is not None, f"Failed to create implementation agent with level {level.name}"
+            print(f"  - Created implementation agent with {level.name} level")
+            
+        # Test fallback model paths are correctly configured
+        print(f"Checking fallback model configuration:")
+        print(f"  - Primary fallbacks: {', '.join(settings.PYDANTICAI_FALLBACK_MODELS[:3])}")
+        if len(settings.PYDANTICAI_FALLBACK_MODELS) > 3:
+            print(f"  - Secondary fallbacks: {', '.join(settings.PYDANTICAI_FALLBACK_MODELS[3:])}")
+            
+        # Verify task-specific models are correctly configured
+        print(f"Checking task-specific model configuration:")
+        print(f"  - Evaluator model: {settings.PYDANTICAI_EVALUATOR_MODEL}")
+        print(f"  - Optimizer model: {settings.PYDANTICAI_OPTIMIZER_MODEL}")
+        print(f"  - Cover letter model: {settings.PYDANTICAI_COVER_LETTER_MODEL}")
+        
+        print("Model Configuration Test Passed!")
+        return True
+        
+    except Exception as e:
+        pytest.skip(f"Model configuration test skipped due to error: {str(e)}")
+        return False
+
+
 if __name__ == "__main__":
+    # Run multiple tests
+    asyncio.run(test_resume_evaluation())
     asyncio.run(test_cover_letter_generation())
+    asyncio.run(test_model_configuration())

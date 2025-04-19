@@ -66,13 +66,17 @@ async def customize_resume_endpoint(
     # Use the PydanticAI optimizer service for the complete workflow
     pydanticai_service = get_pydanticai_optimizer_service(db)
     
+    # Get the ATS analysis if it exists in the request
+    ats_analysis = customization_request.ats_analysis if hasattr(customization_request, 'ats_analysis') else None
+    
     # Perform the complete customization process
     result = await pydanticai_service.customize_resume(
         resume_id=customization_request.resume_id,
         job_id=customization_request.job_description_id,
         customization_strength=customization_request.customization_strength,
         industry=customization_request.focus_areas,
-        iterations=MAX_FEEDBACK_ITERATIONS
+        iterations=MAX_FEEDBACK_ITERATIONS,
+        ats_analysis=ats_analysis  # Pass the ATS analysis to avoid redundant analysis
     )
     
     # Get the content from the result

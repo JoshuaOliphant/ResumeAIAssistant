@@ -22,6 +22,10 @@ class ResumeCustomizationRequest(BaseModel):
         default=None,
         description="Optional comma-separated list of areas to focus on during customization"
     )
+    ats_analysis: Optional[Dict] = Field(
+        default=None,
+        description="Optional existing ATS analysis results to reuse and avoid duplicate analysis"
+    )
 
 
 class ResumeCustomizationResponse(BaseModel):
@@ -65,4 +69,6 @@ class CustomizationPlan(BaseModel):
     job_analysis: str = Field(description="Analysis of the job description's key requirements")
     keywords_to_add: List[str] = Field(description="Important keywords to incorporate")
     formatting_suggestions: List[str] = Field(description="Suggestions for ATS-friendly formatting")
+    authenticity_statement: Optional[str] = Field(None, description="Statement confirming that recommendations maintain truthfulness")
+    experience_preservation_statement: Optional[str] = Field(None, description="Confirmation that all experience is preserved")
     recommendations: List[RecommendationItem] = Field(description="Detailed customization recommendations")

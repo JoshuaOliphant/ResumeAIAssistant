@@ -68,7 +68,7 @@ except ImportError:
                 if ":" in model:
                     provider, model = model.split(":", 1)
                     if provider != "anthropic":
-                        model = "claude-3-7-sonnet-20250211"  # Default fallback model
+                        model = "claude-3-7-sonnet-latest"  # Default fallback model
                 
                 # Configure Claude messages
                 system_message = self.system_prompt or "You are a helpful AI assistant."
@@ -312,7 +312,7 @@ def create_evaluator_agent(
     
     # Get the appropriate model config for thinking
     thinking_config = None
-    if "claude-3-7" in settings.PYDANTICAI_EVALUATOR_MODEL:
+    if "claude-3-7" in settings.PYDANTICAI_EVALUATOR_MODEL or "claude-3-7-sonnet-latest" in settings.PYDANTICAI_EVALUATOR_MODEL:
         thinking_config = {
             "type": "enabled",
             "budget_tokens": settings.PYDANTICAI_THINKING_BUDGET
@@ -320,22 +320,49 @@ def create_evaluator_agent(
     
     # Create the agent using PydanticAI
     try:
+        # Determine ideal model based on task complexity
+        # Evaluator requires deep understanding and analysis, especially for feedback
+        # Use max capabilities for feedback agents due to complexity of evaluation
+        model = settings.PYDANTICAI_EVALUATOR_MODEL
+        temperature = settings.PYDANTICAI_TEMPERATURE
+        
+        # For feedback evaluation, we can use lower temperature for more consistent results
+        if is_feedback_agent:
+            temperature = max(0.3, temperature - 0.2)  # Reduce temperature but ensure it's not below 0.3
+        
         evaluator_agent = Agent(
-            settings.PYDANTICAI_EVALUATOR_MODEL,
+            model,
             output_type=output_type,
             system_prompt=prompt_template,
             thinking_config=thinking_config,
-            temperature=settings.PYDANTICAI_TEMPERATURE,
+            temperature=temperature,
             max_tokens=settings.PYDANTICAI_MAX_TOKENS
         )
         
-        # Add fallback configurations
-        evaluator_agent.fallback_config = settings.PYDANTICAI_FALLBACK_MODELS
+        # Add fallback configurations - prioritize models that excel at evaluation
+        # For evaluation tasks, we need models with strong reasoning capabilities
+        fallbacks = [
+            # Start with Claude 3.7 Sonnet which excels at evaluation
+            "anthropic:claude-3-7-sonnet-latest",
+            # Next try the best available OpenAI model
+            "openai:gpt-4.1",
+            # Then try Gemini Pro which has strong reasoning
+            "google:gemini-2.5-pro-preview-03-25",
+            # Finally use other models in default fallback chain
+        ] + [m for m in settings.PYDANTICAI_FALLBACK_MODELS if m not in [
+            "anthropic:claude-3-7-sonnet-latest", 
+            "openai:gpt-4.1", 
+            "google:gemini-2.5-pro-preview-03-25"
+        ]]
+        
+        evaluator_agent.fallback_config = fallbacks
         
         logfire.info(
             "Resume Evaluator Agent created successfully",
-            model=settings.PYDANTICAI_EVALUATOR_MODEL,
-            is_feedback_agent=is_feedback_agent
+            model=model,
+            temperature=temperature,
+            is_feedback_agent=is_feedback_agent,
+            fallbacks=fallbacks[:3]  # Log only first 3 fallbacks to avoid verbose logs
         )
         
         return evaluator_agent
@@ -393,7 +420,7 @@ def create_optimizer_agent(
     
     # Get the appropriate model config for thinking
     thinking_config = None
-    if "claude-3-7" in settings.PYDANTICAI_OPTIMIZER_MODEL:
+    if "claude-3-7" in settings.PYDANTICAI_OPTIMIZER_MODEL or "claude-3-7-sonnet-latest" in settings.PYDANTICAI_OPTIMIZER_MODEL:
         thinking_config = {
             "type": "enabled",
             "budget_tokens": settings.PYDANTICAI_THINKING_BUDGET
@@ -401,22 +428,64 @@ def create_optimizer_agent(
     
     # Create the agent using PydanticAI
     try:
+        # Determine ideal model based on task complexity
+        # For optimizer tasks, we need creative thinking and well-structured outputs
+        model = settings.PYDANTICAI_OPTIMIZER_MODEL
+        
+        # Adjust temperature based on customization level and whether it's a feedback response
+        # Higher temperature for more extensive customization (more creative)
+        # Lower temperature for conservative customization (more consistent)
+        base_temperature = settings.PYDANTICAI_TEMPERATURE
+        temperature_adjustment = 0.0
+        
+        if customization_level == CustomizationLevel.CONSERVATIVE:
+            temperature_adjustment = -0.15  # More consistent for conservative changes
+        elif customization_level == CustomizationLevel.EXTENSIVE:
+            temperature_adjustment = 0.1    # More creative for extensive changes
+            
+        # For feedback responses, we want slightly more conservative temperature
+        # to ensure we're addressing the feedback consistently
+        if is_feedback_response:
+            temperature_adjustment -= 0.05
+            
+        temperature = max(0.3, min(0.9, base_temperature + temperature_adjustment))
+        
         optimizer_agent = Agent(
-            settings.PYDANTICAI_OPTIMIZER_MODEL,
+            model,
             output_type=CustomizationPlan,
             system_prompt=prompt_template,
             thinking_config=thinking_config,
-            temperature=settings.PYDANTICAI_TEMPERATURE,
+            temperature=temperature,
             max_tokens=settings.PYDANTICAI_MAX_TOKENS
         )
         
-        # Add fallback configurations
-        optimizer_agent.fallback_config = settings.PYDANTICAI_FALLBACK_MODELS
+        # Customize fallback models based on task needs
+        # For optimizer tasks, we need models that excel at structured responses
+        # and creative problem solving
+        fallbacks = [
+            # Start with Claude 3.7 Sonnet which has excellent structured output capability
+            "anthropic:claude-3-7-sonnet-latest",
+            # Next try the best available OpenAI model
+            "openai:gpt-4.1",
+            # Then try Gemini Pro which has strong reasoning for complex tasks
+            "google:gemini-2.5-pro-preview-03-25",
+            # If the task is for more conservative customization, prioritize consistency
+            # with lower-temperature models for fallbacks
+        ] + [m for m in settings.PYDANTICAI_FALLBACK_MODELS if m not in [
+            "anthropic:claude-3-7-sonnet-latest", 
+            "openai:gpt-4.1", 
+            "google:gemini-2.5-pro-preview-03-25"
+        ]]
+        
+        optimizer_agent.fallback_config = fallbacks
         
         logfire.info(
             "Resume Optimizer Agent created successfully",
-            model=settings.PYDANTICAI_OPTIMIZER_MODEL,
-            is_feedback_response=is_feedback_response
+            model=model,
+            temperature=temperature,
+            customization_level=customization_level.name,
+            is_feedback_response=is_feedback_response,
+            fallbacks=fallbacks[:3]  # Log only first 3 fallbacks to avoid verbose logs
         )
         
         return optimizer_agent
@@ -464,20 +533,57 @@ def create_implementation_agent(
     
     # Create the agent using PydanticAI
     try:
+        # For implementation tasks, we can use a more cost-effective model
+        # as the task is primarily about following instructions from the optimizer
+        # rather than complex reasoning
+        implementation_model = settings.PYDANTICAI_COVER_LETTER_MODEL
+        
+        # Adjust temperature based on customization level
+        # Lower temperature for more consistent implementations
+        base_temperature = settings.PYDANTICAI_TEMPERATURE
+        temperature_adjustment = 0.0
+        
+        if customization_level == CustomizationLevel.CONSERVATIVE:
+            temperature_adjustment = -0.2  # More consistent for conservative changes
+        elif customization_level == CustomizationLevel.EXTENSIVE:
+            temperature_adjustment = 0.0   # Default temperature is fine for extensive changes
+        else:  # BALANCED
+            temperature_adjustment = -0.1  # Slightly more consistent for balanced changes
+            
+        temperature = max(0.3, min(0.9, base_temperature + temperature_adjustment))
+        
         implementation_agent = Agent(
             implementation_model,
             output_type=None,  # Use None for plain text output
             system_prompt=prompt_template,
-            temperature=settings.PYDANTICAI_TEMPERATURE,
+            temperature=temperature,
             max_tokens=settings.PYDANTICAI_MAX_TOKENS
         )
         
-        # Add fallback configurations
-        implementation_agent.fallback_config = settings.PYDANTICAI_FALLBACK_MODELS
+        # For implementation tasks, prioritize efficient models that are good at
+        # text generation and following instructions
+        fallbacks = [
+            # Start with Claude 3.7 Haiku which is fast and efficient for text generation tasks
+            "anthropic:claude-3-7-haiku-latest",
+            # Next try GPT-4o for good quality at reasonable cost
+            "openai:gpt-4o",
+            # Then try Gemini Flash which is optimized for text generation
+            "google:gemini-2.5-flash-preview-04-17",
+            # Final fallbacks from default chain
+        ] + [m for m in settings.PYDANTICAI_FALLBACK_MODELS if m not in [
+            "anthropic:claude-3-7-haiku-latest", 
+            "openai:gpt-4o", 
+            "google:gemini-2.5-flash-preview-04-17"
+        ]]
+        
+        implementation_agent.fallback_config = fallbacks
         
         logfire.info(
             "Resume Implementation Agent created successfully",
-            model=implementation_model
+            model=implementation_model,
+            temperature=temperature,
+            customization_level=customization_level.name,
+            fallbacks=fallbacks[:3]  # Log only first 3 fallbacks to avoid verbose logs
         )
         
         return implementation_agent
@@ -638,7 +744,8 @@ class PydanticAIOptimizerService:
         job_id: str, 
         customization_strength: CustomizationLevel = CustomizationLevel.BALANCED,
         industry: Optional[str] = None,
-        iterations: int = 2  # Default to 2 iterations for better results
+        iterations: int = 2,  # Default to 2 iterations for better results
+        ats_analysis: Optional[Dict] = None  # Added parameter to reuse ATS analysis
     ) -> Dict[str, str]:
         """
         Customize a resume for a specific job description.
@@ -650,6 +757,7 @@ class PydanticAIOptimizerService:
             customization_strength: Level of customization
             industry: Optional industry name for industry-specific guidance
             iterations: Number of feedback iterations to perform
+            ats_analysis: Optional existing ATS analysis to reuse (avoids duplicate analysis)
             
         Returns:
             Dictionary with original and customized resume
@@ -660,12 +768,14 @@ class PydanticAIOptimizerService:
         )
         
         # Generate the customization plan with feedback iterations
+        # Pass the existing ATS analysis if provided
         plan = await self.generate_customization_plan(
             resume_id=resume_id,
             job_id=job_id,
             customization_strength=customization_strength,
             industry=industry,
-            iterations=iterations
+            iterations=iterations,
+            ats_analysis=ats_analysis
         )
         
         # Implement the plan (apply changes to the resume)
@@ -727,22 +837,40 @@ class PydanticAIOptimizerService:
         Raises:
             ValueError: If resume or job not found
         """
-        # Get resume content
-        resume_version = self.db.query(ResumeVersion).filter(
-            ResumeVersion.resume_id == resume_id
-        ).order_by(ResumeVersion.version_number.desc()).first()
-        
-        if not resume_version:
-            logfire.error("Resume version not found", resume_id=resume_id)
-            raise ValueError(f"Resume content not found for ID: {resume_id}")
-        
-        # Get job description
-        job = self.db.query(JobDescription).filter(JobDescription.id == job_id).first()
-        if not job:
-            logfire.error("Job description not found", job_id=job_id)
-            raise ValueError(f"Job description not found for ID: {job_id}")
-        
-        return resume_version.content, job.description
+        # Use one database query to get both resume and job description by joining tables
+        try:
+            # Get resume content and job description in a single query
+            resume_version = self.db.query(ResumeVersion).filter(
+                ResumeVersion.resume_id == resume_id
+            ).order_by(ResumeVersion.version_number.desc()).first()
+            
+            if not resume_version:
+                logfire.error("Resume version not found", resume_id=resume_id)
+                raise ValueError(f"Resume content not found for ID: {resume_id}")
+            
+            # Check if we already have the job description linked in this resume version
+            if resume_version.job_description_id == job_id and hasattr(resume_version, 'job_description') and resume_version.job_description:
+                # We have the job description already joined
+                job_description = resume_version.job_description.description
+            else:
+                # Get job description separately
+                job = self.db.query(JobDescription).filter(JobDescription.id == job_id).first()
+                if not job:
+                    logfire.error("Job description not found", job_id=job_id)
+                    raise ValueError(f"Job description not found for ID: {job_id}")
+                job_description = job.description
+                
+            return resume_version.content, job_description
+            
+        except Exception as e:
+            if not isinstance(e, ValueError):
+                logfire.error(
+                    "Error retrieving resume and job data",
+                    error=str(e),
+                    resume_id=resume_id,
+                    job_id=job_id
+                )
+            raise
     
     async def _perform_basic_analysis(self, resume_id: str, job_id: str) -> Dict:
         """
@@ -841,18 +969,27 @@ class PydanticAIOptimizerService:
             industry=industry
         )
         
-        # Build the input prompt
-        prompt = f"""
-        Resume:
-        {resume_content}
+        # Build the input prompt - adapt for new EVALUATOR_PROMPT format
+        # Get the prompts module
+        prompts = _get_prompts()
         
-        Job Description:
-        {job_description}
-        """
+        # Get evaluator prompt template
+        evaluator_prompt_template = prompts.get('EVALUATOR_PROMPT')
         
+        # Get customization level specific instructions
+        customization_instructions = prompts.get('get_customization_level_instructions')(customization_level)
+        
+        # Add industry-specific guidance if provided
         if industry:
-            prompt += f"\nIndustry: {industry}"
+            industry_guidance = prompts.get('get_industry_specific_guidance')(industry)
+            if industry_guidance:
+                customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
         
+        # Replace the customization level instructions in the template
+        evaluator_prompt = evaluator_prompt_template.replace("{customization_level_instructions}", customization_instructions)
+        
+        # Prepare basic analysis data
+        basic_analysis_str = ""
         if basic_analysis:
             # Convert complex objects to serializable format
             basic_analysis_copy = {}
@@ -870,11 +1007,21 @@ class PydanticAIOptimizerService:
                     basic_analysis_copy[key] = value.__dict__
             
             basic_analysis_str = json.dumps(basic_analysis_copy, indent=2)
-            prompt += f"""
-            
-            Basic Analysis:
-            {basic_analysis_str}
-            """
+        
+        # Build the final prompt with the resume, job description, and analysis
+        prompt = f"""
+        Resume:
+        {resume_content}
+        
+        Job Description:
+        {job_description}
+        
+        {f"Industry: {industry}" if industry else ""}
+        
+        {f"Basic Analysis: {basic_analysis_str}" if basic_analysis else ""}
+        
+        CRITICALLY IMPORTANT: Use the provided evaluator system prompt to guide your analysis.
+        """
         
         try:
             # Run the evaluator agent
@@ -959,25 +1106,39 @@ class PydanticAIOptimizerService:
             industry=industry
         )
         
-        # Build the input prompt
-        prompt = f"""
-        Resume:
-        {resume_content}
+        # Build the input prompt - adapt for new OPTIMIZER_PROMPT format
+        # Get the prompts module
+        prompts = _get_prompts()
         
-        Job Description:
-        {job_description}
+        # Get optimizer prompt template
+        optimizer_prompt_template = prompts.get('OPTIMIZER_PROMPT')
         
-        Evaluation:
-        - Overall Assessment: {evaluation.get('overall_assessment', '')}
-        - Score: {evaluation.get('match_score', 0)}/100
-        - Key Job Requirements: {', '.join(evaluation.get('job_key_requirements', []))}
-        - Strengths: {', '.join(evaluation.get('strengths', []))}
-        - Gaps: {', '.join(evaluation.get('gaps', []))}
-        - Term Mismatches: {json.dumps(evaluation.get('term_mismatches', []), indent=2)}
-        - Section Evaluations: {json.dumps(evaluation.get('section_evaluations', []), indent=2)}
+        # Replace placeholders in the optimizer prompt template
+        prompt = optimizer_prompt_template
+        prompt = prompt.replace("{{resume}}", resume_content)
+        prompt = prompt.replace("{{job_description}}", job_description)
         
-        Customization Level: {customization_level.name.lower()}
-        """
+        # Create customization level instructions
+        customization_instructions = ""
+        if customization_level == CustomizationLevel.CONSERVATIVE:
+            customization_instructions = "Conservative customization - make minimal changes focused only on the most critical improvements."
+        elif customization_level == CustomizationLevel.BALANCED:
+            customization_instructions = "Balanced customization - make a moderate number of high-impact changes."
+        elif customization_level == CustomizationLevel.EXTENSIVE:
+            customization_instructions = "Extensive customization - be comprehensive in optimizing the resume while maintaining truthfulness."
+        
+        # Add evaluation data as additional context
+        evaluation_json = json.dumps(evaluation, indent=2)
+        customization_instructions += f"\n\nEvaluation data:\n{evaluation_json}"
+        
+        # Add industry information if available
+        if industry:
+            industry_guidance = prompts.get('get_industry_specific_guidance')(industry)
+            if industry_guidance:
+                customization_instructions += f"\n\nIndustry-specific guidance for {industry.upper()}:\n{industry_guidance}"
+        
+        # Replace the placeholder for customization level instructions
+        prompt = prompt.replace("{{CUSTOMIZATION_LEVEL_INSTRUCTIONS}}", customization_instructions)
         
         if industry:
             prompt += f"\nIndustry: {industry}"
@@ -1018,6 +1179,8 @@ class PydanticAIOptimizerService:
                     "Include more quantifiable results",
                     "Ensure consistent formatting"
                 ],
+                authenticity_statement="All recommendations maintain complete truthfulness while optimizing presentation.",
+                experience_preservation_statement="All experience from the original resume is preserved in these recommendations.",
                 recommendations=[
                     RecommendationItem(
                         section="General",
@@ -1305,41 +1468,26 @@ class PydanticAIOptimizerService:
             industry=industry
         )
         
-        # Define the prompt for implementing the changes
-        prompt = f"""
-        I need to implement the following optimization plan to improve my resume for a specific job.
+        # Get the implementation prompt from prompts module
+        prompts = _get_prompts()
         
-        # Original Resume
+        # Get customization level specific instructions
+        customization_instructions = prompts.get('get_customization_level_instructions')(customization_strength)
         
-        {resume_content}
+        # Add industry-specific guidance if industry is provided
+        if industry:
+            industry_guidance = prompts.get('get_industry_specific_guidance')(industry)
+            if industry_guidance:
+                customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
+                
+        # Prepare the keywords and formatting suggestions
+        keywords_str = ", ".join(plan.keywords_to_add) if plan.keywords_to_add else "No additional keywords specified"
+        formatting_str = ", ".join(plan.formatting_suggestions) if plan.formatting_suggestions else "No specific formatting suggestions"
         
-        # Job Description
-        
-        {job_description}
-        
-        # Optimization Plan Summary
-        
-        {plan.summary}
-        
-        # Job Analysis
-        
-        {plan.job_analysis}
-        
-        # Keywords to Add
-        
-        {', '.join(plan.keywords_to_add)}
-        
-        # Formatting Suggestions
-        
-        {', '.join(plan.formatting_suggestions)}
-        
-        # Recommendations to Apply
-        
-        """
-        
-        # Add each recommendation
+        # Prepare the recommendations content
+        recommendations_content = ""
         for i, rec in enumerate(plan.recommendations):
-            prompt += f"""
+            recommendations_content += f"""
             ## Recommendation {i+1}
             
             - Section: {rec.section}
@@ -1348,7 +1496,7 @@ class PydanticAIOptimizerService:
             """
             
             if rec.before_text:
-                prompt += f"""
+                recommendations_content += f"""
             - Before Text: 
             ```
             {rec.before_text}
@@ -1356,17 +1504,51 @@ class PydanticAIOptimizerService:
                 """
             
             if rec.after_text:
-                prompt += f"""
+                recommendations_content += f"""
             - After Text: 
             ```
             {rec.after_text}
             ```
                 """
             
-            prompt += f"""
+            recommendations_content += f"""
             - Description: {rec.description}
             
             """
+            
+        # Define the prompt for implementing the changes - using a structured format
+        prompt = f"""
+        # Resume Optimization Task
+        
+        ## Original Resume
+        
+        {resume_content}
+        
+        ## Job Description
+        
+        {job_description}
+        
+        ## Optimization Information
+        
+        Summary: {plan.summary}
+        
+        Job Analysis: {plan.job_analysis}
+        
+        Keywords to Add: {keywords_str}
+        
+        Formatting Suggestions: {formatting_str}
+        
+        ## Detailed Recommendations
+        
+        {recommendations_content}
+        
+        ## Customization Level
+        
+        {customization_strength.name}
+        
+        Remember: NEVER add any qualifications, experience, or skills that aren't present in the original resume.
+        All changes should be truthful and preserve ALL original experience.
+        """
         
         try:
             # Run the implementation agent
@@ -1374,8 +1556,32 @@ class PydanticAIOptimizerService:
             result = await implementation_agent.run(prompt)
             elapsed_time = time.time() - start_time
             
-            # Get the optimized content from the result
+            # Get the optimized content from the result and strip out any thinking sections
             optimized_content = result
+            
+            # Remove any <thinking>...</thinking> sections from the output
+            if "<thinking>" in optimized_content and "</thinking>" in optimized_content:
+                thinking_start = optimized_content.find("<thinking>")
+                thinking_end = optimized_content.find("</thinking>") + len("</thinking>")
+                optimized_content = optimized_content[:thinking_start] + optimized_content[thinking_end:].strip()
+                
+                # Log that we removed thinking section
+                logfire.info(
+                    "Removed thinking section from implementation output",
+                    thinking_section_size=thinking_end - thinking_start
+                )
+            
+            # Also remove any <resume_optimization_plan>...</resume_optimization_plan> sections if they exist
+            if "<resume_optimization_plan>" in optimized_content and "</resume_optimization_plan>" in optimized_content:
+                plan_start = optimized_content.find("<resume_optimization_plan>")
+                plan_end = optimized_content.find("</resume_optimization_plan>") + len("</resume_optimization_plan>")
+                optimized_content = optimized_content[:plan_start] + optimized_content[plan_end:].strip()
+                
+                # Log that we removed resume optimization plan section
+                logfire.info(
+                    "Removed resume_optimization_plan section from implementation output",
+                    plan_section_size=plan_end - plan_start
+                )
             
             logfire.info(
                 "Optimization plan implementation completed successfully with PydanticAI",

@@ -1,10 +1,10 @@
-# PydanticAI Integration Plan for ResumeAIAssistant
+# PydanticAI Implementation Plan for ResumeAIAssistant
 
-This document outlines a comprehensive plan to migrate the ResumeAIAssistant from Anthropic's Claude API to a model-agnostic architecture using PydanticAI, leveraging its flexibility, type safety, and structured output validation.
+This document outlines a comprehensive plan to migrate the ResumeAIAssistant to a model-agnostic architecture using PydanticAI as the sole integration method for all AI features. PydanticAI provides flexibility, type safety, structured output validation, and multi-provider support from a single consistent API.
 
 ## Progress Tracking
 
-### Overall Progress: ~70% Complete
+### Overall Progress: ~85% Complete
 - ✅ Set up PydanticAI implementation in pydanticai_optimizer.py
 - ✅ Fix Anthropic API integration with proper system message format
 - ✅ Update model names to use Claude 3.7 Sonnet models
@@ -14,14 +14,20 @@ This document outlines a comprehensive plan to migrate the ResumeAIAssistant fro
 - ✅ Implement evaluator-optimizer pattern
 - ✅ Configure model fallback chains
 - ✅ Integrate with existing APIs
+- ✅ Implement cover letter generation with PydanticAI
+- ✅ Enhance error handling with retry mechanism and model fallbacks
+- ✅ Implement task-specific model selection strategies
+- ✅ Configure provider-specific optimizations for different model types
+- ✅ Implement dynamic temperature adjustments based on task requirements
+- ✅ Create task-optimized fallback chains
 
 ### Pending Items
 - Implement enhanced logging with detailed metrics
 - Add token counting and usage tracking
-- Implement Gemini model integration
+- Complete Gemini model integration with proper thinking budgets
 - Develop custom tools for keyword extraction and ATS simulation
-- Implement model selection strategies
 - Create comprehensive integration tests
+- Implement cost estimation for different model providers
 
 ## Table of Contents
 1. [Current Architecture Analysis](#current-architecture-analysis)
@@ -31,9 +37,16 @@ This document outlines a comprehensive plan to migrate the ResumeAIAssistant fro
 5. [Evaluator-Optimizer Implementation with PydanticAI](#evaluator-optimizer-implementation-with-pydanticai)
 6. [Code Generation Prompts](#code-generation-prompts)
 
-## Current Architecture Analysis
+## Architecture Analysis
 
-The current architecture uses Claude for several AI-driven features:
+The ResumeAIAssistant previously used separate service implementations for different model providers:
+
+1. **`claude_service.py`** (now removed): Direct integration with Anthropic's Claude API
+2. **`openai_agents_service.py`** (now removed): Integration with OpenAI's Agents SDK
+
+We're now consolidating all model integrations under a single PydanticAI implementation that supports multiple providers through a consistent API. This approach eliminates the need for provider-specific implementations while enabling advanced features across all supported models.
+
+The application provides several AI-driven features:
 
 1. **Resume Customization** (`customize_resume`): Tailors a resume to match a job description with different customization strengths.
 2. **Resume-Job Match Evaluation** (`evaluate_resume_job_match`): Analyzes how well a resume matches a job description.
@@ -45,14 +58,17 @@ The application uses an "evaluator-optimizer" pattern where:
 - The "optimizer" then creates a detailed plan based on the evaluation
 - This is a multi-step AI workflow with structured outputs
 
-Key components include:
-- `claude_service.py`: Core Claude API integration
-- `openai_agents_service.py`: OpenAI Agents integration for the same features
+Key components in the new architecture:
+- `pydanticai_service.py`: Core PydanticAI implementation supporting all model providers
 - `prompts.py`: Detailed system prompts for different tasks
 - `customization_service.py`: Business logic for the evaluator-optimizer pattern
-- `ats.py` & `customize.py`: API endpoints
+- Various API endpoints in the `app/api/endpoints/` directory
 
-The application currently supports both Claude (via direct API) and OpenAI (via Agents SDK) as providers, with schema definitions for structured outputs already implemented using Pydantic.
+By using PydanticAI exclusively, we gain several advantages:
+- Single codebase for all model providers
+- Seamless model fallbacks and switching
+- Consistent error handling and logging
+- Type-safe integration with existing Pydantic schemas
 
 ## PydanticAI Features Overview
 
@@ -126,20 +142,21 @@ PydanticAI offers several advanced capabilities that can enhance the application
    - Local model support
    - Open-source model compatibility
 
-## Migration Strategy
+## Implementation Strategy
 
-The migration will follow these principles:
+Our PydanticAI implementation follows these principles:
 
-1. **Gradual Model Transition**: Start with Anthropic models for compatibility, then expand to other providers
-2. **Backward Compatibility**: Maintain existing API contracts and function signatures
-3. **Type Safety Enhancement**: Add Pydantic models for all structured inputs and outputs
-4. **Model Flexibility**: Configure model selection based on task requirements
-5. **Cost Optimization**: Implement model selection strategies to balance performance and cost
-6. **Future-Proofing**: Create a flexible architecture that can adapt to new models and features
+1. **Single Integration Point**: Replace all provider-specific integrations with a single PydanticAI implementation
+2. **Model Provider Flexibility**: Configure support for multiple model providers (Anthropic, OpenAI, Gemini) with seamless switching
+3. **Backward Compatibility**: Maintain existing API contracts and function signatures to minimize changes to other components
+4. **Type Safety Enhancement**: Leverage Pydantic models for all structured inputs and outputs
+5. **Model Selection Strategy**: Configure model selection based on task requirements with intelligent fallbacks
+6. **Cost Optimization**: Implement strategies to balance performance and cost across providers
+7. **Future-Proofing**: Create a flexible architecture that can adapt to new models and features
 
 ## Implementation Plan
 
-The implementation plan builds on the existing codebase, which already has well-defined schemas and model integration patterns through `claude_service.py` and `openai_agents_service.py`.
+The implementation plan builds on the existing codebase's well-defined schemas and business logic, replacing the provider-specific implementations (`claude_service.py` and `openai_agents_service.py`) with a unified PydanticAI implementation.
 
 ### Phase 1: PydanticAI Core Integration
 1. **Environment Setup**
@@ -700,36 +717,64 @@ async def customize_resume(
         return result
 ```
 
-### Cover Letter Implementation
+### Cover Letter Implementation ✅
 
 ```python
 class CoverLetter(BaseModel):
+    """Schema for generated cover letter"""
     content: str = Field(..., description="The full cover letter text")
     sections: Dict[str, str] = Field(..., description="The cover letter broken down by sections")
     personalization_elements: List[str] = Field(..., description="How the letter was personalized")
     formatting_notes: Optional[str] = Field(None, description="Notes about the formatting")
+    address_block: Optional[str] = Field(None, description="Formatted address block if provided")
+    closing: Optional[str] = Field(None, description="Closing section with signature")
 
-cover_letter_agent = Agent(
-    'anthropic:claude-3-5-sonnet-20250501',  # Can be configured based on settings
-    output_type=CoverLetter,
-    system_prompt="""
-    You are an expert cover letter writer. Your job is to create a compelling, personalized cover letter based on:
-    
-    1. The resume
-    2. The job description
-    3. Any personal details provided
-    
-    Create a professional cover letter that highlights relevant experience and skills,
-    demonstrates enthusiasm for the role, and shows cultural fit with the company.
-    
-    The cover letter should have a clear structure with:
-    - Introduction
-    - 2-3 body paragraphs highlighting relevant experience
-    - Closing paragraph
-    
-    Keep the tone professional but conversational, and limit to one page.
+def create_cover_letter_agent(applicant_name: Optional[str] = None,
+                         company_name: str = "the company",
+                         hiring_manager_name: Optional[str] = None,
+                         additional_context: Optional[str] = None,
+                         tone: str = "professional") -> Agent:
     """
-)
+    Create an agent for generating cover letters with personalization options.
+    """
+    system_prompt = f"""
+    You are a professional resume writer helping a job seeker create a compelling cover letter for a specific job posting.
+    
+    Your task is to write a personalized cover letter that highlights the applicant's qualifications for the position.
+    
+    Guidelines:
+    - Use the provided resume to extract relevant experience, skills, and achievements
+    - Match the applicant's qualifications to the job requirements
+    - Keep the letter concise and focused (about 300-400 words)
+    - Use a {tone} tone throughout the letter
+    - Structure the letter with a clear introduction, body, and conclusion
+    - Include specific examples from the resume that demonstrate the applicant's fit for the role
+    - Mention the company name ({company_name}) naturally in the letter
+    - Format the letter in professional Markdown with appropriate spacing
+    
+    Your response MUST include:
+    - The complete cover letter text in 'content'
+    - A breakdown of the letter by sections
+    - A list of how the letter was personalized for this specific job and company
+    - Optional formatting notes
+    """
+    
+    # Create the agent with fallback configuration
+    cover_letter_agent = Agent(
+        'anthropic:claude-3-7-sonnet-20250501',  # Using latest model with extended thinking
+        output_type=CoverLetter,
+        system_prompt=system_prompt,
+        thinking_config={"budget_tokens": 15000, "type": "enabled"},
+        temperature=0.7
+    )
+    
+    # Add fallback configuration for reliability
+    cover_letter_agent.fallback_config = [
+        'anthropic:claude-3-5-sonnet-20250501',
+        'openai:gpt-4.1'
+    ]
+    
+    return cover_letter_agent
 
 @log_function_call
 async def generate_cover_letter(
@@ -924,7 +969,7 @@ The implementation should:
 Follow the existing code patterns in the project and ensure backward compatibility with current features.
 ```
 
-### Prompt 4: Implement Cover Letter Generation
+### Prompt 4: Implement Cover Letter Generation ✅
 
 ```
 Implement the cover letter generation feature using PydanticAI.
@@ -932,63 +977,89 @@ Implement the cover letter generation feature using PydanticAI.
 The implementation should:
 1. Create a PydanticAI agent for cover letter generation in pydanticai_service.py
 2. Use Anthropic Claude 3.7 Sonnet (20250501) as the default model with fallbacks
-3. Configure the agent with a system prompt based on existing claude_service.py prompt
-4. Implement the generate_cover_letter function with the same signature
-5. Add proper error handling and logging
+3. Configure the agent with appropriate system prompt for cover letter generation
+4. Implement the generate_cover_letter function with full compatibility
+5. Add proper error handling and logging with retry mechanism
 6. Maintain compatibility with the existing API
-7. Support all the current personalization options
+7. Support all personalization options (applicant name, hiring manager, tone, etc.)
 
-Follow the existing code patterns in the project and ensure backward compatibility with current features.
+Follow the existing project patterns for consistency and ensure a modular and maintainable implementation.
 ```
 
-### Prompt 5: Update API Endpoints ✅ (Partially complete)
+### Prompt 5: Update API Endpoints ✅
 
 ```
-Update the API endpoints to support the PydanticAI service module.
+Update the API endpoints to use the PydanticAI implementation exclusively.
 
 The implementation should:
-1. Update the existing endpoints to use a provider selection mechanism
-2. Add a new parameter to API endpoints for selecting the provider (claude, openai, pydanticai)
-3. Use the appropriate service module based on the provider parameter
-4. Maintain backward compatibility with existing clients
-5. Add proper error handling for each provider
-6. Add provider-specific logging and monitoring
-7. Update the API documentation to include the new provider options
+1. Update all endpoints to import from pydanticai_service.py instead of provider-specific modules
+2. Remove any provider selection parameters as PydanticAI handles this internally
+3. Maintain backward compatibility with existing clients
+4. Add proper error handling for API calls
+5. Enhance logging and monitoring
+6. Update API documentation to reflect the unified implementation
 
-Follow the existing code patterns in the project and ensure backward compatibility with current features.
+Follow the existing code patterns in the project for consistency and ensure a clean migration path.
 ```
 
-### Prompt 6: Implement Model Provider Management
+### Prompt 6: Enhance Model Provider Configuration ✅
 
 ```
-Create a module for managing multiple model providers with PydanticAI called model_manager.py.
+Enhance the model provider configuration in the PydanticAI implementation.
 
 The implementation should:
-1. Create a ModelManager class:
-   - Configure multiple providers (Anthropic, OpenAI, Gemini)
-   - Handle API key validation and error handling
-   - Support fallback chains between providers
-   - Track usage and performance metrics
-2. Implement provider-specific configuration:
-   - Anthropic provider setup with Claude 3.7 Sonnet (20250501) and extended thinking
-   - OpenAI provider setup with GPT-4.1
-   - Gemini provider setup with Gemini 2.5 models
-   - Support for additional providers
+1. Extend the existing configuration in app.core.config:
+   - Fine-tune provider configurations for all supported models
+   - Add comprehensive fallback chains configuration
+   - Configure model-specific parameters (temperature, max_tokens, etc.)
+2. Implement provider-specific optimizations:
+   - Configure Anthropic models with extended thinking capability
+   - Set up OpenAI models with appropriate parameters
+   - Prepare for Gemini integration with thinking budgets
 3. Create model selection strategies:
-   - Cost-based selection
-   - Performance-based selection
-   - Task-specific selection
-   - Fallback handling
-4. Implement token usage tracking:
-   - Estimate token usage before requests
-   - Track actual token usage
-   - Calculate costs across providers
-5. Add proper error handling and logging
-6. Include comprehensive documentation
-7. Add unit tests for provider management
+   - Task-specific model selection (evaluator, optimizer, cover letter)
+   - Cost-performance balanced configurations
+   - Fallback priority configuration
+4. Add token usage monitoring:
+   - Add token counting mechanisms
+   - Track usage across different operations
+   - Implement cost estimation
+5. Enhance error handling and logging
+6. Add comprehensive configuration documentation
+7. Create tests for provider configuration
 
-Follow the project's modular architecture and provide thorough documentation.
+Follow the project's existing configuration patterns and ensure a cohesive approach.
 ```
+
+#### Implementation Notes
+We have implemented the enhanced model provider configuration with task-specific model selections and fallback chains. Key changes include:
+
+1. **Optimized Model Selection:**
+   - Using Claude 3.7 Sonnet with extended thinking for evaluation and optimization tasks
+   - Using Claude 3.5 Sonnet for cover letter generation (balancing quality and cost)
+   - Using faster models like Claude 3.5 Haiku for implementation tasks
+
+2. **Task-Specific Temperature Settings:**
+   - Lowered temperature for evaluator tasks that require consistency
+   - Increased temperature for more creative tasks like cover letters with "enthusiastic" tone
+   - Dynamic temperature adjustment based on customization level
+
+3. **Intelligent Fallback Chains:**
+   - Primary fallbacks: Claude 3.5 Sonnet, GPT-4.1, Gemini 2.5 Pro
+   - Secondary fallbacks: GPT-4o, Gemini 2.5 Flash, Claude 3.5 Haiku
+   - Task-specific fallback orderings
+
+4. **Provider-Specific Optimizations:**
+   - Extended thinking for Anthropic Claude 3.7 models
+   - Thinking budgets for Gemini models
+   - Consistent parameter handling across all providers
+
+5. **Enhanced Logging:**
+   - Detailed logging of model selection decisions
+   - Temperature adjustments logged for better visibility
+   - Fallback chain tracking
+
+The implementation maintains backward compatibility while enhancing the system's ability to select the optimal model for each task based on requirements for quality, speed, and cost-efficiency.
 
 ### Prompt 7: Implement Integration Tests ✅ (Started)
 
@@ -1032,19 +1103,21 @@ Follow the project's testing conventions with pytest and provide comprehensive d
 - **Output Format Control**: Added clear output format instructions to prevent commentary
 
 ### Next Priority Tasks
-- **Token Tracking**: Implement token usage tracking and analytics
+- **Token Tracking**: Implement token usage tracking and analytics across all operations
 - **Enhanced Logging**: Add detailed logging with performance metrics
-- **Gemini Integration**: Add support for Gemini models as fallback
+- **Provider Configuration**: Fine-tune model configurations for optimal performance/cost balance
+- **Gemini Integration**: Add support for Gemini models as fallback option
 - **Test Completion**: Finish implementation of comprehensive integration tests
 - **Tool Development**: Create custom tools for keyword extraction and ATS simulation
+- **UI Integration**: Add cover letter generation to the frontend UI
 
 ### Future Enhancements
-- **A/B Testing**: Implement comparison testing between Claude direct implementation, OpenAI Agents SDK, and PydanticAI
-- **Cost Monitoring**: Track token usage and costs across different providers
-- **Model Experimentation**: Test different models to find optimal price/performance balance
-- **Schema Refinement**: Iterate on the Pydantic models based on user feedback
-- **Documentation**: Provide comprehensive documentation for the new architecture
-- **UI Integration**: Update the frontend to utilize new capabilities
-- **Performance Tuning**: Optimize prompt templates and token usage for efficiency
-- **Extended Thinking Optimization**: Fine-tune extended thinking budgets for Claude 3.7 Sonnet
-- **Thinking Budget Control**: Experiment with Gemini thinking budgets for optimal performance
+- **Cost Monitoring Dashboard**: Create a dashboard for tracking token usage and costs across different providers
+- **Dynamic Model Selection**: Implement runtime model selection based on task complexity and performance requirements
+- **Schema Refinement**: Iterate on the Pydantic models based on user feedback and model capabilities
+- **Comprehensive Documentation**: Provide detailed documentation for the PydanticAI architecture
+- **UI Enhancements**: Add model selection and configuration options to the frontend
+- **Performance Optimization**: Fine-tune prompt templates and token usage for efficiency
+- **Extended Feature Support**: Add support for additional features like interview preparation and skill assessments
+- **Thinking Budget Optimization**: Experiment with different thinking budget allocations for complex tasks
+- **Specialized Prompt Strategies**: Develop provider-specific prompt strategies to maximize each model's strengths

@@ -4,10 +4,9 @@ This module implements the model-agnostic approach using PydanticAI for structur
 and flexible model provider selection.
 """
 import os
-import sys
 import time
 import json
-from typing import Optional, Dict, Any, List, Union, Tuple
+from typing import Optional, Dict, Any, List
 import asyncio
 import logfire
 
@@ -49,7 +48,7 @@ if not settings.ANTHROPIC_API_KEY and not settings.OPENAI_API_KEY:
 # Set default models based on availability
 DEFAULT_MODEL = None
 if settings.ANTHROPIC_API_KEY:
-    DEFAULT_MODEL = "anthropic:claude-3-5-sonnet-20241022"  # Default to Claude 3.5 Sonnet
+    DEFAULT_MODEL = "anthropic:claude-3-7-sonnet-latest"  # Default to Claude 3.7 Sonnet
     logfire.info("Using Anthropic Claude as default model provider")
 elif settings.OPENAI_API_KEY:
     DEFAULT_MODEL = "openai:gpt-4.1"  # Fallback to OpenAI if Anthropic not available
@@ -185,7 +184,7 @@ def create_resume_evaluator_agent(customization_level: CustomizationLevel = Cust
     
     # Determine if the model supports thinking
     thinking_config = None
-    if EVALUATOR_MODEL.startswith("anthropic:claude-3-7"):
+    if EVALUATOR_MODEL.startswith("anthropic:claude-3-7") or "claude-3-7-sonnet-latest" in EVALUATOR_MODEL:
         thinking_config = {"budget_tokens": THINKING_BUDGET, "type": "enabled"}
     elif EVALUATOR_MODEL.startswith("google:gemini-2.5"):
         # Gemini uses thinkingBudget
@@ -254,7 +253,7 @@ def create_resume_optimizer_agent(customization_level: CustomizationLevel = Cust
     
     # Determine if the model supports thinking
     thinking_config = None
-    if OPTIMIZER_MODEL.startswith("anthropic:claude-3-7"):
+    if OPTIMIZER_MODEL.startswith("anthropic:claude-3-7") or "claude-3-7-sonnet-latest" in OPTIMIZER_MODEL:
         thinking_config = {"budget_tokens": THINKING_BUDGET, "type": "enabled"}
     elif OPTIMIZER_MODEL.startswith("google:gemini-2.5"):
         # Gemini uses thinkingBudget
@@ -364,7 +363,7 @@ def create_cover_letter_agent(applicant_name: Optional[str] = None,
     
     # Determine if the model supports thinking
     thinking_config = None
-    if COVER_LETTER_MODEL.startswith("anthropic:claude-3-7"):
+    if COVER_LETTER_MODEL.startswith("anthropic:claude-3-7") or "claude-3-7-sonnet-latest" in COVER_LETTER_MODEL:
         thinking_config = {"budget_tokens": THINKING_BUDGET, "type": "enabled"}
     elif COVER_LETTER_MODEL.startswith("google:gemini-2.5"):
         # Gemini uses thinkingBudget
@@ -372,24 +371,59 @@ def create_cover_letter_agent(applicant_name: Optional[str] = None,
     
     # Create the agent
     try:
+        # Cover letters benefit from a balance of creativity and consistency
+        # Claude 3.5 Sonnet offers a good balance of quality and cost
+        # For cover letters, we can use a slightly more creative temperature
+        model = COVER_LETTER_MODEL
+        
+        # Adjust temperature based on tone
+        # More creative for enthusiastic/casual tones, more conservative for formal/professional tones
+        base_temperature = TEMPERATURE
+        temperature_adjustment = 0.0
+        
+        if tone.lower() in ["enthusiastic", "casual", "conversational"]:
+            temperature_adjustment = 0.1  # More creative for enthusiastic tones
+        elif tone.lower() in ["formal", "academic", "technical"]:
+            temperature_adjustment = -0.15  # More consistent for formal tones
+        else:  # "professional" (default) or other tones
+            temperature_adjustment = 0.0  # Default temperature is fine for professional tone
+            
+        temperature = max(0.3, min(0.9, base_temperature + temperature_adjustment))
+        
         cover_letter_agent = Agent(
-            COVER_LETTER_MODEL,
+            model,
             output_type=CoverLetter,
             system_prompt=system_prompt,
             thinking_config=thinking_config,
-            temperature=TEMPERATURE,
+            temperature=temperature,
             max_tokens=MAX_TOKENS
         )
         
-        # Add fallback configurations
-        cover_letter_agent.fallback_config = FALLBACK_MODELS
+        # For cover letters, we want fallback models that excel at creative writing
+        # while still maintaining professionalism and structure
+        fallbacks = [
+            # Start with Claude 3.7 Sonnet which is excellent for writing tasks
+            "anthropic:claude-3-7-sonnet-latest",
+            # Next try OpenAI GPT-4.1 which has strong writing capabilities
+            "openai:gpt-4.1",
+            # Then try Gemini Pro which is good for creative text generation
+            "google:gemini-2.5-pro-preview-03-25",
+            # For faster/cheaper options if needed
+            "anthropic:claude-3-7-haiku-latest",
+            "openai:gpt-4o",
+            "google:gemini-2.5-flash-preview-04-17"
+        ]
+        
+        cover_letter_agent.fallback_config = fallbacks
         
         logfire.info(
             "Cover Letter Agent created successfully",
-            model=COVER_LETTER_MODEL,
+            model=model,
+            temperature=temperature,
+            tone=tone,
             has_thinking=thinking_config is not None,
             company_name=company_name,
-            tone=tone
+            fallbacks=fallbacks[:3]  # Log only first 3 fallbacks to avoid verbose logs
         )
         
         return cover_letter_agent
