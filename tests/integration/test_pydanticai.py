@@ -274,13 +274,12 @@ async def test_model_configuration():
             pytest.skip("PydanticAI is not installed - skipping test")
             return None
         
-        # Import the configuration and agent creation functions
+        # Import the configuration functions
         from app.core.config import get_pydanticai_model_config, settings
-        from app.services.pydanticai_optimizer import (
-            create_evaluator_agent, 
-            create_optimizer_agent,
-            create_implementation_agent
-        )
+        
+        # Note: The direct agent creation functions have been replaced with dynamic model selection
+        # We're now skipping this part of the test as it's no longer applicable
+        print("Skipping direct agent creation tests - now using dynamic model selection")
         
         # Test the configuration
         config = get_pydanticai_model_config()
@@ -307,31 +306,9 @@ async def test_model_configuration():
                 assert anthropic_config["thinking_config"].get("budget_tokens") > 0, "Invalid thinking budget for Claude 3.7"
                 print(f"Verified Claude 3.7 thinking config with budget: {anthropic_config['thinking_config'].get('budget_tokens')}")
         
-        # Test evaluator agent creation with different customization levels
-        print("Testing evaluator agents with different customization levels:")
-        for level in [CustomizationLevel.CONSERVATIVE, CustomizationLevel.BALANCED, CustomizationLevel.EXTENSIVE]:
-            agent = create_evaluator_agent(customization_level=level)
-            assert agent is not None, f"Failed to create evaluator agent with level {level.name}"
-            
-            # Check that the agent has a fallback configuration
-            assert hasattr(agent, "fallback_config"), "Agent missing fallback_config"
-            assert len(agent.fallback_config) > 0, "Agent has empty fallback_config"
-            print(f"  - Created evaluator agent with {level.name} level, using {len(agent.fallback_config)} fallback models")
-        
-        # Test optimizer agent creation with feedback response
-        optimizer_agent = create_optimizer_agent(
-            customization_level=CustomizationLevel.BALANCED, 
-            is_feedback_response=True
-        )
-        assert optimizer_agent is not None, "Failed to create optimizer agent with feedback response"
-        print(f"Created optimizer agent with feedback response capability")
-        
-        # Test implementation agent for different customization levels
-        print("Testing implementation agents with different customization levels:")
-        for level in [CustomizationLevel.CONSERVATIVE, CustomizationLevel.EXTENSIVE]:
-            impl_agent = create_implementation_agent(customization_level=level)
-            assert impl_agent is not None, f"Failed to create implementation agent with level {level.name}"
-            print(f"  - Created implementation agent with {level.name} level")
+        # Skip direct agent creation tests since we've switched to dynamic model selection
+        print("Note: Skipping direct agent creation tests - now using dynamic model selection")
+        print("Testing model selection and configuration is now done in the actual usage flow")
             
         # Test fallback model paths are correctly configured
         print(f"Checking fallback model configuration:")

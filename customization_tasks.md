@@ -3,23 +3,23 @@
 ## Infrastructure & Foundation
 
 ### Gemini API Integration
-- [ ] **TASK-1**: Setup Gemini API client in config
-  - Setup API key configuration
-  - Create basic Gemini client wrapper
-  - Test basic text completion with Gemini 2.5 Flash
-  - *Acceptance: Successfully call Gemini API and receive response*
+- [x] **TASK-1**: Configure Gemini models in PydanticAI
+  - Setup Gemini API key configuration in config.py
+  - Ensure PydanticAI can use Gemini models through its model-agnostic interface
+  - Create test file to verify Gemini models working with PydanticAI
+  - *Acceptance: Successfully use Gemini models through PydanticAI*
 
-- [ ] **TASK-2**: Implement thinking budget parameter
-  - Add configuration for thinking budget
-  - Create utility to set appropriate thinking budget based on task type
-  - Test different budget levels with same prompt
+- [x] **TASK-2**: Implement thinking budget parameter for PydanticAI
+  - Enhance configuration for dynamic thinking budget allocation
+  - Create utility to set appropriate thinking budget based on task type and complexity
+  - Test different budget levels with same prompt across models
   - *Acceptance: Demonstrate different response qualities with varying thinking budgets*
 
-- [ ] **TASK-3**: Create model selection utility
-  - Implement function to select appropriate model based on task complexity
-  - Create configuration for model mapping (task type → model)
+- [x] **TASK-3**: Create task-based model selection utility
+  - Implement function to select appropriate model/provider based on task complexity
+  - Create configuration for model mapping (task type → provider:model)
   - Add logging for model selection decisions
-  - *Acceptance: Given a task description, correctly select appropriate model*
+  - *Acceptance: Given a task description, correctly select appropriate model provider and model*
 
 ### Configuration System
 

@@ -17,180 +17,10 @@ import asyncio
 import logfire
 from typing import Optional, Dict, Any, List, Tuple
 
-# Import PydanticAI components - wrapped in try/except for graceful failure
-# Since PydanticAI is a custom framework, we can use anthropic directly as fallback
-try:
-    # Try to import PydanticAI if available
-    from pydanticai import Agent, tool
-    PYDANTICAI_AVAILABLE = True
-except ImportError:
-    logfire.warning("PydanticAI not installed. Using Anthropic Claude directly instead.")
-    PYDANTICAI_AVAILABLE = False
-    
-    # Import Anthropic SDK
-    try:
-        import anthropic
-        from anthropic import Anthropic
-        ANTHROPIC_AVAILABLE = True
-    except ImportError:
-        logfire.error("Neither PydanticAI nor Anthropic SDK installed. Please install with 'uv add anthropic'")
-        ANTHROPIC_AVAILABLE = False
-    
-    # Create a placeholder Agent class that will use Anthropic directly
-    class Agent:
-        def __init__(self, model_name, output_type=None, system_prompt=None, thinking_config=None, 
-                   temperature=0.7, max_tokens=4000):
-            self.model_name = model_name
-            self.system_prompt = system_prompt
-            self.temperature = temperature
-            self.max_tokens = max_tokens
-            self.output_type = output_type
-            self.thinking_config = thinking_config
-            self.fallback_config = []
-            
-            # Try to get Anthropic client
-            if ANTHROPIC_AVAILABLE:
-                try:
-                    self.client = Anthropic()
-                except Exception as e:
-                    logfire.error(f"Failed to initialize Anthropic client: {str(e)}")
-                    self.client = None
-            else:
-                self.client = None
-        
-        async def run(self, prompt, deps=None):
-            if not ANTHROPIC_AVAILABLE or not self.client:
-                raise NotImplementedError("Anthropic SDK not installed or initialized")
-            
-            try:
-                # Process model name to remove provider prefix if present
-                model = self.model_name
-                if ":" in model:
-                    provider, model = model.split(":", 1)
-                    if provider != "anthropic":
-                        model = "claude-3-7-sonnet-latest"  # Default fallback model
-                
-                # Configure Claude messages
-                system_message = self.system_prompt or "You are a helpful AI assistant."
-                messages = [
-                    {"role": "user", "content": prompt}
-                ]
-                
-                # Determine if thinking is enabled
-                anthropic_params = {
-                    "model": model,
-                    "messages": messages,
-                    "temperature": self.temperature,
-                    "max_tokens": self.max_tokens,
-                    "system": system_message
-                }
-                
-                # Add thinking if applicable - but only if using PydanticAI 
-                # which supports system_instructions (not the direct Anthropic API)
-                # This section is commented out because it's causing errors with direct Anthropic API calls
-                # if self.thinking_config and "claude-3-7" in model:
-                #     anthropic_params["system_instructions"] = [
-                #         {
-                #             "type": "thinking",
-                #             "thinking": {"enabled": True, "budget_tokens": self.thinking_config.get("budget_tokens", 15000)}
-                #         }
-                #     ]
-                
-                # Call Claude directly
-                response = self.client.messages.create(**anthropic_params)
-                
-                # Process the response based on output_type
-                result = response.content[0].text if response.content else ""
-                
-                # Convert to output_type if specified
-                if self.output_type and hasattr(self.output_type, 'parse_raw'):
-                    try:
-                        # Try to parse as JSON if it's a Pydantic model
-                        import json
-                        import re
-                        
-                        # Extract JSON from the result if it's wrapped in code blocks
-                        json_str = result
-                        if "```json" in result:
-                            json_str = result.split("```json")[1].split("```")[0].strip()
-                        elif "```" in result:
-                            code_blocks = re.findall(r'```(?:json)?(.*?)```', result, re.DOTALL)
-                            if code_blocks:
-                                # Try each code block until we find valid JSON
-                                for block in code_blocks:
-                                    try:
-                                        json.loads(block.strip())
-                                        json_str = block.strip()
-                                        break
-                                    except:
-                                        continue
-                        
-                        # Handle potential JSON within markdown that isn't in code blocks
-                        if '{' in json_str and '}' in json_str:
-                            potential_json = json_str[json_str.find('{'):json_str.rfind('}')+1]
-                            try:
-                                json.loads(potential_json)
-                                json_str = potential_json
-                            except:
-                                pass
-                        
-                        # Try to parse as JSON then as Pydantic model
-                        data = json.loads(json_str)
-                        return self.output_type.parse_obj(data)
-                    except Exception as e:
-                        logfire.error(f"Failed to parse response as {self.output_type.__name__}: {str(e)}")
-                        
-                        # Attempt to create a basic CustomizationPlan if that's what we're expecting
-                        if self.output_type.__name__ == 'CustomizationPlan':
-                            try:
-                                from app.schemas.customize import CustomizationPlan, RecommendationItem
-                                return CustomizationPlan(
-                                    summary="Failed to parse JSON response, but created a basic plan.",
-                                    job_analysis="The job requires skills and experience that could be better emphasized in your resume.",
-                                    keywords_to_add=["skill", "experience", "qualification"],
-                                    formatting_suggestions=["Use bullet points for achievements"],
-                                    recommendations=[
-                                        RecommendationItem(
-                                            section="General",
-                                            what="Improve content",
-                                            why="Better job match",
-                                            before_text=None,
-                                            after_text=None,
-                                            description="Enhance your resume to better match the job requirements."
-                                        )
-                                    ]
-                                )
-                            except Exception:
-                                pass
-                        
-                        # Return the text directly if parsing fails
-                        return result
-                
-                return result
-                
-            except Exception as e:
-                logfire.error(f"Error calling Anthropic API: {str(e)}")
-                
-                # Try fallbacks if available
-                for fallback_model in self.fallback_config:
-                    try:
-                        logfire.info(f"Trying fallback model: {fallback_model}")
-                        original_model = self.model_name
-                        self.model_name = fallback_model
-                        result = await self.run(prompt, deps)
-                        self.model_name = original_model
-                        return result
-                    except Exception as fallback_err:
-                        logfire.error(f"Fallback to {fallback_model} failed: {str(fallback_err)}")
-                
-                # Re-raise the original error if all fallbacks fail
-                raise e
-        
-        @staticmethod
-        def tool(*args, **kwargs):
-            def decorator(func):
-                return func
-            return decorator
+# Import PydanticAI components directly - it's a core dependency
+from pydantic_ai import Agent
+
+logfire.info("PydanticAI imported successfully")
 
 # Import from project
 from app.core.config import settings, get_pydanticai_model_config
@@ -200,37 +30,35 @@ from app.schemas.customize import (
     CustomizationPlan,
     RecommendationItem
 )
+from app.schemas.pydanticai_models import (
+    TermMismatch,
+    SectionEvaluation,
+    ResumeEvaluation,
+    PreservationIssue,
+    KeywordFeedback,
+    FormatFeedback,
+    AuthenticityItem,
+    OpportunityItem,
+    FeedbackEvaluation
+)
 from app.db.session import get_db
 from sqlalchemy.orm import Session
 from app.models.resume import Resume, ResumeVersion
 from app.models.job import JobDescription
+from app.services.thinking_budget import (
+    get_thinking_config_for_task,
+    get_task_complexity_from_content,
+    TaskComplexity
+)
+from app.services.model_selector import (
+    get_model_config_for_task,
+    select_model_for_task,
+    get_fallback_chain,
+    ModelProvider
+)
 
 # Set up model provider configuration
 MODEL_CONFIG = get_pydanticai_model_config()
-
-# Define the output schema for the resume evaluation
-class ResumeEvaluation:
-    """Schema for resume evaluation results."""
-    overall_assessment: str
-    match_score: int
-    job_key_requirements: List[str]
-    strengths: List[str]
-    gaps: List[str]
-    term_mismatches: List[Dict[str, str]]
-    section_evaluations: List[Dict[str, Any]]
-    competitor_analysis: str
-    reframing_opportunities: List[str]
-    experience_preservation_check: str
-
-class FeedbackEvaluation:
-    """Schema for evaluation feedback on optimization."""
-    requires_iteration: bool
-    experience_preservation_issues: List[Dict[str, str]]
-    keyword_alignment_feedback: List[Dict[str, str]]
-    formatting_feedback: List[Dict[str, str]]
-    authenticity_concerns: List[Dict[str, str]]
-    missed_opportunities: List[Dict[str, str]]
-    overall_feedback: str
 
 # Log initialization
 logfire.info(
@@ -310,20 +138,28 @@ def create_evaluator_agent(
         prompt_template = prompts['EVALUATOR_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
         output_type = ResumeEvaluation
     
-    # Get the appropriate model config for thinking
+    # Get model configuration from the central config
+    model_config = get_pydanticai_model_config()
+    
+    # Ensure we're using Google Gemini as the primary model
+    # Get the model from the configuration if available, otherwise use default
+    model = model_config.get("gemini", {}).get("default_model", "google-gla:gemini-1.5-pro") if "gemini" in model_config else "google-gla:gemini-1.5-pro"
+    model_provider = "google"  # Set Google as default provider
+    
+    # Log the model override for debugging
+    logfire.info("Using Google Gemini model for evaluation", model=model)
+    
+    # Use dynamic thinking budget calculation based on task type
+    task_name = "feedback_evaluation" if is_feedback_agent else "resume_evaluation"
+    
+    # The thinking_config should be None for now - we'll set it after content is available
     thinking_config = None
-    if "claude-3-7" in settings.PYDANTICAI_EVALUATOR_MODEL or "claude-3-7-sonnet-latest" in settings.PYDANTICAI_EVALUATOR_MODEL:
-        thinking_config = {
-            "type": "enabled",
-            "budget_tokens": settings.PYDANTICAI_THINKING_BUDGET
-        }
     
     # Create the agent using PydanticAI
     try:
         # Determine ideal model based on task complexity
         # Evaluator requires deep understanding and analysis, especially for feedback
         # Use max capabilities for feedback agents due to complexity of evaluation
-        model = settings.PYDANTICAI_EVALUATOR_MODEL
         temperature = settings.PYDANTICAI_TEMPERATURE
         
         # For feedback evaluation, we can use lower temperature for more consistent results
@@ -341,19 +177,14 @@ def create_evaluator_agent(
         
         # Add fallback configurations - prioritize models that excel at evaluation
         # For evaluation tasks, we need models with strong reasoning capabilities
-        fallbacks = [
-            # Start with Claude 3.7 Sonnet which excels at evaluation
-            "anthropic:claude-3-7-sonnet-latest",
-            # Next try the best available OpenAI model
-            "openai:gpt-4.1",
-            # Then try Gemini Pro which has strong reasoning
-            "google:gemini-2.5-pro-preview-03-25",
-            # Finally use other models in default fallback chain
-        ] + [m for m in settings.PYDANTICAI_FALLBACK_MODELS if m not in [
-            "anthropic:claude-3-7-sonnet-latest", 
-            "openai:gpt-4.1", 
-            "google:gemini-2.5-pro-preview-03-25"
-        ]]
+        # Get fallback models from the service module to ensure consistency
+        from app.services.pydanticai_service import FALLBACK_MODELS
+        
+        # Use the centralized fallback models
+        fallbacks = FALLBACK_MODELS
+        
+        # Add any other models from settings that aren't already in the list
+        fallbacks += [m for m in settings.PYDANTICAI_FALLBACK_MODELS if m not in fallbacks]
         
         evaluator_agent.fallback_config = fallbacks
         
@@ -375,226 +206,9 @@ def create_evaluator_agent(
         )
         raise e
 
-# Utility function to create an optimizer agent
-def create_optimizer_agent(
-    customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
-    industry: Optional[str] = None,
-    is_feedback_response: bool = False
-) -> Agent:
-    """
-    Create a PydanticAI agent for generating resume optimization plans.
-    
-    Args:
-        customization_level: Level of customization (affects optimization detail)
-        industry: Optional industry name for industry-specific guidance
-        is_feedback_response: Whether this agent is responding to evaluator feedback
-        
-    Returns:
-        PydanticAI Agent configured for resume optimization
-    """
-    # Get prompts dynamically
-    prompts = _get_prompts()
-    
-    # Select the appropriate base prompt based on whether this is a feedback response agent
-    if is_feedback_response:
-        prompt_template = prompts['OPTIMIZER_FEEDBACK_RESPONSE_PROMPT']
-        
-        # Add any industry-specific considerations if relevant
-        if industry:
-            industry_guidance = prompts['get_industry_specific_guidance'](industry)
-            if industry_guidance:
-                prompt_template += f"\n\nConsider this INDUSTRY-SPECIFIC GUIDANCE for {industry.upper()}:\n{industry_guidance}"
-    else:
-        # Standard optimizer agent
-        # Get customization level specific instructions
-        customization_instructions = prompts['get_customization_level_instructions'](customization_level)
-        
-        # Get industry-specific guidance if industry is provided
-        if industry:
-            industry_guidance = prompts['get_industry_specific_guidance'](industry)
-            if industry_guidance:
-                customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
-        
-        # Format the prompt with the customization level instructions
-        prompt_template = prompts['OPTIMIZER_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
-    
-    # Get the appropriate model config for thinking
-    thinking_config = None
-    if "claude-3-7" in settings.PYDANTICAI_OPTIMIZER_MODEL or "claude-3-7-sonnet-latest" in settings.PYDANTICAI_OPTIMIZER_MODEL:
-        thinking_config = {
-            "type": "enabled",
-            "budget_tokens": settings.PYDANTICAI_THINKING_BUDGET
-        }
-    
-    # Create the agent using PydanticAI
-    try:
-        # Determine ideal model based on task complexity
-        # For optimizer tasks, we need creative thinking and well-structured outputs
-        model = settings.PYDANTICAI_OPTIMIZER_MODEL
-        
-        # Adjust temperature based on customization level and whether it's a feedback response
-        # Higher temperature for more extensive customization (more creative)
-        # Lower temperature for conservative customization (more consistent)
-        base_temperature = settings.PYDANTICAI_TEMPERATURE
-        temperature_adjustment = 0.0
-        
-        if customization_level == CustomizationLevel.CONSERVATIVE:
-            temperature_adjustment = -0.15  # More consistent for conservative changes
-        elif customization_level == CustomizationLevel.EXTENSIVE:
-            temperature_adjustment = 0.1    # More creative for extensive changes
-            
-        # For feedback responses, we want slightly more conservative temperature
-        # to ensure we're addressing the feedback consistently
-        if is_feedback_response:
-            temperature_adjustment -= 0.05
-            
-        temperature = max(0.3, min(0.9, base_temperature + temperature_adjustment))
-        
-        optimizer_agent = Agent(
-            model,
-            output_type=CustomizationPlan,
-            system_prompt=prompt_template,
-            thinking_config=thinking_config,
-            temperature=temperature,
-            max_tokens=settings.PYDANTICAI_MAX_TOKENS
-        )
-        
-        # Customize fallback models based on task needs
-        # For optimizer tasks, we need models that excel at structured responses
-        # and creative problem solving
-        fallbacks = [
-            # Start with Claude 3.7 Sonnet which has excellent structured output capability
-            "anthropic:claude-3-7-sonnet-latest",
-            # Next try the best available OpenAI model
-            "openai:gpt-4.1",
-            # Then try Gemini Pro which has strong reasoning for complex tasks
-            "google:gemini-2.5-pro-preview-03-25",
-            # If the task is for more conservative customization, prioritize consistency
-            # with lower-temperature models for fallbacks
-        ] + [m for m in settings.PYDANTICAI_FALLBACK_MODELS if m not in [
-            "anthropic:claude-3-7-sonnet-latest", 
-            "openai:gpt-4.1", 
-            "google:gemini-2.5-pro-preview-03-25"
-        ]]
-        
-        optimizer_agent.fallback_config = fallbacks
-        
-        logfire.info(
-            "Resume Optimizer Agent created successfully",
-            model=model,
-            temperature=temperature,
-            customization_level=customization_level.name,
-            is_feedback_response=is_feedback_response,
-            fallbacks=fallbacks[:3]  # Log only first 3 fallbacks to avoid verbose logs
-        )
-        
-        return optimizer_agent
-        
-    except Exception as e:
-        logfire.error(
-            "Error creating Resume Optimizer Agent",
-            error=str(e),
-            error_type=type(e).__name__
-        )
-        raise e
-
-# Utility function to create an implementation agent
-def create_implementation_agent(
-    customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
-    industry: Optional[str] = None
-) -> Agent:
-    """
-    Create a PydanticAI agent for implementing resume optimizations.
-    
-    Args:
-        customization_level: Level of customization (affects implementation detail)
-        industry: Optional industry name for industry-specific guidance
-        
-    Returns:
-        PydanticAI Agent configured for resume implementation
-    """
-    # Get prompts dynamically
-    prompts = _get_prompts()
-    
-    # Get customization level specific instructions
-    customization_instructions = prompts['get_customization_level_instructions'](customization_level)
-    
-    # Get industry-specific guidance if industry is provided
-    if industry:
-        industry_guidance = prompts['get_industry_specific_guidance'](industry)
-        if industry_guidance:
-            customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
-    
-    # Format the prompt with the customization level instructions
-    prompt_template = prompts['IMPLEMENTATION_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
-    
-    # Get the appropriate model - use a simpler model for implementation to reduce costs
-    implementation_model = settings.PYDANTICAI_COVER_LETTER_MODEL
-    
-    # Create the agent using PydanticAI
-    try:
-        # For implementation tasks, we can use a more cost-effective model
-        # as the task is primarily about following instructions from the optimizer
-        # rather than complex reasoning
-        implementation_model = settings.PYDANTICAI_COVER_LETTER_MODEL
-        
-        # Adjust temperature based on customization level
-        # Lower temperature for more consistent implementations
-        base_temperature = settings.PYDANTICAI_TEMPERATURE
-        temperature_adjustment = 0.0
-        
-        if customization_level == CustomizationLevel.CONSERVATIVE:
-            temperature_adjustment = -0.2  # More consistent for conservative changes
-        elif customization_level == CustomizationLevel.EXTENSIVE:
-            temperature_adjustment = 0.0   # Default temperature is fine for extensive changes
-        else:  # BALANCED
-            temperature_adjustment = -0.1  # Slightly more consistent for balanced changes
-            
-        temperature = max(0.3, min(0.9, base_temperature + temperature_adjustment))
-        
-        implementation_agent = Agent(
-            implementation_model,
-            output_type=None,  # Use None for plain text output
-            system_prompt=prompt_template,
-            temperature=temperature,
-            max_tokens=settings.PYDANTICAI_MAX_TOKENS
-        )
-        
-        # For implementation tasks, prioritize efficient models that are good at
-        # text generation and following instructions
-        fallbacks = [
-            # Start with Claude 3.7 Haiku which is fast and efficient for text generation tasks
-            "anthropic:claude-3-7-haiku-latest",
-            # Next try GPT-4o for good quality at reasonable cost
-            "openai:gpt-4o",
-            # Then try Gemini Flash which is optimized for text generation
-            "google:gemini-2.5-flash-preview-04-17",
-            # Final fallbacks from default chain
-        ] + [m for m in settings.PYDANTICAI_FALLBACK_MODELS if m not in [
-            "anthropic:claude-3-7-haiku-latest", 
-            "openai:gpt-4o", 
-            "google:gemini-2.5-flash-preview-04-17"
-        ]]
-        
-        implementation_agent.fallback_config = fallbacks
-        
-        logfire.info(
-            "Resume Implementation Agent created successfully",
-            model=implementation_model,
-            temperature=temperature,
-            customization_level=customization_level.name,
-            fallbacks=fallbacks[:3]  # Log only first 3 fallbacks to avoid verbose logs
-        )
-        
-        return implementation_agent
-        
-    except Exception as e:
-        logfire.error(
-            "Error creating Resume Implementation Agent",
-            error=str(e),
-            error_type=type(e).__name__
-        )
-        raise e
+# Note: The previous helper functions for agent creation (create_optimizer_agent and create_implementation_agent)
+# have been removed as they've been replaced with direct model selection in the main workflow functions.
+# Agent creation now happens directly in the main functions with the dynamic model selection.
 
 
 class PydanticAIOptimizerService:
@@ -963,10 +577,122 @@ class PydanticAIOptimizerService:
             industry=industry if industry else "not specified"
         )
         
-        # Create the evaluator agent
-        evaluator_agent = create_evaluator_agent(
-            customization_level=customization_level,
-            industry=industry
+        # Use model selector to get the best model configuration
+        cost_sensitivity = 1.0 if customization_level == CustomizationLevel.BALANCED else \
+                          0.5 if customization_level == CustomizationLevel.EXTENSIVE else 1.5
+        
+        # Force Google provider for testing
+        model_config = get_model_config_for_task(
+            task_name="resume_evaluation",
+            content=resume_content,
+            job_description=job_description,
+            industry=industry,
+            # Force Google as preferred provider
+            preferred_provider="google",
+            # Adjust cost sensitivity based on customization level
+            cost_sensitivity=cost_sensitivity
+        )
+        
+        # Log the model selection in detail
+        logfire.info(
+            "Model selection for evaluator agent",
+            selected_model=model_config.get("model", "unknown"),
+            provider=model_config.get("model", "unknown").split(":")[0] if ":" in model_config.get("model", "unknown") else "unknown",
+            customization_level=customization_level.value,
+            cost_sensitivity=cost_sensitivity,
+            thinking_config=model_config.get("thinking_config", None)
+        )
+        
+        # SKIP the standard agent creation and create the agent directly with our model
+        # Get prompts dynamically
+        prompts = _get_prompts()
+        
+        # Get customization level specific instructions
+        customization_instructions = prompts['get_customization_level_instructions'](customization_level)
+        
+        # Get industry-specific guidance if industry is provided
+        industry_guidance = ""
+        if industry:
+            industry_guidance = prompts['get_industry_specific_guidance'](industry)
+            if industry_guidance:
+                customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
+        
+        # Format the prompt with the customization level instructions
+        prompt_template = prompts['EVALUATOR_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
+        
+        # Add structured output instructions
+        json_instruction = """
+        Your output must match the following structure:
+        - overall_assessment: Detailed evaluation of how well the resume matches the job
+        - match_score: A score from 0-100 representing how well the resume matches the job
+        - job_key_requirements: A list of the most important job requirements
+        - strengths: A list of candidate strengths relative to the job
+        - gaps: A list of missing skills or experiences
+        - term_mismatches: A list of terminology equivalence (job term vs resume term)
+        - section_evaluations: A list of section-level evaluations
+        - competitor_analysis: A brief market comparison
+        - reframing_opportunities: A list of experience reframing ideas
+        - experience_preservation_check: Verification that all original experience is preserved
+        """
+        
+        prompt_template = f"{prompt_template}\n\n{json_instruction}"
+        
+        # Get thinking configuration from model config
+        thinking_config = model_config.get("thinking_config", None)
+        
+        # Direct agent creation with selected model
+        from app.schemas.customize import CustomizationPlan, RecommendationItem
+        from app.schemas.ats import KeywordMatch, ATSImprovement, SectionScore
+        from app.services.pydanticai_service import ResumeEvaluation
+        
+        # Get the Gemini model from the central configuration
+        from app.services.pydanticai_service import EVALUATOR_MODEL
+        gemini_model = EVALUATOR_MODEL
+        
+        # Log the model override
+        logfire.info(
+            "Overriding model selection to use Google Gemini",
+            original_model=model_config.get("model", "unknown"),
+            override_model=gemini_model
+        )
+        
+        evaluator_agent = Agent(
+            gemini_model,  # Force Google Gemini instead of using model_config["model"]
+            output_type=ResumeEvaluation,
+            system_prompt=prompt_template,
+            thinking_config=thinking_config,
+            temperature=model_config.get("temperature", 0.7),
+            max_tokens=model_config.get("max_tokens", 8000)
+        )
+        
+        # Use the centralized fallback models
+        from app.services.pydanticai_service import FALLBACK_MODELS
+        fallback_chain = FALLBACK_MODELS
+        
+        # Apply our custom fallback chain instead of using model_config
+        evaluator_agent.fallback_config = fallback_chain
+        
+        # Log the fallback chain override
+        logfire.info(
+            "Applied custom fallback chain prioritizing Google models",
+            fallback_models=fallback_chain[:2]  # Log only first 2 fallbacks to reduce verbosity
+        )
+        
+        logfire.info(
+            "Created evaluator agent directly with selected model",
+            model=gemini_model,
+            provider=model_config["model"].split(":")[0] if ":" in model_config["model"] else "unknown",
+            has_thinking=thinking_config is not None,
+            fallback_count=len(model_config.get("fallback_config", []))
+        )
+        
+        logfire.info(
+            "Applied model selection to evaluator agent",
+            selected_model=model_config["model"],
+            has_thinking_config="thinking_config" in model_config,
+            fallback_count=len(model_config.get("fallback_config", [])),
+            resume_length=len(resume_content),
+            job_description_length=len(job_description)
         )
         
         # Build the input prompt - adapt for new EVALUATOR_PROMPT format
@@ -1029,15 +755,22 @@ class PydanticAIOptimizerService:
             result = await evaluator_agent.run(prompt)
             elapsed_time = time.time() - start_time
             
-            # Convert the result to dictionary
-            if hasattr(result, 'dict'):
-                evaluation_result = result.dict()
+            # Access the output property of AgentRunResult which contains the Pydantic model
+            pydantic_result = result.output
+            
+            # Convert Pydantic model to dictionary using built-in methods
+            if hasattr(pydantic_result, 'model_dump'):
+                # Pydantic v2
+                evaluation_result = pydantic_result.model_dump()
+            elif hasattr(pydantic_result, 'dict'):
+                # Pydantic v1
+                evaluation_result = pydantic_result.dict()
             else:
-                # In case the agent returns a plain object, convert attributes to dict
+                # Fallback (should not happen with properly configured output_type)
                 evaluation_result = {
-                    attr: getattr(result, attr) 
-                    for attr in dir(result) 
-                    if not attr.startswith('_') and not callable(getattr(result, attr))
+                    attr: getattr(pydantic_result, attr) 
+                    for attr in dir(pydantic_result) 
+                    if not attr.startswith('_') and not callable(getattr(pydantic_result, attr))
                 }
             
             # Log success
@@ -1100,10 +833,103 @@ class PydanticAIOptimizerService:
             industry=industry if industry else "not specified"
         )
         
-        # Create the optimizer agent
-        optimizer_agent = create_optimizer_agent(
-            customization_level=customization_level,
-            industry=industry
+        # Use model selector to get the best model configuration
+        cost_sensitivity = 1.0 if customization_level == CustomizationLevel.BALANCED else \
+                          0.5 if customization_level == CustomizationLevel.EXTENSIVE else 1.5
+                          
+        # Force Google provider for testing
+        model_config = get_model_config_for_task(
+            task_name="optimization_plan",
+            content=resume_content,
+            job_description=job_description,
+            industry=industry,
+            # Force Google as preferred provider
+            preferred_provider="google",
+            # Adjust cost sensitivity based on customization level
+            cost_sensitivity=cost_sensitivity
+        )
+        
+        # Log the model selection in detail
+        logfire.info(
+            "Model selection for optimizer agent",
+            selected_model=model_config.get("model", "unknown"),
+            provider=model_config.get("model", "unknown").split(":")[0] if ":" in model_config.get("model", "unknown") else "unknown",
+            customization_level=customization_level.value,
+            cost_sensitivity=cost_sensitivity,
+            thinking_config=model_config.get("thinking_config", None)
+        )
+        
+        # SKIP the standard agent creation and create the agent directly with our model
+        # Get prompts dynamically
+        prompts = _get_prompts()
+        
+        # Get customization level specific instructions
+        customization_instructions = prompts['get_customization_level_instructions'](customization_level)
+        
+        # Get industry-specific guidance if industry is provided
+        industry_guidance = ""
+        if industry:
+            industry_guidance = prompts['get_industry_specific_guidance'](industry)
+            if industry_guidance:
+                customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
+        
+        # Format the prompt with the customization level instructions
+        prompt_template = prompts['OPTIMIZER_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
+        
+        # Get thinking configuration from model config
+        thinking_config = model_config.get("thinking_config", None)
+        
+        # Get the Gemini model from the central configuration
+        from app.services.pydanticai_service import EVALUATOR_MODEL
+        gemini_model = EVALUATOR_MODEL
+        
+        # Log the model override
+        logfire.info(
+            "Overriding model selection to use Google Gemini for optimizer",
+            original_model=model_config.get("model", "unknown"),
+            override_model=gemini_model
+        )
+        
+        # Direct agent creation with selected model
+        from app.schemas.customize import CustomizationPlan, RecommendationItem
+        
+        optimizer_agent = Agent(
+            gemini_model,  # Force Google Gemini instead of using model_config["model"]
+            output_type=CustomizationPlan,
+            system_prompt=prompt_template,
+            thinking_config=thinking_config,
+            temperature=model_config.get("temperature", 0.7),
+            max_tokens=model_config.get("max_tokens", 8000)
+        )
+        
+        # Use the centralized fallback models
+        from app.services.pydanticai_service import FALLBACK_MODELS
+        fallback_chain = FALLBACK_MODELS
+        
+        # Apply our custom fallback chain instead of using model_config
+        optimizer_agent.fallback_config = fallback_chain
+        
+        # Log the fallback chain override
+        logfire.info(
+            "Applied custom fallback chain prioritizing Google models for optimizer",
+            fallback_models=fallback_chain[:2]  # Log only first 2 fallbacks to reduce verbosity
+        )
+        
+        logfire.info(
+            "Created optimizer agent directly with selected model",
+            model=gemini_model,
+            provider="google",
+            has_thinking=thinking_config is not None,
+            fallback_count=len(model_config.get("fallback_config", []))
+        )
+        
+        logfire.info(
+            "Applied model selection to optimizer agent",
+            selected_model=gemini_model,
+            has_thinking_config="thinking_config" in model_config,
+            fallback_count=len(model_config.get("fallback_config", [])),
+            resume_length=len(resume_content),
+            job_description_length=len(job_description)
         )
         
         # Build the input prompt - adapt for new OPTIMIZER_PROMPT format
@@ -1128,8 +954,21 @@ class PydanticAIOptimizerService:
             customization_instructions = "Extensive customization - be comprehensive in optimizing the resume while maintaining truthfulness."
         
         # Add evaluation data as additional context
-        evaluation_json = json.dumps(evaluation, indent=2)
-        customization_instructions += f"\n\nEvaluation data:\n{evaluation_json}"
+        # We should already have a dictionary from _evaluate_match
+        # But ensure it's serializable before adding to the prompt
+        try:
+            evaluation_json = json.dumps(evaluation, indent=2)
+            customization_instructions += f"\n\nEvaluation data:\n{evaluation_json}"
+        except TypeError as e:
+            # In the unlikely case evaluation still contains non-serializable objects
+            logfire.warning(
+                "Could not directly serialize evaluation, attempting conversion",
+                error=str(e)
+            )
+            # Try to convert it first if needed
+            evaluation_dict = evaluation.model_dump() if hasattr(evaluation, 'model_dump') else evaluation.dict() if hasattr(evaluation, 'dict') else evaluation
+            evaluation_json = json.dumps(evaluation_dict, indent=2)
+            customization_instructions += f"\n\nEvaluation data:\n{evaluation_json}"
         
         # Add industry information if available
         if industry:
@@ -1149,14 +988,17 @@ class PydanticAIOptimizerService:
             result = await optimizer_agent.run(prompt)
             elapsed_time = time.time() - start_time
             
+            # Access the output property of AgentRunResult which contains the Pydantic model
+            plan = result.output
+            
             # Log success
             logfire.info(
                 "Optimization plan generation completed successfully with PydanticAI",
                 duration_seconds=round(elapsed_time, 2),
-                recommendation_count=len(result.recommendations)
+                recommendation_count=len(plan.recommendations)
             )
             
-            return result
+            return plan
             
         except Exception as e:
             logfire.error(
@@ -1236,11 +1078,39 @@ class PydanticAIOptimizerService:
                 industry=industry if industry else "not specified"
             )
             
+            # Use model selector to get the best model configuration
+            model_config = get_model_config_for_task(
+                task_name="feedback_evaluation",
+                content=original_resume,
+                job_description=job_description,
+                industry=industry,
+                # Feedback is critical, so use lower cost sensitivity (higher quality)
+                cost_sensitivity=0.5
+            )
+            
             # Create the evaluator agent specifically for feedback
             feedback_agent = create_evaluator_agent(
                 customization_level=customization_level,
                 industry=industry,
                 is_feedback_agent=True
+            )
+            
+            # Update agent with selected model and configuration
+            feedback_agent.model_name = model_config["model"]
+            if "thinking_config" in model_config:
+                feedback_agent.thinking_config = model_config["thinking_config"]
+            
+            # Apply fallback chain if available
+            if "fallback_config" in model_config:
+                feedback_agent.fallback_config = model_config["fallback_config"]
+            
+            logfire.info(
+                "Applied model selection to feedback evaluation agent",
+                selected_model=model_config["model"],
+                has_thinking_config="thinking_config" in model_config,
+                fallback_count=len(model_config.get("fallback_config", [])),
+                original_resume_length=len(original_resume),
+                optimized_resume_length=len(optimized_resume)
             )
             
             # Build the user message
@@ -1356,11 +1226,77 @@ class PydanticAIOptimizerService:
                 industry=industry if industry else "not specified"
             )
             
-            # Create the optimizer agent specifically for feedback response
-            optimizer_agent = create_optimizer_agent(
-                customization_level=customization_level,
+            # Use model selector to get the best model configuration
+            model_config = get_model_config_for_task(
+                task_name="optimization_plan_feedback",
+                content=original_resume,
+                job_description=job_description,
                 industry=industry,
-                is_feedback_response=True
+                # Feedback response is extremely critical, so use lower cost sensitivity (highest quality)
+                cost_sensitivity=0.3
+            )
+            
+            # Get prompts dynamically
+            prompts = _get_prompts()
+        
+            # Get customization level specific instructions
+            customization_instructions = prompts['get_customization_level_instructions'](customization_level)
+        
+            # Get industry-specific guidance if industry is provided
+            industry_guidance = ""
+            if industry:
+                industry_guidance = prompts['get_industry_specific_guidance'](industry)
+                if industry_guidance:
+                    customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
+        
+            # Format the prompt with the customization level instructions
+            prompt_template = prompts['OPTIMIZER_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
+        
+            # Get the Gemini model from the central configuration
+            from app.services.pydanticai_service import OPTIMIZER_MODEL
+            gemini_model = OPTIMIZER_MODEL
+        
+            # Get thinking configuration from model config
+            thinking_config = model_config.get("thinking_config", None)
+        
+            # Log the model override
+            logfire.info(
+                "Using Google Gemini for feedback response optimizer",
+                original_model=model_config.get("model", "unknown"),
+                override_model=gemini_model
+            )
+        
+            # Direct agent creation with the Google Gemini model
+            from app.schemas.customize import CustomizationPlan, RecommendationItem
+        
+            optimizer_agent = Agent(
+                gemini_model,  # Force Google Gemini model
+                output_type=CustomizationPlan,
+                system_prompt=prompt_template,
+                thinking_config=thinking_config,
+                temperature=model_config.get("temperature", 0.7),
+                max_tokens=model_config.get("max_tokens", 8000)
+            )
+            
+            # Use the centralized fallback models
+            from app.services.pydanticai_service import FALLBACK_MODELS
+            fallback_chain = FALLBACK_MODELS      
+            # Apply our custom fallback chain instead of using model_config
+            optimizer_agent.fallback_config = fallback_chain
+        
+            # Log the fallback chain override
+            logfire.info(
+                "Applied custom fallback chain prioritizing Google models for feedback optimizer",
+                fallback_models=fallback_chain[:2]  # Log only first 2 fallbacks to reduce verbosity
+            )
+            
+            logfire.info(
+                "Applied model selection to feedback response optimizer agent",
+                selected_model=gemini_model,
+                has_thinking_config="thinking_config" in model_config,
+                fallback_count=len(model_config.get("fallback_config", [])),
+                original_resume_length=len(original_resume),
+                feedback_items=sum(len(v) for k, v in feedback.items() if isinstance(v, list))
             )
             
             # Build the user message
@@ -1391,14 +1327,17 @@ class PydanticAIOptimizerService:
                 # Calculate elapsed time
                 elapsed_time = time.time() - start_time
                 
+                # Access the output property of AgentRunResult which contains the Pydantic model
+                plan = result.output
+                
                 # Log success
                 logfire.info(
                     "Resume optimization with feedback completed successfully using PydanticAI",
                     duration_seconds=round(elapsed_time, 2),
-                    recommendation_count=len(result.recommendations)
+                    recommendation_count=len(plan.recommendations)
                 )
                 
-                return result
+                return plan
                 
             except Exception as e:
                 # Calculate elapsed time
@@ -1462,13 +1401,18 @@ class PydanticAIOptimizerService:
             industry=industry if industry else "not specified"
         )
         
-        # Create the implementation agent
-        implementation_agent = create_implementation_agent(
-            customization_level=customization_strength,
-            industry=industry
+        # Use model selector to get the best model configuration
+        model_config = get_model_config_for_task(
+            task_name="resume_implementation",
+            content=resume_content,
+            job_description=job_description,
+            industry=industry,
+            # Adjust cost sensitivity based on customization level
+            cost_sensitivity=1.0 if customization_strength == CustomizationLevel.BALANCED else
+                           0.5 if customization_strength == CustomizationLevel.EXTENSIVE else 1.5
         )
         
-        # Get the implementation prompt from prompts module
+        # Get prompts module for implementation agent creation
         prompts = _get_prompts()
         
         # Get customization level specific instructions
@@ -1479,6 +1423,43 @@ class PydanticAIOptimizerService:
             industry_guidance = prompts.get('get_industry_specific_guidance')(industry)
             if industry_guidance:
                 customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
+        
+        # Format the prompt with the customization level instructions
+        prompt_template = prompts['IMPLEMENTATION_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
+        
+        # Get thinking configuration from model config
+        thinking_config = model_config.get("thinking_config", None)
+        
+        # Create implementation agent directly with selected model
+        implementation_agent = Agent(
+            model_config["model"],  # Use the selected model from model_config
+            output_format="text",   # Use text format for resume content
+            system_prompt=prompt_template,
+            thinking_config=thinking_config,
+            temperature=model_config.get("temperature", 0.7),
+            max_tokens=model_config.get("max_tokens", 8000)
+        )
+        
+        # Apply fallback chain if available
+        if "fallback_config" in model_config:
+            implementation_agent.fallback_config = model_config["fallback_config"]
+            
+        logfire.info(
+            "Created implementation agent directly with selected model",
+            model=model_config["model"],
+            provider=model_config["model"].split(":")[0] if ":" in model_config["model"] else "unknown",
+            has_thinking=thinking_config is not None,
+            fallback_count=len(model_config.get("fallback_config", []))
+        )
+        
+        logfire.info(
+            "Prepared implementation agent",
+            resume_length=len(resume_content),
+            plan_recommendation_count=len(plan.recommendations),
+            customization_strength=customization_strength
+        )
+        
+        # We already have customization_instructions from above
                 
         # Prepare the keywords and formatting suggestions
         keywords_str = ", ".join(plan.keywords_to_add) if plan.keywords_to_add else "No additional keywords specified"

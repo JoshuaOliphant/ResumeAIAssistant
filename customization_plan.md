@@ -64,18 +64,18 @@ However, the customization example reveals several areas for improvement:
 
 Based on the Anthropic blog post on agent workflows and our analysis of Google's Gemini models, we can implement a sophisticated multi-model approach that leverages each model's strengths while optimizing for cost and performance.
 
-### Model Selection Framework
+### Model Selection Framework with PydanticAI
 
-| Task Type | Optimal Model | Why |
-|-----------|---------------|-----|
-| Simple Classification | Gemini 2.5 Flash (0 thinking budget) | Fast, cost-effective for straightforward tasks |
-| Focused Analysis | Gemini 2.5 Flash (medium thinking budget) | Good reasoning for specific domain analysis at lower cost |
-| Complex Orchestration | Claude 3.5 Sonnet or Gemini 2.5 Pro | Strong reasoning capabilities for complex synthesis |
-| Challenging Edge Cases | Claude 3.7 Opus | Ultimate reasoning for difficult optimizations |
-| Implementation | Gemini 2.5 Flash or Claude 3.5 Haiku | Good output quality with speed optimization |
-| Verification | Gemini 2.5 Flash (low thinking budget) | Cost-effective for verification against criteria |
+| Task Type | Optimal Model | Thinking Budget | Why |
+|-----------|---------------|----------------|-----|
+| Simple Classification | google:gemini-2.5-flash-preview-04-17 | 0 tokens | Fast, cost-effective for straightforward tasks |
+| Focused Analysis | google:gemini-2.5-flash-preview-04-17 | 5000 tokens | Good reasoning for specific domain analysis at lower cost |
+| Complex Orchestration | anthropic:claude-3-5-sonnet-latest or google:gemini-2.5-pro-preview-03-25 | 10000+ tokens | Strong reasoning capabilities for complex synthesis |
+| Challenging Edge Cases | anthropic:claude-3-7-opus-latest | 15000+ tokens | Ultimate reasoning for difficult optimizations |
+| Implementation | google:gemini-2.5-flash-preview-04-17 or anthropic:claude-3-5-haiku-latest | 5000 tokens | Good output quality with speed optimization |
+| Verification | google:gemini-2.5-flash-preview-04-17 | 2000 tokens | Cost-effective for verification against criteria |
 
-This framework allows us to select the optimal model for each task based on complexity, cost sensitivity, and performance requirements.
+This framework allows us to select the optimal model provider and model for each task based on complexity, cost sensitivity, and performance requirements, while maintaining a unified interface through PydanticAI.
 
 ## Proposed Agent Workflow Enhancements
 
@@ -84,30 +84,30 @@ This framework allows us to select the optimal model for each task based on comp
 Building on our current approach, we add a verification step using a cost-optimized model:
 
 ```
-[Resume + Job] → Evaluator (Claude 3.5 Sonnet) → Optimizer (Gemini 2.5 Pro) → Implementation (Gemini 2.5 Flash) → Verification (Gemini 2.5 Flash) → Final Resume
-                      ↑                                                           |
-                      └───────────────── Feedback Loop ────────────────────────────┘
+[Resume + Job] → Evaluator (anthropic:claude-3-5-sonnet-latest) → Optimizer (google:gemini-2.5-pro) → Implementation (google:gemini-2.5-flash) → Verification (google:gemini-2.5-flash) → Final Resume
+                      ↑                                                                                |
+                      └─────────────────────────── Feedback Loop ─────────────────────────────────────┘
 ```
 
-- **Evaluator**: Claude 3.5 Sonnet for deep understanding of resume and job alignment
-- **Optimizer**: Gemini 2.5 Pro for comprehensive optimization planning
-- **Implementation**: Gemini 2.5 Flash with appropriate thinking budget based on complexity
-- **Verification**: Gemini 2.5 Flash (low thinking budget) for cost-effective verification
+- **Evaluator**: Claude 3.5 Sonnet through PydanticAI for deep understanding of resume and job alignment
+- **Optimizer**: Gemini 2.5 Pro through PydanticAI for comprehensive optimization planning
+- **Implementation**: Gemini 2.5 Flash through PydanticAI with appropriate thinking budget based on complexity
+- **Verification**: Gemini 2.5 Flash through PydanticAI (low thinking budget) for cost-effective verification
 
 ### 2. Job Role Classifier & Router
 
 Add an initial classification step using a cost-effective model:
 
 ```
-                                     ┌→ Technology Path (Gemini 2.5 Flash)
-                                     │
-[Resume + Job] → Job Role Classifier →→ Healthcare Path (Gemini 2.5 Flash) → Evaluator-Optimizer → Implementation
-(Gemini 2.5 Flash)                   │
-thinking budget=0                    └→ Finance Path (Gemini 2.5 Flash)
+                                                 ┌→ Technology Path (PydanticAI with google:gemini-2.5-flash)
+                                                 │
+[Resume + Job] → Job Role Classifier             →→ Healthcare Path (PydanticAI with google:gemini-2.5-flash) → Evaluator-Optimizer → Implementation
+(PydanticAI with google:gemini-2.5-flash)        │
+thinking budget=0                                └→ Finance Path (PydanticAI with google:gemini-2.5-flash)
 ```
 
-- Use Gemini 2.5 Flash with minimal thinking budget for fast, cheap classification
-- Route to specialized paths with appropriate models for each industry
+- Use PydanticAI with Gemini 2.5 Flash (zero thinking budget) for fast, cheap classification
+- Route to specialized PydanticAI agents with appropriate models for each industry
 - Dynamically adjust thinking budgets based on industry complexity
 
 ### 3. Parallelized Analysis with Specialized Models
@@ -115,16 +115,16 @@ thinking budget=0                    └→ Finance Path (Gemini 2.5 Flash)
 Implement parallel analysis using appropriate models for each subtask:
 
 ```
-                     ┌→ Skills Analysis (Gemini 2.5 Flash)        ┐
-                     │  thinking budget=medium                     │
-[Resume + Job] →     │→ Experience Analysis (Gemini 2.5 Flash)    │→ Synthesized Evaluation → Optimizer → Implementation
-                     │  thinking budget=medium                     │  (Claude 3.5 Sonnet)
-                     └→ Keyword Match Analysis (Gemini 2.5 Flash) ┘
-                        thinking budget=low
+                     ┌→ Skills Analysis (PydanticAI with google:gemini-2.5-flash)        ┐
+                     │  thinking budget=5000                                              │
+[Resume + Job] →     │→ Experience Analysis (PydanticAI with google:gemini-2.5-flash)    │→ Synthesized Evaluation → Optimizer → Implementation
+                     │  thinking budget=5000                                              │  (PydanticAI with anthropic:claude-3-5-sonnet)
+                     └→ Keyword Match Analysis (PydanticAI with google:gemini-2.5-flash) ┘
+                        thinking budget=2000
 ```
 
-- Each specialized analysis task uses Gemini 2.5 Flash with appropriate thinking budget
-- Synthesis step uses Claude 3.5 Sonnet for complex integration of diverse analyses
+- Each specialized analysis task uses PydanticAI with Gemini 2.5 Flash with appropriate thinking budget
+- Synthesis step uses PydanticAI with Claude 3.5 Sonnet for complex integration of diverse analyses
 - Configurable thinking budgets based on task complexity and resume length
 
 ### 4. Orchestrator-Worker Implementation
@@ -132,18 +132,18 @@ Implement parallel analysis using appropriate models for each subtask:
 For complex resumes, implement an orchestrator-worker pattern with model optimization:
 
 ```
-                                                   ┌→ Worker: Skills Section (Gemini 2.5 Flash)
-                                                   │  thinking budget=medium
-[Optimization Plan] → Implementation Orchestrator →→ Worker: Experience Section (Gemini 2.5 Flash) → Final Assembly → Verification
-(Gemini 2.5 Pro)                                   │  thinking budget=high                            (Claude 3.5)    (Gemini 2.5 Flash)
-                                                   └→ Worker: Summary Section (Gemini 2.5 Flash)
-                                                      thinking budget=medium
+                                                           ┌→ Worker: Skills Section (PydanticAI with google:gemini-2.5-flash)
+                                                           │  thinking budget=5000
+[Optimization Plan] → Implementation Orchestrator         →→ Worker: Experience Section (PydanticAI with google:gemini-2.5-flash) → Final Assembly → Verification
+(PydanticAI with google:gemini-2.5-pro)                   │  thinking budget=8000                                                  (PydanticAI with   (PydanticAI with
+                                                           └→ Worker: Summary Section (PydanticAI with google:gemini-2.5-flash)     anthropic:claude)  google:gemini-2.5-flash)
+                                                              thinking budget=5000                                                                      thinking budget=2000
 ```
 
-- Orchestrator: Gemini 2.5 Pro for complex task distribution and coordination
-- Workers: Gemini 2.5 Flash with variable thinking budgets based on section complexity
-- Final Assembly: Claude 3.5 Sonnet for coherent integration
-- Verification: Gemini 2.5 Flash with minimal thinking budget for efficient checking
+- Orchestrator: PydanticAI with Gemini 2.5 Pro for complex task distribution and coordination
+- Workers: PydanticAI with Gemini 2.5 Flash with variable thinking budgets based on section complexity
+- Final Assembly: PydanticAI with Claude 3.5 Sonnet for coherent integration
+- Verification: PydanticAI with Gemini 2.5 Flash with minimal thinking budget for efficient checking
 
 ## Model Experimentation and Optimization Plan
 
@@ -170,24 +170,25 @@ For complex resumes, implement an orchestrator-worker pattern with model optimiz
 ## Implementation Plan
 
 1. **Short-term Improvements**:
-   - Integrate Gemini API alongside Claude
-   - Add model selection configuration options
-   - Enhance the evaluator-optimizer pattern with verification
-   - Add explicit job role classification and routing
-   - Improve post-processing to ensure clean output
+   - ✅ Configure Gemini models in PydanticAI
+   - ✅ Create test file to verify PydanticAI with Gemini
+   - ✅ Update model selection framework with provider prefixes
+   - [ ] Enhance the evaluator-optimizer pattern with verification
+   - [ ] Add explicit job role classification and routing
+   - [ ] Improve post-processing to ensure clean output
 
 2. **Medium-term Enhancements**:
-   - Implement parallelized analysis with model-specific optimizations
-   - Add thinking budget optimization for Gemini models
-   - Implement automatic model selection based on task complexity
-   - Add ATS simulation testing to verify improvements
-   - Create feedback mechanism to track successful applications
+   - [ ] Implement parallelized analysis with model-specific optimizations
+   - [ ] Add thinking budget optimization for different model providers
+   - [ ] Implement automatic model selection based on task complexity
+   - [ ] Add ATS simulation testing to verify improvements
+   - [ ] Create feedback mechanism to track successful applications
 
 3. **Long-term Vision**:
-   - Implement full orchestrator-worker architecture with optimal model distribution
-   - Build learning system to improve customizations based on outcomes
-   - Create continuous optimization with interview feedback loop
-   - Implement adaptive thinking budget allocation
-   - Develop hybrid model workflows that maximize strengths of each model family
+   - [ ] Implement full orchestrator-worker architecture with optimal model distribution
+   - [ ] Build learning system to improve customizations based on outcomes
+   - [ ] Create continuous optimization with interview feedback loop
+   - [ ] Implement adaptive thinking budget allocation
+   - [ ] Develop hybrid model workflows that maximize strengths of each model family
 
 By implementing this multi-model approach with dynamic selection and budgeting, we can create a robust, cost-effective resume customization system that leverages the unique strengths of both Claude and Gemini model families.

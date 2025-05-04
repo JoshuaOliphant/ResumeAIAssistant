@@ -10,32 +10,22 @@ from typing import Optional, Dict, Any, List
 import asyncio
 import logfire
 
-# Import from PydanticAI - wrapped in try/except to handle missing dependencies gracefully
-try:
-    from pydanticai import Agent, tool
-    PYDANTICAI_AVAILABLE = True
-except ImportError:
-    logfire.error("PydanticAI not installed. Please install with 'uv add pydanticai'")
-    # Create dummy classes to prevent import errors
-    class Agent:
-        def __init__(self, *args, **kwargs):
-            pass
-        
-        async def run(self, *args, **kwargs):
-            raise NotImplementedError("PydanticAI not installed")
-            
-    def tool(*args, **kwargs):
-        def decorator(func):
-            return func
-        return decorator
-        
-    PYDANTICAI_AVAILABLE = False
+# Import from PydanticAI directly - it's a core dependency
+from pydantic_ai import Agent
+
+logfire.info("PydanticAI imported successfully")
 
 from pydantic import BaseModel, Field
 from app.core.config import settings
 from app.core.logging import log_function_call
 from app.schemas.customize import CustomizationLevel, CustomizationPlan, RecommendationItem
 from app.schemas.ats import KeywordMatch, ATSImprovement, SectionScore
+from app.schemas.pydanticai_models import (
+    TermMismatch,
+    SectionEvaluation,
+    ResumeEvaluation,
+    CoverLetter
+)
 
 # Check for API keys - at minimum, we need one of these to function
 if not settings.ANTHROPIC_API_KEY and not settings.OPENAI_API_KEY:
@@ -47,12 +37,16 @@ if not settings.ANTHROPIC_API_KEY and not settings.OPENAI_API_KEY:
 
 # Set default models based on availability
 DEFAULT_MODEL = None
-if settings.ANTHROPIC_API_KEY:
-    DEFAULT_MODEL = "anthropic:claude-3-7-sonnet-latest"  # Default to Claude 3.7 Sonnet
-    logfire.info("Using Anthropic Claude as default model provider")
+# IMPORTANT: Always use Google Gemini as the primary model provider
+if settings.GEMINI_API_KEY:
+    DEFAULT_MODEL = "google:gemini-2.5-pro-preview-03-25"  # Default to Gemini 2.5 Pro
+    logfire.info("Using Google Gemini as default model provider")
 elif settings.OPENAI_API_KEY:
-    DEFAULT_MODEL = "openai:gpt-4.1"  # Fallback to OpenAI if Anthropic not available
-    logfire.info("Using OpenAI as default model provider")
+    DEFAULT_MODEL = "openai:gpt-4.1"  # Fallback to OpenAI if Gemini not available
+    logfire.info("Using OpenAI as fallback model provider")
+elif settings.ANTHROPIC_API_KEY:
+    DEFAULT_MODEL = "anthropic:claude-3-7-sonnet-latest"  # Use Claude as last resort fallback
+    logfire.info("Using Anthropic Claude as last resort model provider")
 else:
     # This should never happen due to the check above, but just in case
     logfire.warning("No default model provider available")
@@ -68,14 +62,27 @@ if settings.GEMINI_API_KEY:
 # Import model config function
 from app.core.config import get_pydanticai_model_config
 
-# Define config for model providers using settings
-EVALUATOR_MODEL = settings.PYDANTICAI_EVALUATOR_MODEL
-OPTIMIZER_MODEL = settings.PYDANTICAI_OPTIMIZER_MODEL
-COVER_LETTER_MODEL = settings.PYDANTICAI_COVER_LETTER_MODEL
+# Get configuration from the core config
+model_config = get_pydanticai_model_config()
+
+# Extract model settings
+EVALUATOR_MODEL = model_config.get("gemini", {}).get("default_model", "google-gla:gemini-1.5-pro") if "gemini" in model_config else "google-gla:gemini-1.5-pro"
+OPTIMIZER_MODEL = EVALUATOR_MODEL  # Use same model for optimizer
+COVER_LETTER_MODEL = EVALUATOR_MODEL  # Use same model for cover letter generation
 THINKING_BUDGET = settings.PYDANTICAI_THINKING_BUDGET
 TEMPERATURE = settings.PYDANTICAI_TEMPERATURE
 MAX_TOKENS = settings.PYDANTICAI_MAX_TOKENS
-FALLBACK_MODELS = settings.PYDANTICAI_FALLBACK_MODELS
+
+# Set fallback models in order of preference
+FALLBACK_MODELS = [
+    "google-gla:gemini-1.5-flash",             # Faster Gemini model as first fallback
+    "openai:gpt-4.1" if "openai" in model_config else None,  # Latest GPT-4.1 if OpenAI configured
+    "anthropic:claude-3-7-sonnet-latest" if "anthropic" in model_config else None,  # Claude if available
+    "openai:gpt-4o" if "openai" in model_config else None,  # Older but still capable model
+]
+
+# Filter out None values from fallback models
+FALLBACK_MODELS = [model for model in FALLBACK_MODELS if model is not None]
 
 # Get the complete model provider configuration
 MODEL_CONFIG = get_pydanticai_model_config()
@@ -110,184 +117,10 @@ def _get_prompts():
         'OPTIMIZER_PROMPT': OPTIMIZER_PROMPT,
     }
 
-# Schema definitions for PydanticAI
-class ResumeEvaluation(BaseModel):
-    """Schema for resume evaluation results"""
-    overall_assessment: str = Field(..., description="Detailed evaluation of resume-job match")
-    match_score: int = Field(..., ge=0, le=100, description="Score from 0-100")
-    job_key_requirements: List[str] = Field(..., description="Most important job requirements")
-    strengths: List[str] = Field(..., description="Candidate strengths relative to job")
-    gaps: List[str] = Field(..., description="Missing skills or experiences")
-    term_mismatches: List[Dict[str, str]] = Field(..., description="Terminology equivalence")
-    section_evaluations: List[Dict[str, Any]] = Field(..., description="Section-level evaluations")
-    competitor_analysis: str = Field(..., description="Market comparison")
-    reframing_opportunities: List[str] = Field(..., description="Experience reframing ideas")
-    experience_preservation_check: str = Field(..., description="Verification of experience preservation")
+# Schema definitions for PydanticAI are now centralized in app.schemas.pydanticai_models
 
-class CoverLetter(BaseModel):
-    """Schema for generated cover letter"""
-    content: str = Field(..., description="The full cover letter text")
-    sections: Dict[str, str] = Field(..., description="The cover letter broken down by sections")
-    personalization_elements: List[str] = Field(..., description="How the letter was personalized")
-    formatting_notes: Optional[str] = Field(None, description="Notes about the formatting")
-    address_block: Optional[str] = Field(None, description="Formatted address block if provided")
-    closing: Optional[str] = Field(None, description="Closing section with signature")
-
-# Define agent creation functions
-def create_resume_evaluator_agent(customization_level: CustomizationLevel = CustomizationLevel.BALANCED, 
-                                 industry: Optional[str] = None) -> Agent:
-    """
-    Create an agent for evaluating resume-job match.
-    
-    Args:
-        customization_level: Level of customization
-        industry: Optional industry name for industry-specific guidance
-        
-    Returns:
-        PydanticAI Agent configured for resume evaluation
-    """
-    if not PYDANTICAI_AVAILABLE:
-        raise ImportError("PydanticAI is not installed")
-        
-    # Get prompts dynamically
-    prompts = _get_prompts()
-    
-    # Get customization level specific instructions
-    customization_instructions = prompts['get_customization_level_instructions'](customization_level)
-    
-    # Get industry-specific guidance if industry is provided
-    industry_guidance = ""
-    if industry:
-        industry_guidance = prompts['get_industry_specific_guidance'](industry)
-        if industry_guidance:
-            customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
-    
-    # Format the prompt with the customization level instructions
-    prompt_template = prompts['EVALUATOR_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
-    
-    # Add instructions to return structured output format
-    json_instruction = """
-    Your output must match the following structure:
-    - overall_assessment: Detailed evaluation of how well the resume matches the job
-    - match_score: A score from 0-100 representing how well the resume matches the job
-    - job_key_requirements: A list of the most important job requirements
-    - strengths: A list of candidate strengths relative to the job
-    - gaps: A list of missing skills or experiences
-    - term_mismatches: A list of terminology equivalence (job term vs resume term)
-    - section_evaluations: A list of section-level evaluations
-    - competitor_analysis: A brief market comparison
-    - reframing_opportunities: A list of experience reframing ideas
-    - experience_preservation_check: Verification that all original experience is preserved
-    """
-    
-    prompt_template = f"{prompt_template}\n\n{json_instruction}"
-    
-    # Determine if the model supports thinking
-    thinking_config = None
-    if EVALUATOR_MODEL.startswith("anthropic:claude-3-7") or "claude-3-7-sonnet-latest" in EVALUATOR_MODEL:
-        thinking_config = {"budget_tokens": THINKING_BUDGET, "type": "enabled"}
-    elif EVALUATOR_MODEL.startswith("google:gemini-2.5"):
-        # Gemini uses thinkingBudget
-        thinking_config = {"thinkingBudget": THINKING_BUDGET}
-    
-    # Create the agent
-    try:
-        evaluator_agent = Agent(
-            EVALUATOR_MODEL,
-            output_type=ResumeEvaluation,
-            system_prompt=prompt_template,
-            thinking_config=thinking_config,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS
-        )
-        
-        # Add fallback configurations
-        evaluator_agent.fallback_config = FALLBACK_MODELS
-        
-        logfire.info(
-            "Resume Evaluator Agent created successfully",
-            model=EVALUATOR_MODEL,
-            has_thinking=thinking_config is not None
-        )
-        
-        return evaluator_agent
-        
-    except Exception as e:
-        logfire.error(
-            "Error creating Resume Evaluator Agent",
-            error=str(e),
-            error_type=type(e).__name__
-        )
-        raise e
-
-def create_resume_optimizer_agent(customization_level: CustomizationLevel = CustomizationLevel.BALANCED, 
-                                 industry: Optional[str] = None) -> Agent:
-    """
-    Create an agent for generating resume optimization plans.
-    
-    Args:
-        customization_level: Level of customization
-        industry: Optional industry name for industry-specific guidance
-        
-    Returns:
-        PydanticAI Agent configured for resume optimization
-    """
-    if not PYDANTICAI_AVAILABLE:
-        raise ImportError("PydanticAI is not installed")
-        
-    # Get prompts dynamically
-    prompts = _get_prompts()
-    
-    # Get customization level specific instructions
-    customization_instructions = prompts['get_customization_level_instructions'](customization_level)
-    
-    # Get industry-specific guidance if industry is provided
-    industry_guidance = ""
-    if industry:
-        industry_guidance = prompts['get_industry_specific_guidance'](industry)
-        if industry_guidance:
-            customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
-    
-    # Format the prompt with the customization level instructions
-    prompt_template = prompts['OPTIMIZER_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
-    
-    # Determine if the model supports thinking
-    thinking_config = None
-    if OPTIMIZER_MODEL.startswith("anthropic:claude-3-7") or "claude-3-7-sonnet-latest" in OPTIMIZER_MODEL:
-        thinking_config = {"budget_tokens": THINKING_BUDGET, "type": "enabled"}
-    elif OPTIMIZER_MODEL.startswith("google:gemini-2.5"):
-        # Gemini uses thinkingBudget
-        thinking_config = {"thinkingBudget": THINKING_BUDGET}
-    
-    # Create the agent
-    try:
-        optimizer_agent = Agent(
-            OPTIMIZER_MODEL,
-            output_type=CustomizationPlan,
-            system_prompt=prompt_template,
-            thinking_config=thinking_config,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS
-        )
-        
-        # Add fallback configurations
-        optimizer_agent.fallback_config = FALLBACK_MODELS
-        
-        logfire.info(
-            "Resume Optimizer Agent created successfully",
-            model=OPTIMIZER_MODEL,
-            has_thinking=thinking_config is not None
-        )
-        
-        return optimizer_agent
-        
-    except Exception as e:
-        logfire.error(
-            "Error creating Resume Optimizer Agent",
-            error=str(e),
-            error_type=type(e).__name__
-        )
-        raise e
+# Note: The helper functions for agent creation have been removed as they're no longer used.
+# Agent creation now happens directly in the pydanticai_optimizer.py file with model selection.
 
 def create_cover_letter_agent(applicant_name: Optional[str] = None,
                          company_name: str = "the company",
@@ -307,8 +140,7 @@ def create_cover_letter_agent(applicant_name: Optional[str] = None,
     Returns:
         PydanticAI Agent configured for cover letter generation
     """
-    if not PYDANTICAI_AVAILABLE:
-        raise ImportError("PydanticAI is not installed")
+    # PydanticAI is a required dependency - no need to check
         
     # Build the salutation based on available info
     salutation_instruction = ""
@@ -407,7 +239,7 @@ def create_cover_letter_agent(applicant_name: Optional[str] = None,
             # Next try OpenAI GPT-4.1 which has strong writing capabilities
             "openai:gpt-4.1",
             # Then try Gemini Pro which is good for creative text generation
-            "google:gemini-2.5-pro-preview-03-25",
+            "google-gla:gemini-1.5-pro",
             # For faster/cheaper options if needed
             "anthropic:claude-3-7-haiku-latest",
             "openai:gpt-4o",
@@ -437,7 +269,7 @@ def create_cover_letter_agent(applicant_name: Optional[str] = None,
         raise e
 
 # Tools for agents
-@tool
+# Function will need to be decorated with agent.tool in the specific agent creation
 def extract_keywords(job_description: str, max_keywords: int = 20) -> List[str]:
     """
     Extract important keywords from a job description.
@@ -466,7 +298,7 @@ def extract_keywords(job_description: str, max_keywords: int = 20) -> List[str]:
         logfire.error(f"Error extracting keywords: {str(e)}")
         return []
 
-@tool
+# Function will need to be decorated with agent.tool in the specific agent creation
 def simulate_ats(resume: str, job_description: str) -> Dict[str, Any]:
     """
     Simulate how an ATS system would process this resume.
@@ -513,8 +345,7 @@ async def evaluate_resume_job_match(
     Returns:
         Dictionary containing evaluation of the resume-job match
     """
-    if not PYDANTICAI_AVAILABLE:
-        raise ImportError("PydanticAI is not installed")
+    # PydanticAI is a required dependency - no need to check
         
     # Start timer for performance tracking
     start_time = time.time()
@@ -537,10 +368,55 @@ async def evaluate_resume_job_match(
             industry=industry if industry else "not specified"
         )
         
-        # Create the evaluator agent with appropriate customization level and industry
-        evaluator_agent = create_resume_evaluator_agent(
-            customization_level=customization_level,
-            industry=industry
+        # Get prompts dynamically
+        prompts = _get_prompts()
+        
+        # Get customization level specific instructions
+        customization_instructions = prompts['get_customization_level_instructions'](customization_level)
+        
+        # Get industry-specific guidance if industry is provided
+        industry_guidance = ""
+        if industry:
+            industry_guidance = prompts['get_industry_specific_guidance'](industry)
+            if industry_guidance:
+                customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
+        
+        # Format the prompt with the customization level instructions
+        prompt_template = prompts['EVALUATOR_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
+        
+        # Use the constant defined at the top of the file
+        gemini_model = EVALUATOR_MODEL
+        thinking_config = {
+            "thinkingBudget": THINKING_BUDGET  # Use standard thinking budget from settings
+        }
+        
+        # Log the model selection
+        logfire.info(
+            "Using Google Gemini for resume evaluation",
+            model=gemini_model,
+            customization_level=customization_level.name,
+            has_thinking_config=thinking_config is not None
+        )
+        
+        # Create the agent directly with Google Gemini model
+        evaluator_agent = Agent(
+            gemini_model,
+            output_type=ResumeEvaluation,
+            system_prompt=prompt_template,
+            thinking_config=thinking_config,
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS
+        )
+        
+        # Use the fallback models defined at the top of the file
+        fallback_chain = FALLBACK_MODELS
+        
+        evaluator_agent.fallback_config = fallback_chain
+        
+        # Log the fallback configuration
+        logfire.info(
+            "Applied fallback chain for evaluator agent",
+            fallback_models=fallback_chain[:2]  # Only log first two models to reduce verbosity
         )
         
         # Build the user message
@@ -571,17 +447,21 @@ async def evaluate_resume_job_match(
             The target industry for this job is: {industry}
             """
         
-        # Set up the dependencies for tools
-        dependencies = {
-            "extract_keywords_context": {"job_description": job_description},
-            "simulate_ats_context": {"resume": resume_content, "job_description": job_description}
-        }
+        # Register tools on the agent instance
+        @evaluator_agent.tool
+        def extract_keywords_for_job(job_description: str = job_description, max_keywords: int = 20) -> List[str]:
+            """Extract important keywords from the job description."""
+            return extract_keywords(job_description, max_keywords)
+            
+        @evaluator_agent.tool
+        def simulate_ats_scan(resume: str = resume_content, job_desc: str = job_description) -> Dict[str, Any]:
+            """Simulate how an ATS system would process this resume."""
+            return simulate_ats(resume, job_desc)
         
         try:
             # Run the agent
             result = await evaluator_agent.run(
-                user_message,
-                deps=dependencies
+                user_message
             )
             
             # Calculate elapsed time
@@ -636,8 +516,7 @@ async def generate_optimization_plan(
     Returns:
         CustomizationPlan object with detailed recommendations
     """
-    if not PYDANTICAI_AVAILABLE:
-        raise ImportError("PydanticAI is not installed")
+    # PydanticAI is a required dependency - no need to check
         
     # Start timer for performance tracking
     start_time = time.time()
@@ -658,10 +537,55 @@ async def generate_optimization_plan(
             industry=industry if industry else "not specified"
         )
         
-        # Create the optimizer agent with appropriate customization level and industry
-        optimizer_agent = create_resume_optimizer_agent(
-            customization_level=customization_level,
-            industry=industry
+        # Get prompts dynamically
+        prompts = _get_prompts()
+        
+        # Get customization level specific instructions
+        customization_instructions = prompts['get_customization_level_instructions'](customization_level)
+        
+        # Get industry-specific guidance if industry is provided
+        industry_guidance = ""
+        if industry:
+            industry_guidance = prompts['get_industry_specific_guidance'](industry)
+            if industry_guidance:
+                customization_instructions += f"\n\nINDUSTRY-SPECIFIC GUIDANCE ({industry.upper()}):\n{industry_guidance}"
+        
+        # Format the prompt with the customization level instructions
+        prompt_template = prompts['OPTIMIZER_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
+        
+        # Use the constant defined at the top of the file
+        gemini_model = OPTIMIZER_MODEL
+        thinking_config = {
+            "thinkingBudget": THINKING_BUDGET  # Use standard thinking budget from settings
+        }
+        
+        # Log the model selection
+        logfire.info(
+            "Using Google Gemini for optimization plan generation",
+            model=gemini_model,
+            customization_level=customization_level.name,
+            has_thinking_config=thinking_config is not None
+        )
+        
+        # Create the agent directly with Google Gemini model
+        optimizer_agent = Agent(
+            gemini_model,
+            output_type=CustomizationPlan,
+            system_prompt=prompt_template,
+            thinking_config=thinking_config,
+            temperature=TEMPERATURE,
+            max_tokens=MAX_TOKENS
+        )
+        
+        # Use the fallback models defined at the top of the file
+        fallback_chain = FALLBACK_MODELS
+        
+        optimizer_agent.fallback_config = fallback_chain
+        
+        # Log the fallback configuration
+        logfire.info(
+            "Applied fallback chain for optimizer agent",
+            fallback_models=fallback_chain[:2]  # Only log first two models to reduce verbosity
         )
         
         # Build the user message
@@ -688,6 +612,12 @@ async def generate_optimization_plan(
             """
         
         try:
+            # Register tools if needed (optimizer doesn't seem to need tools at the moment)
+            @optimizer_agent.tool
+            def extract_keywords_for_job(job_description: str = job_description, max_keywords: int = 20) -> List[str]:
+                """Extract important keywords from the job description."""
+                return extract_keywords(job_description, max_keywords)
+            
             # Run the agent
             result = await optimizer_agent.run(user_message)
             
@@ -740,8 +670,7 @@ async def customize_resume(
     Returns:
         Customized resume content in Markdown format
     """
-    if not PYDANTICAI_AVAILABLE:
-        raise ImportError("PydanticAI is not installed")
+    # PydanticAI is a required dependency - no need to check
         
     # Start timer for performance tracking
     start_time = time.time()
@@ -819,11 +748,21 @@ async def customize_resume(
         Please customize my resume for this specific job.
         """
         
-        try:
-            # Run the agent
-            result = await customization_agent.run(user_message)
+        # Register tools on the agent
+        @customization_agent.tool
+        def extract_keywords_for_job(job_description: str = job_description, max_keywords: int = 20) -> List[str]:
+            """Extract important keywords from the job description."""
+            return extract_keywords(job_description, max_keywords)
             
-            # Calculate elapsed time
+        @customization_agent.tool
+        def simulate_ats_scan(resume: str = resume_content, job_desc: str = job_description) -> Dict[str, Any]:
+            """Simulate how an ATS system would process this resume."""
+            return simulate_ats(resume, job_desc)
+            
+        # Run the agent, tracking the start and end time
+        try:
+            start_time = time.time()
+            result = await customization_agent.run(user_message)
             elapsed_time = time.time() - start_time
             
             # Log success
@@ -876,8 +815,7 @@ async def generate_cover_letter(
     Returns:
         Generated cover letter content in Markdown format
     """
-    if not PYDANTICAI_AVAILABLE:
-        raise ImportError("PydanticAI is not installed")
+    # PydanticAI is a required dependency - no need to check
         
     # Start timer for performance tracking
     start_time = time.time()

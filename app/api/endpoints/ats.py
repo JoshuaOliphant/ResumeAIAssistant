@@ -19,6 +19,7 @@ from app.schemas.customize import (
 )
 
 from app.services.ats_service import analyze_resume_for_ats
+from app.services.pydanticai_optimizer import get_pydanticai_optimizer_service
 from app.services.customization_service import get_customization_service, CustomizationService
 
 router = APIRouter()
@@ -77,7 +78,6 @@ async def analyze_resume(
 async def analyze_and_generate_plan(
     request: ATSAnalysisRequest,
     customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
-    customization_service: CustomizationService = Depends(get_customization_service),
     db: Session = Depends(get_db)
 ):
     """
@@ -98,6 +98,9 @@ async def analyze_and_generate_plan(
     )
     
     try:
+        # Get the PydanticAI optimizer service
+        customization_service = get_pydanticai_optimizer_service(db)
+        
         # Create a plan request object
         plan_request = CustomizationPlanRequest(
             resume_id=request.resume_id,
@@ -200,7 +203,7 @@ async def analyze_resume_content(
 async def analyze_content_and_generate_plan(
     analysis_request: ATSContentAnalysisRequest,
     customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
-    customization_service: CustomizationService = Depends(get_customization_service)
+    db: Session = Depends(get_db)
 ):
     """
     Analyze resume content against a job description and generate a customization plan in one step.
@@ -220,6 +223,9 @@ async def analyze_content_and_generate_plan(
     )
     
     try:
+        # Get the PydanticAI optimizer service
+        customization_service = get_pydanticai_optimizer_service(db)
+        
         # First, perform the basic analysis
         basic_analysis = await analyze_resume_for_ats(
             analysis_request.resume_content, 

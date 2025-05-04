@@ -42,38 +42,37 @@ class Settings(BaseSettings):
     
     # PydanticAI Configuration
     # Default provider based on available API keys
-    PYDANTICAI_PRIMARY_PROVIDER: str = os.getenv("PYDANTICAI_PRIMARY_PROVIDER", "anthropic")
-    # Default model setting - using Claude 3.7 Sonnet model by default with -latest alias
+    PYDANTICAI_PRIMARY_PROVIDER: str = os.getenv("PYDANTICAI_PRIMARY_PROVIDER", "google")
+    # Default model setting - using Gemini 2.5 Pro model by default
     PYDANTICAI_PRIMARY_MODEL: str = os.getenv(
         "PYDANTICAI_PRIMARY_MODEL", 
-        "claude-3-7-sonnet-latest"
+        "gemini-2.5-pro-preview-03-25"
     )
-    # Model for evaluation tasks - using Claude 3.7 Sonnet with extended thinking capability
+    # Model for evaluation tasks - using Gemini 2.5 Pro with extended thinking capability
     PYDANTICAI_EVALUATOR_MODEL: str = os.getenv(
         "PYDANTICAI_EVALUATOR_MODEL", 
-        "anthropic:claude-3-7-sonnet-latest"
+        "google:gemini-2.5-pro-preview-03-25"
     )
-    # Model for optimization tasks - also using Claude 3.7 Sonnet with extended thinking capability
+    # Model for optimization tasks - also using Gemini 2.5 Pro with extended thinking capability
     PYDANTICAI_OPTIMIZER_MODEL: str = os.getenv(
         "PYDANTICAI_OPTIMIZER_MODEL", 
-        "anthropic:claude-3-7-sonnet-latest"
+        "google:gemini-2.5-pro-preview-03-25"
     )
-    # Model for cover letter generation - using Claude 3.7 Sonnet for best quality
+    # Model for cover letter generation - using Gemini 2.5 Pro for best quality
     PYDANTICAI_COVER_LETTER_MODEL: str = os.getenv(
         "PYDANTICAI_COVER_LETTER_MODEL",
-        "anthropic:claude-3-7-sonnet-latest"  # Using latest Claude 3.7 Sonnet for cover letters
+        "google:gemini-2.5-pro-preview-03-25"  # Using Gemini 2.5 Pro for cover letters
     )
     # Fallback models listed in order of preference
     PYDANTICAI_FALLBACK_MODELS: List[str] = [
         # Primary fallbacks - newer models with strong capabilities
-        "anthropic:claude-3-7-sonnet-latest",       # Always use latest Claude 3.7 Sonnet
+        "anthropic:claude-3-7-sonnet-latest",       # Claude 3.7 Sonnet as first fallback
         "openai:gpt-4.1",                           # Latest GPT-4.1 model
-        "google:gemini-2.5-pro-preview-03-25",      # Latest Gemini 2.5 Pro (Mar 2025)
+        "google:gemini-2.5-flash-preview-04-17",    # Latest Gemini 2.5 Flash (Apr 2025)
         
         # Secondary fallbacks - more cost-effective models
         "openai:gpt-4o",                            # Older but still capable model
-        "google:gemini-2.5-flash-preview-04-17",    # Latest Gemini 2.5 Flash (Apr 2025)
-        "anthropic:claude-3-7-haiku-latest"         # Always use latest Claude 3.7 Haiku
+        "anthropic:claude-3-7-haiku-latest"         # Latest Claude 3.7 Haiku
     ]
     # Token budget for models with thinking capability
     PYDANTICAI_THINKING_BUDGET: int = os.getenv("PYDANTICAI_THINKING_BUDGET", 15000)
@@ -104,6 +103,9 @@ def get_pydanticai_model_config() -> Dict[str, Any]:
         Dictionary with model provider configuration for PydanticAI
     """
     config = {}
+    
+    # OVERRIDE: Always set google as the primary provider regardless of settings
+    settings.PYDANTICAI_PRIMARY_PROVIDER = "google"
     
     # Configure Anthropic provider if API key is available
     if settings.ANTHROPIC_API_KEY:
@@ -152,8 +154,12 @@ def get_pydanticai_model_config() -> Dict[str, Any]:
         gemini_default = (
             settings.PYDANTICAI_PRIMARY_MODEL 
             if settings.PYDANTICAI_PRIMARY_PROVIDER == "google" 
-            else "gemini-2.5-pro-preview-03-25"  # Latest Gemini Pro model
+            else "gemini-1.5-pro"  # Default Gemini Pro model
         )
+        
+        # Properly format for the API - gemini needs google-gla prefix
+        if not gemini_default.startswith("google-gla:"):
+            gemini_default = f"google-gla:{gemini_default}"
         
         # Configure thinking budget for Gemini models
         thinking_config = {

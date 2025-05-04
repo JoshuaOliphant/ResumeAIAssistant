@@ -151,8 +151,7 @@ async def generate_customization_plan(
     )
     
     try:
-        # Use the PydanticAI optimizer service
-        pydanticai_service = get_pydanticai_optimizer_service(db)
+        # Using the PydanticAI optimizer service injected through dependency
         
         # Generate the plan using PydanticAI optimizer service
         plan = await pydanticai_service.generate_customization_plan(
