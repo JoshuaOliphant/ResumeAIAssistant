@@ -11,6 +11,7 @@
 - Add new dependencies with `uv add ...`.
 - This project has a virtual environment that needs to be sourced.
 - After sourcing the virtual environment, `uv sync` can be used to sync the dependencies.
+- Use uv to start the application with `uv run uvicorn main:app --host 0.0.0.0 --port 5001 --reload`
 
 ## Frontend Development (Next.js)
 - Location: `/nextjs-frontend` directory
