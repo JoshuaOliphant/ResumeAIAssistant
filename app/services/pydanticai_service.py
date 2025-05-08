@@ -330,7 +330,8 @@ async def evaluate_resume_job_match(
     job_description: str,
     basic_analysis: Optional[Dict] = None,
     customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
-    industry: Optional[str] = None
+    industry: Optional[str] = None,
+    model_config: Optional[Dict[str, Any]] = None
 ) -> Dict:
     """
     Evaluate how well a resume matches a job description.
@@ -341,6 +342,7 @@ async def evaluate_resume_job_match(
         basic_analysis: Optional basic keyword analysis results to enhance evaluation
         customization_level: Level of customization (affects evaluation detail)
         industry: Optional industry name for industry-specific guidance
+        model_config: Optional model configuration to override defaults
         
     Returns:
         Dictionary containing evaluation of the resume-job match
@@ -357,6 +359,7 @@ async def evaluate_resume_job_match(
         span.set_attribute("has_basic_analysis", basic_analysis is not None)
         span.set_attribute("customization_level", customization_level.value)
         span.set_attribute("industry", industry if industry else "not specified")
+        span.set_attribute("has_model_config", model_config is not None)
         
         # Log operation start
         logfire.info(
@@ -365,7 +368,8 @@ async def evaluate_resume_job_match(
             job_description_length=len(job_description),
             has_basic_analysis=basic_analysis is not None,
             customization_level=customization_level.name,
-            industry=industry if industry else "not specified"
+            industry=industry if industry else "not specified",
+            has_custom_model_config=model_config is not None
         )
         
         # Get prompts dynamically
@@ -384,39 +388,53 @@ async def evaluate_resume_job_match(
         # Format the prompt with the customization level instructions
         prompt_template = prompts['EVALUATOR_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
         
-        # Use the constant defined at the top of the file
-        gemini_model = EVALUATOR_MODEL
-        thinking_config = {
-            "thinkingBudget": THINKING_BUDGET  # Use standard thinking budget from settings
-        }
+        # Use model configuration if provided, otherwise use defaults
+        if model_config:
+            # Extract model configuration
+            model_name = model_config.get("model", EVALUATOR_MODEL)
+            thinking_config = model_config.get("thinking_config", {"thinkingBudget": THINKING_BUDGET})
+            temperature = model_config.get("temperature", TEMPERATURE)
+            max_tokens = model_config.get("max_tokens", MAX_TOKENS)
+            fallback_chain = model_config.get("fallback_config", FALLBACK_MODELS)
+            
+            logfire.info(
+                "Using custom model configuration for resume evaluation",
+                model=model_name,
+                customization_level=customization_level.name,
+                has_thinking_config=thinking_config is not None
+            )
+        else:
+            # Use default configuration
+            model_name = EVALUATOR_MODEL
+            thinking_config = {"thinkingBudget": THINKING_BUDGET}
+            temperature = TEMPERATURE
+            max_tokens = MAX_TOKENS
+            fallback_chain = FALLBACK_MODELS
+            
+            logfire.info(
+                "Using default model configuration for resume evaluation",
+                model=model_name,
+                customization_level=customization_level.name,
+                has_thinking_config=thinking_config is not None
+            )
         
-        # Log the model selection
-        logfire.info(
-            "Using Google Gemini for resume evaluation",
-            model=gemini_model,
-            customization_level=customization_level.name,
-            has_thinking_config=thinking_config is not None
-        )
-        
-        # Create the agent directly with Google Gemini model
+        # Create the agent with the selected configuration
         evaluator_agent = Agent(
-            gemini_model,
+            model_name,
             output_type=ResumeEvaluation,
             system_prompt=prompt_template,
             thinking_config=thinking_config,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS
+            temperature=temperature,
+            max_tokens=max_tokens
         )
         
-        # Use the fallback models defined at the top of the file
-        fallback_chain = FALLBACK_MODELS
-        
+        # Apply fallback chain
         evaluator_agent.fallback_config = fallback_chain
         
         # Log the fallback configuration
         logfire.info(
             "Applied fallback chain for evaluator agent",
-            fallback_models=fallback_chain[:2]  # Only log first two models to reduce verbosity
+            fallback_models=fallback_chain[:2] if isinstance(fallback_chain, list) else "None"  
         )
         
         # Build the user message
@@ -501,7 +519,8 @@ async def generate_optimization_plan(
     job_description: str,
     evaluation: Dict,
     customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
-    industry: Optional[str] = None
+    industry: Optional[str] = None,
+    model_config: Optional[Dict[str, Any]] = None
 ) -> CustomizationPlan:
     """
     Generate a detailed optimization plan based on an evaluation of resume-job match.
@@ -512,6 +531,7 @@ async def generate_optimization_plan(
         evaluation: The evaluation dictionary from the evaluator stage
         customization_level: Level of customization (affects optimization detail)
         industry: Optional industry name for industry-specific guidance
+        model_config: Optional model configuration to override defaults
         
     Returns:
         CustomizationPlan object with detailed recommendations
@@ -527,6 +547,7 @@ async def generate_optimization_plan(
         span.set_attribute("job_description_length", len(job_description))
         span.set_attribute("customization_level", customization_level.value)
         span.set_attribute("industry", industry if industry else "not specified")
+        span.set_attribute("has_model_config", model_config is not None)
         
         # Log operation start
         logfire.info(
@@ -534,7 +555,8 @@ async def generate_optimization_plan(
             resume_length=len(resume_content),
             job_description_length=len(job_description),
             customization_level=customization_level.name,
-            industry=industry if industry else "not specified"
+            industry=industry if industry else "not specified",
+            has_custom_model_config=model_config is not None
         )
         
         # Get prompts dynamically
@@ -553,39 +575,53 @@ async def generate_optimization_plan(
         # Format the prompt with the customization level instructions
         prompt_template = prompts['OPTIMIZER_PROMPT'].replace("{customization_level_instructions}", customization_instructions)
         
-        # Use the constant defined at the top of the file
-        gemini_model = OPTIMIZER_MODEL
-        thinking_config = {
-            "thinkingBudget": THINKING_BUDGET  # Use standard thinking budget from settings
-        }
+        # Use model configuration if provided, otherwise use defaults
+        if model_config:
+            # Extract model configuration
+            model_name = model_config.get("model", OPTIMIZER_MODEL)
+            thinking_config = model_config.get("thinking_config", {"thinkingBudget": THINKING_BUDGET})
+            temperature = model_config.get("temperature", TEMPERATURE)
+            max_tokens = model_config.get("max_tokens", MAX_TOKENS)
+            fallback_chain = model_config.get("fallback_config", FALLBACK_MODELS)
+            
+            logfire.info(
+                "Using custom model configuration for optimization plan generation",
+                model=model_name,
+                customization_level=customization_level.name,
+                has_thinking_config=thinking_config is not None
+            )
+        else:
+            # Use default configuration
+            model_name = OPTIMIZER_MODEL
+            thinking_config = {"thinkingBudget": THINKING_BUDGET}
+            temperature = TEMPERATURE
+            max_tokens = MAX_TOKENS
+            fallback_chain = FALLBACK_MODELS
+            
+            logfire.info(
+                "Using default model configuration for optimization plan generation",
+                model=model_name,
+                customization_level=customization_level.name,
+                has_thinking_config=thinking_config is not None
+            )
         
-        # Log the model selection
-        logfire.info(
-            "Using Google Gemini for optimization plan generation",
-            model=gemini_model,
-            customization_level=customization_level.name,
-            has_thinking_config=thinking_config is not None
-        )
-        
-        # Create the agent directly with Google Gemini model
+        # Create the agent with the selected configuration
         optimizer_agent = Agent(
-            gemini_model,
+            model_name,
             output_type=CustomizationPlan,
             system_prompt=prompt_template,
             thinking_config=thinking_config,
-            temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS
+            temperature=temperature,
+            max_tokens=max_tokens
         )
         
-        # Use the fallback models defined at the top of the file
-        fallback_chain = FALLBACK_MODELS
-        
+        # Apply fallback chain
         optimizer_agent.fallback_config = fallback_chain
         
         # Log the fallback configuration
         logfire.info(
             "Applied fallback chain for optimizer agent",
-            fallback_models=fallback_chain[:2]  # Only log first two models to reduce verbosity
+            fallback_models=fallback_chain[:2] if isinstance(fallback_chain, list) else "None"
         )
         
         # Build the user message

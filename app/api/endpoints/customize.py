@@ -20,6 +20,7 @@ from app.schemas.customize import (
 )
 from app.services.customization_service import get_customization_service, CustomizationService
 from app.services.pydanticai_optimizer import get_pydanticai_optimizer_service, PydanticAIOptimizerService
+from app.services.parallel_customization_service import get_parallel_customization_service, ParallelCustomizationService
 
 router = APIRouter()
 
@@ -129,12 +130,14 @@ async def generate_customization_plan(
     db: Session = Depends(get_db)
 ):
     """
-    Generate a detailed resume customization plan using the evaluator-optimizer pattern with PydanticAI.
+    Generate a detailed resume customization plan using the evaluator-optimizer pattern
+    with parallel processing architecture.
     
     This endpoint implements a multi-stage AI workflow:
     1. Basic analysis (existing ATS analyzer)
-    2. Evaluation (PydanticAI acting as ATS expert)
-    3. Optimization (PydanticAI generating a detailed plan)
+    2. Parallel evaluation (AI models analyzing resume sections concurrently)
+    3. Parallel optimization (AI models generating section-specific plans concurrently)
+    4. Results aggregation (combining section analyses into unified plan)
     
     - **resume_id**: ID of the resume to analyze
     - **job_description_id**: ID of the job description to analyze against
@@ -143,31 +146,29 @@ async def generate_customization_plan(
     
     Returns a detailed customization plan with specific recommendations.
     """
+    start_time = time.time()
     logfire.info(
-        "Generating customization plan with PydanticAI",
+        "Generating customization plan with parallel architecture",
         resume_id=plan_request.resume_id,
         job_id=plan_request.job_description_id,
         customization_level=plan_request.customization_strength.name
     )
     
     try:
-        # Using the PydanticAI optimizer service injected through dependency
+        # Use the parallel customization service for improved performance
+        parallel_service = get_parallel_customization_service(db)
         
-        # Generate the plan using PydanticAI optimizer service
-        plan = await pydanticai_service.generate_customization_plan(
-            resume_id=plan_request.resume_id,
-            job_id=plan_request.job_description_id,
-            customization_strength=plan_request.customization_strength,
-            industry=plan_request.industry,
-            ats_analysis=plan_request.ats_analysis,
-            iterations=1  # Default to 1 iteration
-        )
+        # Generate the plan using parallel architecture
+        plan = await parallel_service.generate_customization_plan(plan_request)
         
+        # Calculate and log the total processing time
+        total_duration = time.time() - start_time
         logfire.info(
-            "Customization plan generated successfully with PydanticAI",
+            "Customization plan generated successfully with parallel architecture",
             resume_id=plan_request.resume_id,
             job_id=plan_request.job_description_id,
-            recommendation_count=len(plan.recommendations)
+            recommendation_count=len(plan.recommendations),
+            total_duration_seconds=round(total_duration, 2)
         )
         
         return plan
@@ -201,3 +202,24 @@ async def generate_customization_plan(
             status_code=500, 
             detail=f"An error occurred while generating the customization plan: {str(e)}"
         )
+
+@router.post("/parallel", response_model=CustomizationPlan)
+async def generate_customization_plan_parallel(
+    plan_request: CustomizationPlanRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate a detailed resume customization plan using the parallel processing architecture.
+    This is an alternative endpoint that explicitly uses the parallel architecture.
+    
+    This endpoint is identical to /plan but is provided separately for A/B testing and comparison.
+    
+    - **resume_id**: ID of the resume to analyze
+    - **job_description_id**: ID of the job description to analyze against
+    - **customization_strength**: Strength of customization (1=conservative, 2=balanced, 3=extensive)
+    - **ats_analysis**: Optional results from prior ATS analysis
+    
+    Returns a detailed customization plan with specific recommendations.
+    """
+    # Simply call the main implementation
+    return await generate_customization_plan(plan_request, db)
