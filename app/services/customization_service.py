@@ -1,5 +1,7 @@
 """
 Customization service implementing the evaluator-optimizer pattern for resume customization.
+
+This service now integrates with specialized section analyzers for more detailed analysis.
 """
 import uuid
 import json
@@ -22,6 +24,8 @@ from app.schemas.customize import (
 from app.core.logging import log_function_call
 from app.services import pydanticai_service as ai_service
 from app.services.prompts import MAX_FEEDBACK_ITERATIONS
+from app.services.section_analysis_service import get_section_analysis_service, SectionAnalysisService
+from app.services.section_analyzers.base import SectionType
 
 
 class CustomizationService:
@@ -29,8 +33,9 @@ class CustomizationService:
     Service for resume customization using the evaluator-optimizer pattern.
     This implements a multi-stage AI workflow:
     1. Basic analysis (existing ATS analyzer)
-    2. Evaluation (Claude acting as ATS expert)
-    3. Optimization (Claude generating a detailed plan)
+    2. Specialized section analyzers (skills, experience, education, achievements, language)
+    3. Evaluation (Claude acting as ATS expert)
+    4. Optimization (Claude generating a detailed plan)
     """
     
     def __init__(self, db: Session):
@@ -41,12 +46,13 @@ class CustomizationService:
             db: Database session
         """
         self.db = db
+        self.section_analysis_service = get_section_analysis_service(db)
     
     @log_function_call
     async def generate_customization_plan(self, request: CustomizationPlanRequest) -> CustomizationPlan:
         """
         Generate a detailed customization plan for a resume based on a job description.
-        This implements the evaluator-optimizer pattern.
+        This implements the evaluator-optimizer pattern with specialized section analyzers.
         
         Args:
             request: The customization plan request containing resume_id, job_description_id,
@@ -55,89 +61,127 @@ class CustomizationService:
         Returns:
             A CustomizationPlan with detailed recommendations
         """
-        # Gather the necessary data
-        resume_content, job_description = await self._get_resume_and_job(
-            request.resume_id, request.job_description_id
-        )
+        start_time = time.time()
         
-        # Use provided analysis or perform basic analysis
-        basic_analysis = request.ats_analysis
-        if not basic_analysis:
-            basic_analysis = await self._perform_basic_analysis(
+        # Check if we should use the new section analyzers
+        # This is controlled by a feature flag to allow gradual rollout
+        use_section_analyzers = True
+        
+        if use_section_analyzers:
+            # Use the new section analyzers approach
+            logfire.info(
+                "Using specialized section analyzers for customization plan",
+                resume_id=request.resume_id,
+                job_id=request.job_description_id,
+                customization_level=request.customization_strength.name
+            )
+            
+            # Generate plan using section analyzers
+            plan = await self.section_analysis_service.generate_customization_plan(request)
+            
+            # Store the plan for future reference
+            await self._store_plan(
+                request.resume_id,
+                request.job_description_id,
+                plan
+            )
+            
+            # Log completion with metrics
+            elapsed_time = time.time() - start_time
+            logfire.info(
+                "Customization plan generation completed with section analyzers",
+                resume_id=request.resume_id,
+                job_id=request.job_description_id,
+                duration_seconds=round(elapsed_time, 2),
+                recommendations_count=len(plan.recommendations),
+                keywords_added_count=len(plan.keywords_to_add),
+                formatting_suggestions_count=len(plan.formatting_suggestions)
+            )
+            
+            return plan
+            
+        else:
+            # Use the original approach as fallback
+            # Gather the necessary data
+            resume_content, job_description = await self._get_resume_and_job(
                 request.resume_id, request.job_description_id
             )
-        
-        # Evaluate the match (evaluator stage)
-        start_time_evaluator = time.time()
-        logfire.info(
-            "Starting evaluator stage with extended thinking",
-            resume_id=request.resume_id,
-            job_id=request.job_description_id,
-            customization_level=request.customization_strength.name,
-            industry=request.industry if request.industry else "not specified",
-            using_extended_thinking=True
-        )
-        evaluation = await self._evaluate_match(
-            resume_content, 
-            job_description, 
-            basic_analysis,
-            request.customization_strength,
-            request.industry
-        )
-        
-        # Log evaluation results with metrics
-        elapsed_time_evaluator = time.time() - start_time_evaluator
-        logfire.info(
-            "Evaluator stage completed",
-            resume_id=request.resume_id,
-            job_id=request.job_description_id,
-            duration_seconds=round(elapsed_time_evaluator, 2),
-            match_score=evaluation.get("match_score", 0),
-            term_mismatches_count=len(evaluation.get("term_mismatches", [])),
-            sections_evaluated=len(evaluation.get("section_evaluations", []))
-        )
-        
-        # Generate the optimization plan (optimizer stage)
-        start_time_optimizer = time.time()
-        logfire.info(
-            "Starting optimizer stage with extended thinking",
-            resume_id=request.resume_id,
-            job_id=request.job_description_id,
-            customization_level=request.customization_strength.name,
-            industry=request.industry if request.industry else "not specified",
-            using_extended_thinking=True
-        )
-        plan = await self._generate_optimization_plan(
-            resume_content, 
-            job_description, 
-            evaluation,
-            request.customization_strength,
-            request.industry
-        )
-        
-        # Log optimizer results with metrics
-        elapsed_time_optimizer = time.time() - start_time_optimizer
-        logfire.info(
-            "Optimizer stage completed",
-            resume_id=request.resume_id,
-            job_id=request.job_description_id,
-            duration_seconds=round(elapsed_time_optimizer, 2),
-            recommendations_count=len(plan.recommendations),
-            keywords_added_count=len(plan.keywords_to_add),
-            formatting_suggestions_count=len(plan.formatting_suggestions)
-        )
-        
-        # Just store the plan for future reference without implementing feedback loop here
-        # The feedback loop will happen during the actual customization process
-        
-        # Store the plan for future reference
-        await self._store_plan(
-            request.resume_id,
-            request.job_description_id,
-            plan
-        )
-        
-        return plan
+            
+            # Use provided analysis or perform basic analysis
+            basic_analysis = request.ats_analysis
+            if not basic_analysis:
+                basic_analysis = await self._perform_basic_analysis(
+                    request.resume_id, request.job_description_id
+                )
+            
+            # Evaluate the match (evaluator stage)
+            start_time_evaluator = time.time()
+            logfire.info(
+                "Starting evaluator stage with extended thinking",
+                resume_id=request.resume_id,
+                job_id=request.job_description_id,
+                customization_level=request.customization_strength.name,
+                industry=request.industry if request.industry else "not specified",
+                using_extended_thinking=True
+            )
+            evaluation = await self._evaluate_match(
+                resume_content, 
+                job_description, 
+                basic_analysis,
+                request.customization_strength,
+                request.industry
+            )
+            
+            # Log evaluation results with metrics
+            elapsed_time_evaluator = time.time() - start_time_evaluator
+            logfire.info(
+                "Evaluator stage completed",
+                resume_id=request.resume_id,
+                job_id=request.job_description_id,
+                duration_seconds=round(elapsed_time_evaluator, 2),
+                match_score=evaluation.get("match_score", 0),
+                term_mismatches_count=len(evaluation.get("term_mismatches", [])),
+                sections_evaluated=len(evaluation.get("section_evaluations", []))
+            )
+            
+            # Generate the optimization plan (optimizer stage)
+            start_time_optimizer = time.time()
+            logfire.info(
+                "Starting optimizer stage with extended thinking",
+                resume_id=request.resume_id,
+                job_id=request.job_description_id,
+                customization_level=request.customization_strength.name,
+                industry=request.industry if request.industry else "not specified",
+                using_extended_thinking=True
+            )
+            plan = await self._generate_optimization_plan(
+                resume_content, 
+                job_description, 
+                evaluation,
+                request.customization_strength,
+                request.industry
+            )
+            
+            # Log optimizer results with metrics
+            elapsed_time_optimizer = time.time() - start_time_optimizer
+            logfire.info(
+                "Optimizer stage completed",
+                resume_id=request.resume_id,
+                job_id=request.job_description_id,
+                duration_seconds=round(elapsed_time_optimizer, 2),
+                recommendations_count=len(plan.recommendations),
+                keywords_added_count=len(plan.keywords_to_add),
+                formatting_suggestions_count=len(plan.formatting_suggestions)
+            )
+            
+            # Store the plan for future reference
+            await self._store_plan(
+                request.resume_id,
+                request.job_description_id,
+                plan
+            )
+            
+            return plan
     
     async def _get_resume_and_job(self, resume_id: str, job_id: str) -> tuple[str, str]:
         """
