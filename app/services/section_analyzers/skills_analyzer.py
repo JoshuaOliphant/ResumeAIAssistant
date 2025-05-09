@@ -108,7 +108,14 @@ class SkillsQualificationsAnalyzer(BaseSectionAnalyzer):
         
         # Build the input for the agent
         context_dict = context or {}
-        input_message = f"""
+        
+        # Format additional context section conditionally
+        additional_context = ""
+        if context_dict:
+            additional_context = f"# Additional Context\n{json.dumps(context_dict, indent=2)}"
+        
+        # Create the input message using a template
+        input_template = """
         # Resume Content
         {resume_content}
         
@@ -118,10 +125,18 @@ class SkillsQualificationsAnalyzer(BaseSectionAnalyzer):
         # Skills Section
         {section_content}
         
-        {f"# Additional Context\n{json.dumps(context_dict, indent=2)}" if context_dict else ""}
+        {additional_context}
         
         Analyze the skills section of this resume against the job description and provide detailed feedback.
         """
+        
+        # Format the template with the needed values
+        input_message = input_template.format(
+            resume_content=resume_content,
+            job_description=job_description,
+            section_content=section_content,
+            additional_context=additional_context
+        )
         
         try:
             # Run the agent
@@ -190,7 +205,8 @@ class SkillsQualificationsAnalyzer(BaseSectionAnalyzer):
         elif self.customization_level == CustomizationLevel.EXTENSIVE:
             depth_instruction = "Provide an extremely detailed analysis covering all aspects of skills alignment"
         
-        return f"""
+        # Create prompt template as raw string
+        prompt_template = r"""
         You are an expert ATS (Applicant Tracking System) and resume skills analyzer. Your task is to analyze the skills section of a resume against a job description and provide detailed feedback and recommendations.
 
         # Approach
@@ -229,3 +245,6 @@ class SkillsQualificationsAnalyzer(BaseSectionAnalyzer):
         
         IMPORTANT: Do not fabricate or suggest adding skills that aren't already present in the resume in some form. Focus on better highlighting and phrasing existing skills, and identifying genuine gaps.
         """
+        
+        # Format the prompt with the depth instruction
+        return prompt_template.format(depth_instruction=depth_instruction)

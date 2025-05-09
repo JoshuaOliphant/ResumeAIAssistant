@@ -451,19 +451,23 @@ async def evaluate_resume_job_match(
         # If we have basic analysis results, add them to the prompt
         if basic_analysis:
             basic_analysis_str = json.dumps(basic_analysis, indent=2)
-            user_message += f"""
+            # Use string format instead of f-string
+            analysis_template = """
             
             Here are the results of a basic keyword analysis:
             
-            {basic_analysis_str}
+            {analysis_str}
             """
+            user_message += analysis_template.format(analysis_str=basic_analysis_str)
             
         # If industry is specified, mention it in the user message
         if industry:
-            user_message += f"""
+            # Use string format instead of f-string
+            industry_template = """
             
-            The target industry for this job is: {industry}
+            The target industry for this job is: {industry_name}
             """
+            user_message += industry_template.format(industry_name=industry)
         
         # Register tools on the agent instance
         @evaluator_agent.tool

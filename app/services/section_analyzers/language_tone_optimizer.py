@@ -105,17 +105,31 @@ class LanguageToneOptimizer(BaseSectionAnalyzer):
         
         # Build the input for the agent
         context_dict = context or {}
-        input_message = f"""
+        
+        # Format additional context section conditionally
+        additional_context = ""
+        if context_dict:
+            additional_context = f"# Additional Context\n{json.dumps(context_dict, indent=2)}"
+        
+        # Create the input message using a template
+        input_template = """
         # Resume Content
         {resume_content}
         
         # Job Description
         {job_description}
         
-        {f"# Additional Context\n{json.dumps(context_dict, indent=2)}" if context_dict else ""}
+        {additional_context}
         
         Analyze the language and tone used throughout this resume and provide detailed feedback on improving clarity, impact, and alignment with the job description terminology.
         """
+        
+        # Format the template with the needed values
+        input_message = input_template.format(
+            resume_content=resume_content,
+            job_description=job_description,
+            additional_context=additional_context
+        )
         
         try:
             # Run the agent
@@ -184,7 +198,8 @@ class LanguageToneOptimizer(BaseSectionAnalyzer):
         elif self.customization_level == CustomizationLevel.EXTENSIVE:
             depth_instruction = "Provide an extremely detailed analysis covering all aspects of language and tone throughout the resume"
         
-        return f"""
+        # Create prompt template as raw string
+        prompt_template = r"""
         You are an expert resume language and tone analyst. Your task is to analyze the language and tone used throughout a resume, evaluate its effectiveness for the target job, and provide specific recommendations for improvement.
 
         # Approach
@@ -225,3 +240,6 @@ class LanguageToneOptimizer(BaseSectionAnalyzer):
         
         IMPORTANT: Do not suggest complete rewrites of sections. Focus on specific language improvements that maintain the original content and experience while enhancing impact, clarity, and alignment with the job description.
         """
+        
+        # Format the prompt with the depth instruction
+        return prompt_template.format(depth_instruction=depth_instruction)

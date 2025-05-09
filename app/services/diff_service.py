@@ -454,8 +454,8 @@ def generate_diff_html_document(original_text: str, customized_text: str,
     # Generate the side-by-side diff data
     side_by_side = generate_side_by_side_diff(original_text, customized_text)
     
-    # Create the HTML document
-    html_template = f"""<!DOCTYPE html>
+    # Create HTML template as a raw string (note the 'r' prefix)
+    html_template_str = r"""<!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -792,22 +792,22 @@ def generate_diff_html_document(original_text: str, customized_text: str,
     <div class="stats-container">
         <div class="stats-card">
             <h3>Additions</h3>
-            <div class="stats-number additions-text">+{stats['additions']}</div>
+            <div class="stats-number additions-text">+{stats[additions]}</div>
             <div>Characters added</div>
         </div>
         <div class="stats-card">
             <h3>Deletions</h3>
-            <div class="stats-number deletions-text">-{stats['deletions']}</div>
+            <div class="stats-number deletions-text">-{stats[deletions]}</div>
             <div>Characters removed</div>
         </div>
         <div class="stats-card">
             <h3>Modifications</h3>
-            <div class="stats-number">{stats['modifications']}</div>
+            <div class="stats-number">{stats[modifications]}</div>
             <div>Characters modified</div>
         </div>
         <div class="stats-card">
             <h3>Unchanged</h3>
-            <div class="stats-number">{stats['unchanged']}</div>
+            <div class="stats-number">{stats[unchanged]}</div>
             <div>Characters unchanged</div>
         </div>
     </div>
@@ -817,41 +817,24 @@ def generate_diff_html_document(original_text: str, customized_text: str,
     <div class="stats-card">
         <h3>Added Keywords</h3>
         <div class="keyword-container">
-            {' '.join([f'<span class="keyword added">{k}</span>' for k in keyword_analysis['added_keywords']])}
+            {added_keywords}
         </div>
         
         <h3>Removed Keywords</h3>
         <div class="keyword-container">
-            {' '.join([f'<span class="keyword removed">{k}</span>' for k in keyword_analysis['removed_keywords']])}
+            {removed_keywords}
         </div>
         
         <h3>Common Keywords</h3>
         <div class="keyword-container">
-            {' '.join([f'<span class="keyword common">{k}</span>' for k in keyword_analysis['common_keywords']])}
+            {common_keywords}
         </div>
     </div>
     
     <!-- Section Analysis -->
     <h2>Section-by-Section Analysis</h2>
     
-    {' '.join([f'''
-    <div class="section-header" onclick="toggleSection('{section.replace("'", "\\'")}')">
-        {section}
-        <span class="section-stats">
-            +{analysis.get('additions', 0)} -{analysis.get('deletions', 0)} ~{analysis.get('changes', 0)}
-        </span>
-    </div>
-    <div id="section-{section.replace(' ', '-')}" class="section-content">
-        <p><strong>Status:</strong> {analysis.get('status', 'unknown').replace('_', ' ')}</p>
-        <p><strong>Changes:</strong> {analysis.get('change_percentage', 0)}%</p>
-        <p><strong>Rationale:</strong> {analysis.get('rationale', 'No rationale provided')}</p>
-        <p><strong>Impact:</strong> {analysis.get('impact', 'unknown')}</p>
-        <div class="section-diff">
-            <h4>Section Changes</h4>
-            <pre>{analysis.get('section_diff', 'No diff available')}</pre>
-        </div>
-    </div>
-    ''' for section, analysis in section_analysis.items()])}
+    {section_analysis_html}
     
     <!-- Diff Views -->
     <h2>Full Resume Comparison</h2>
@@ -882,27 +865,16 @@ def generate_diff_html_document(original_text: str, customized_text: str,
                 </div>
                 
                 <!-- Diff lines -->
-                {' '.join([f'''
-                <div class="diff-line {row['type']}-line">
-                    <div class="diff-column">
-                        <div class="line-number">{row['line_number']}</div>
-                        <div class="line-content">{html.escape(row['original'])}</div>
-                    </div>
-                    <div class="diff-column">
-                        <div class="line-number">{row['line_number']}</div>
-                        <div class="line-content">{html.escape(row['customized'])}</div>
-                    </div>
-                </div>
-                ''' for row in side_by_side['diff_data']])}
+                {side_by_side_rows}
             </div>
         </div>
         
         <div id="original" class="tab-content">
-            <pre>{html.escape(original_text)}</pre>
+            <pre>{original_text_escaped}</pre>
         </div>
         
         <div id="customized" class="tab-content">
-            <pre>{html.escape(customized_text)}</pre>
+            <pre>{customized_text_escaped}</pre>
         </div>
     </div>
     
@@ -941,6 +913,67 @@ def generate_diff_html_document(original_text: str, customized_text: str,
     </script>
 </body>
 </html>"""
+
+    # Prepare data for the template
+    added_keywords = ' '.join([f'<span class="keyword added">{k}</span>' for k in keyword_analysis['added_keywords']])
+    removed_keywords = ' '.join([f'<span class="keyword removed">{k}</span>' for k in keyword_analysis['removed_keywords']])
+    common_keywords = ' '.join([f'<span class="keyword common">{k}</span>' for k in keyword_analysis['common_keywords']])
+    
+    # Section analysis HTML
+    section_analysis_parts = []
+    for section, analysis in section_analysis.items():
+        escaped_section = section.replace("'", "\\'")
+        section_analysis_parts.append(f'''
+    <div class="section-header" onclick="toggleSection('{escaped_section}')">
+        {section}
+        <span class="section-stats">
+            +{analysis.get('additions', 0)} -{analysis.get('deletions', 0)} ~{analysis.get('changes', 0)}
+        </span>
+    </div>
+    <div id="section-{section.replace(' ', '-')}" class="section-content">
+        <p><strong>Status:</strong> {analysis.get('status', 'unknown').replace('_', ' ')}</p>
+        <p><strong>Changes:</strong> {analysis.get('change_percentage', 0)}%</p>
+        <p><strong>Rationale:</strong> {analysis.get('rationale', 'No rationale provided')}</p>
+        <p><strong>Impact:</strong> {analysis.get('impact', 'unknown')}</p>
+        <div class="section-diff">
+            <h4>Section Changes</h4>
+            <pre>{analysis.get('section_diff', 'No diff available')}</pre>
+        </div>
+    </div>
+    ''')
+    section_analysis_html = ''.join(section_analysis_parts)
+    
+    # Side by side rows
+    side_by_side_rows_parts = []
+    for row in side_by_side['diff_data']:
+        side_by_side_rows_parts.append(f'''
+                <div class="diff-line {row['type']}-line">
+                    <div class="diff-column">
+                        <div class="line-number">{row['line_number']}</div>
+                        <div class="line-content">{html.escape(row['original'])}</div>
+                    </div>
+                    <div class="diff-column">
+                        <div class="line-number">{row['line_number']}</div>
+                        <div class="line-content">{html.escape(row['customized'])}</div>
+                    </div>
+                </div>
+                ''')
+    side_by_side_rows = ''.join(side_by_side_rows_parts)
+    
+    # Create the final HTML by formatting the template with the data
+    html_template = html_template_str.format(
+        title=title,
+        description=description,
+        stats=stats,
+        inline_diff=inline_diff,
+        added_keywords=added_keywords,
+        removed_keywords=removed_keywords,
+        common_keywords=common_keywords,
+        section_analysis_html=section_analysis_html,
+        side_by_side_rows=side_by_side_rows,
+        original_text_escaped=html.escape(original_text),
+        customized_text_escaped=html.escape(customized_text)
+    )
     
     return html_template
 

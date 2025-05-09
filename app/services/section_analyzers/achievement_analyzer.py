@@ -128,7 +128,14 @@ class AchievementQuantificationAnalyzer(BaseSectionAnalyzer):
         
         # Build the input for the agent
         context_dict = context or {}
-        input_message = f"""
+        
+        # Format additional context section conditionally
+        additional_context = ""
+        if context_dict:
+            additional_context = f"# Additional Context\n{json.dumps(context_dict, indent=2)}"
+        
+        # Create the input message using a template
+        input_template = """
         # Resume Content
         {resume_content}
         
@@ -138,11 +145,19 @@ class AchievementQuantificationAnalyzer(BaseSectionAnalyzer):
         # Achievement-Related Content
         {achievement_content}
         
-        {f"# Additional Context\n{json.dumps(context_dict, indent=2)}" if context_dict else ""}
+        {additional_context}
         
         Analyze the achievements in this resume, including achievements mentioned in work experience sections.
         Focus on how well achievements are quantified and provide detailed feedback on improving achievement statements.
         """
+        
+        # Format the template with the needed values
+        input_message = input_template.format(
+            resume_content=resume_content,
+            job_description=job_description,
+            achievement_content=achievement_content,
+            additional_context=additional_context
+        )
         
         try:
             # Run the agent
@@ -259,7 +274,8 @@ class AchievementQuantificationAnalyzer(BaseSectionAnalyzer):
         elif self.customization_level == CustomizationLevel.EXTENSIVE:
             depth_instruction = "Provide an extremely detailed analysis covering all aspects of achievement quantification and impact"
         
-        return f"""
+        # Create prompt template as raw string
+        prompt_template = r"""
         You are an expert resume achievement analyst specializing in achievement quantification. Your task is to analyze achievement statements in a resume against a job description and provide detailed feedback on how to improve the quantification and impact of these achievements.
 
         # Approach
@@ -299,3 +315,6 @@ class AchievementQuantificationAnalyzer(BaseSectionAnalyzer):
         
         IMPORTANT: Do not fabricate achievements or suggest adding accomplishments that aren't already mentioned in the resume. Focus on better quantifying and highlighting existing achievements, and identifying opportunities to add metrics to statements that are already present.
         """
+        
+        # Format the prompt with the depth instruction
+        return prompt_template.format(depth_instruction=depth_instruction)

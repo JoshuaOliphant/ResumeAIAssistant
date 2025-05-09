@@ -13,6 +13,20 @@
 - After sourcing the virtual environment, `uv sync` can be used to sync the dependencies.
 - Use uv to start the application with `uv run uvicorn main:app --host 0.0.0.0 --port 5001 --reload`
 
+## Project Architecture
+
+### Core Components
+- **PydanticAI Architecture**: Model-agnostic AI system using the evaluator-optimizer pattern
+- **Multi-Model Support**: Integration with Anthropic Claude, Google Gemini, and OpenAI
+- **Parallel Processing**: Resume sections are processed concurrently for improved performance
+- **Dynamic Thinking Budget**: Resource allocation system for AI processing
+
+### Key Services
+- **Parallel Customization Service**: Processes resume sections in parallel
+- **Task Scheduler**: Manages concurrent AI model requests with prioritization
+- **Resume Segmenter**: Splits resumes into logical sections for parallel processing
+- **Results Aggregator**: Combines parallel processing results into unified output
+
 ## Frontend Development (Next.js)
 - Location: `/nextjs-frontend` directory
 - Setup: `cd nextjs-frontend && npm install`
@@ -28,6 +42,7 @@
 - **shadcn/ui**: Component library for consistent UI (Button, Card, Form, etc.)
 - **React Hook Form**: Form validation with Zod
 - **next-themes**: Theme management (light/dark mode)
+- **WebSockets**: For real-time progress updates
 
 ### Frontend Structure
 - `/app`: Next.js App Router pages
@@ -37,11 +52,27 @@
   - `client.ts`: API client for FastAPI backend (port 5000)
   - `utils.ts`: Helper functions
 
+### UI Components
+- **ResumeDiffView**: Enhanced diff visualization with side-by-side comparison
+- **Progress Tracking**: Real-time updates for long-running processes
+- **Section Analysis**: Expandable sections showing what changed and why 
+- **ATS Improvement Metrics**: Shows score improvement for resume sections
+
 ### API Integration
 - Backend connection configured in `lib/client.ts`
 - API calls use fetch with proper error handling
 - All API endpoints from FastAPI backend are implemented
 - Authentication via JWT tokens stored in localStorage
+- WebSocket connection for real-time progress updates
+
+## Claude Prompts
+- Location: `/claude_prompts` directory
+- Purpose: Specialized prompts for Claude Code instances
+- Available templates:
+  - `backend_issue_prompt.md`: Backend development tasks
+  - `frontend_issue_prompt.md`: Frontend development tasks
+  - `ai_model_issue_prompt.md`: AI model integration tasks
+  - `pr_review_feedback_prompt.md`: PR feedback implementation
 
 ## Git Conventions
 - Write concise, descriptive commit messages
@@ -79,3 +110,12 @@
 - Each endpoint should have at least one test case
 - Mock external services (Claude API) when testing
 - Use pprint() for debugging API responses
+
+## Project Planning
+- Project planning is documented in `planning_scratchpad.md`
+- Issues are organized into epics in GitHub
+- Critical issues can be worked on in parallel:
+  - Parallel Processing Architecture (backend)
+  - Improved Diff Visualization (frontend)
+  - Progress Tracking System (frontend/backend)
+- Each issue has clear sections for description, tasks, dependencies, and estimates
