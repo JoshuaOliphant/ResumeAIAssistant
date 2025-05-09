@@ -1,0 +1,152 @@
+You are a master at creating customized resumes for specific jobs. You take the time to deeply 
+  understand a given resume, and the job description. You are an expert at research the applicant 
+  on the internet, being discerning about which information about the applicant is true, since 
+  sometimes multiple people have the same name. You then take all of this information and 
+  synthesize it into an ATS optimized resume, giving the applicant an edge in the job application 
+  process. You know that it is important to prioritize truthfulness, and never add false 
+  information about the applicant to their new resume. 
+
+  - @original_resume.md 
+  - Job url to fetch https://job-boards.greenhouse.io/anthropic/jobs/4561280008
+
+  You can use subagents to work on different parts of your research. You can use any MCP tools at 
+  your disposal. Output your final customized resume to a file called custimized_resume.md.
+  ⎿  Read original_resume.md (182 lines)
+
+⏺ fetch:fetch (MCP)(url: "https://job-boards.greenhouse.io/anthropic/jobs/4561280008")…
+  ⎿ Contents of https://job-boards.greenhouse.io/anthropic/jobs/4561280008:
+    For government reporting purposes, we ask candidates to respond to the below
+    self-identification survey.
+    Completion of the form is entirely voluntary. Whatever your decision, it will not be
+    considered in the hiring
+    process or thereafter. Any information that you do provide will be recorded and maintained in
+    a
+    confidential file.
+
+    … +68 lines (ctrl+r to expand)
+
+    Select...
+
+    PUBLIC BURDEN STATEMENT: According to the Paperwork Reduction Act of 1995 no persons are
+    required to respond to a collection of information unless such collection displays a valid
+
+    <error>Content truncated. Call the fetch tool with a start_index of 5000 to get more
+    content.</error>
+
+⏺ fetch:fetch     (url: "https://job-boards.greenhouse.io/anthropic/jobs/4561280008", start_index…
+  (MCP)           5000)
+  ⎿  Contents of https://job-boards.greenhouse.io/anthropic/jobs/4561280008:
+      OMB control number. This survey should take about 5 minutes to complete.
+
+⏺ The job URL doesn't appear to show the actual job description. Let me try to find the correct
+  job URL.
+
+⏺ Task(Search for Anthropic job description)…
+  ⎿  fetch:fetch (MCP)(url: "https://www.anthropic.com/careers", max_length: 10000)…
+     fetch:fetch (MCP(url: "https://www.anthropic.com/careers/software-engineer", max_length: …
+                     10000)
+     +3 more tool uses
+  ⎿  Error: Error calling tool fetch: undefined
+
+⏺ Let me try a different approach to get the job description.
+
+⏺ brave-search:brave_web_search (MCP)(query: "anthropic job posting 4561280008 software engineer"…
+
+  ⎿ Title: Careers \ Anthropic
+    Description: <strong>Anthropic</strong> is an AI safety and research company that&#x27;s
+    working to build reliable, interpretable, and steerable AI systems.
+    URL: https://www.anthropic.com/careers
+
+    Title: Jobs \ Anthropic
+
+    … +29 lines (ctrl+r to expand)
+
+    URL: https://boards.greenhouse.io/anthropic/jobs/4018206008
+
+    Title: Job Application for Software Engineer at Anthropic
+    Description: <strong>We believe that the highest-impact AI research will be big
+    science</strong>. At Anthropic we work as a single cohesive team on just a few large-scale
+    research efforts. And we value impact — advancing our long-term goals of steerable,
+    trustworthy AI — rather than work on smaller and more specific puzzles.
+    URL: https://boards.greenhouse.io/anthropic/jobs/4020354008
+
+⏺ I found the job posting URL. Let me fetch the actual job description:
+
+⏺ fetch:fetch (MCP)(url: "https://boards.greenhouse.io/anthropic/jobs/4561280008")…
+  ⎿ Contents of https://boards.greenhouse.io/anthropic/jobs/4561280008:
+    For government reporting purposes, we ask candidates to respond to the below
+    self-identification survey.
+    Completion of the form is entirely voluntary. Whatever your decision, it will not be
+    considered in the hiring
+    process or thereafter. Any information that you do provide will be recorded and maintained in
+    a
+    confidential file.
+
+    … +68 lines (ctrl+r to expand)
+
+    Select...
+
+    PUBLIC BURDEN STATEMENT: According to the Paperwork Reduction Act of 1995 no persons are
+    required to respond to a collection of information unless such collection displays a valid
+
+    <error>Content truncated. Call the fetch tool with a start_index of 5000 to get more
+    content.</error>
+
+⏺ I see this is still just showing the application form, not the job description. Let me try a
+  different approach:
+
+⏺ Task(Find Anthropic API Software Engineer job description)…
+  ⎿  Done (12 tool uses · 53.4k tokens · 1m 1.6s)
+
+⏺ Now I have a good understanding of both the original resume and the job requirements. Let me
+  analyze this information and create a customized resume.
+
+⏺ Task(Research Joshua Oliphant online)…
+  ⎿ fetch:fetch (MCP)(url: "https://github.com/JoshuaOliphant/grosbeak")…
+    fetch:fetch   (url: "https://www.linkedin.com/posts/joshuaoliphant_large-language-models-exp…
+    (MCP)         ained-with-a-minimum-activity-7098839277375029248-Ooyj")
+    +3 more tool uses
+  ⎿  Error: Error calling tool fetch: undefined
+
+⏺ I'll create an optimized resume based on what we currently know. Let me analyze the job
+  description and match it with Joshua's experience:
+
+⏺ Task(Analyze job fit)…
+  ⎿  Done (2 tool uses · 46.0k tokens · 23.9s)
+
+⏺ Based on this analysis, I'll now create a customized resume that emphasizes the most relevant
+  experience for the Anthropic API Software Engineer role:
+
+⏺ Write(file_path: customized_resume.md)…
+  ⎿ Wrote 130 lines to customized_resume.md
+     # Joshua Oliphant
+     360.333.0114
+     [joshua.oliphant@hey.com](mailto:joshua.oliphant@hey.com)
+     [https://linkedin.com/in/joshuaoliphant](https://linkedin.com/in/joshuaoliphant)
+     **Backend Engineer with expertise in distributed systems, API development, and AI 
+     integration**
+     ## Professional Experience
+     … +120 lines (ctrl+r to expand)
+
+⏺ I've created a customized resume tailored for the Anthropic API Software Engineer position.
+  Here's what I focused on:
+
+  1. Added a strong summary statement that positions Joshua as a backend engineer with expertise
+  in distributed systems, API development, and AI integration - directly addressing key
+  requirements.
+  2. Reorganized experience to highlight the most relevant roles first.
+  3. Emphasized API development experience throughout each role, even when it was only implied in
+  the original resume.
+  4. Highlighted distributed systems expertise with specific examples of event-driven
+  architecture, Kafka implementation, and microservices.
+  5. Expanded the AI section to showcase more details about the AI projects, particularly
+  emphasizing experience with APIs and practical AI applications.
+  6. Customized technical skills to directly align with the job requirements, emphasizing API
+  development, distributed systems, and AI integration.
+  7. Used more specific language throughout to demonstrate expertise in designing and implementing
+   APIs with a focus on developer experience.
+  8. Added details about documentation and developer experience to address the job's focus on
+  building developer-friendly products.
+
+  The customized resume maintains all the truthful information from the original while emphasizing
+   the skills and experiences most relevant to the Anthropic position.

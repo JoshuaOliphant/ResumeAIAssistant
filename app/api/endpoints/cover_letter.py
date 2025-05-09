@@ -5,7 +5,7 @@ from app.db.session import get_db
 from app.models.resume import Resume, ResumeVersion
 from app.models.job import JobDescription
 from app.schemas.cover_letter import CoverLetterRequest, CoverLetterResponse
-from app.services.claude_service import generate_cover_letter
+from app.services.pydanticai_service import generate_cover_letter
 
 router = APIRouter()
 
@@ -17,7 +17,7 @@ async def generate_cover_letter_endpoint(
     db: Session = Depends(get_db)
 ):
     """
-    Generate a cover letter based on a resume and job description using Claude AI.
+    Generate a cover letter based on a resume and job description using AI models.
     
     - **resume_id**: ID of the resume to base the cover letter on
     - **job_description_id**: ID of the job description for the application

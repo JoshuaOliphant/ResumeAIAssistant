@@ -4,7 +4,7 @@ import os
 import time
 import sys
 
-BASE_URL = "http://localhost:5000"
+BASE_URL = "http://localhost:5001"
 API_V1 = "/api/v1"
 # Set a reasonable timeout for requests (10 seconds)
 REQUEST_TIMEOUT = 10

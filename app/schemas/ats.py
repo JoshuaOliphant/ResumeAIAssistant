@@ -42,3 +42,21 @@ class ATSAnalysisResponse(BaseModel):
     section_scores: List[Dict[str, Any]] = []
     confidence: str = "medium"
     keyword_density: float = 0.0
+
+
+class ATSContentAnalysisRequest(BaseModel):
+    """Schema for requesting ATS analysis using direct content"""
+    resume_content: str
+    job_description_content: str
+
+
+class ATSContentAnalysisResponse(BaseModel):
+    """Schema for ATS analysis response based on content"""
+    match_score: int = Field(..., ge=0, le=100, description="Overall match score 0-100")
+    matching_keywords: List[KeywordMatch]
+    missing_keywords: List[KeywordMatch]
+    improvements: List[ATSImprovement]
+    job_type: str = "default"
+    section_scores: List[Dict[str, Any]] = []
+    confidence: str = "medium"
+    keyword_density: float = 0.0

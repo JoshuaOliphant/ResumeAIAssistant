@@ -11,20 +11,104 @@ import {
   ChevronDown, ChevronUp, ExternalLink, Check, X
 } from "lucide-react"
 import { ThemeProvider, useTheme } from "next-themes"
-import ReactDiffViewer from 'react-diff-viewer-continued'
+import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
 
 export interface ResumeDiffViewProps {
   resumeDiff: ResumeDiff;
   jobTitle?: string;
 }
 
+// Utility function to create HTML diff content
+function createDiffHtml(oldText: string, newText: string, isDark: boolean): string {
+  // Simple line-by-line diff
+  const oldLines = oldText.split('\n');
+  const newLines = newText.split('\n');
+  
+  // Map to track processed old lines to avoid showing removals for lines that were just moved
+  const processedOldLines = new Set<string>();
+  
+  // First pass: identify lines that are in new but not in old (additions)
+  const addedLines = newLines.filter(line => {
+    // Skip empty lines
+    if (!line.trim()) return false;
+    return !oldLines.includes(line);
+  });
+  
+  // Second pass: identify lines that are in old but not in new (removals)
+  const removedLines = oldLines.filter(line => {
+    // Skip empty lines
+    if (!line.trim()) return false;
+    return !newLines.includes(line);
+  });
+  
+  // Create HTML for the diff
+  let diffHtml = '';
+  
+  // Process each line in the new text
+  for (const line of newLines) {
+    if (!line.trim()) {
+      // Empty line
+      diffHtml += '<div style="padding: 2px 0;">&nbsp;</div>';
+      continue;
+    }
+    
+    if (addedLines.includes(line)) {
+      // Line was added
+      const addedStyle = isDark
+        ? 'background-color: #044B53; color: white; padding: 2px 4px; border-radius: 3px; margin-bottom: 4px;'
+        : 'background-color: #e6ffec; color: #24292f; padding: 2px 4px; border-radius: 3px; margin-bottom: 4px;';
+      
+      diffHtml += `<div style="${addedStyle}"><span style="display: inline-block; width: 16px; text-align: center; margin-right: 8px; color: ${isDark ? '#8c8c8c' : 'rgba(0,0,0,0.5)'}">+</span>${escapeHtml(line)}</div>`;
+    } else {
+      // Line was unchanged
+      diffHtml += `<div style="padding: 2px 0;">${escapeHtml(line)}</div>`;
+    }
+  }
+  
+  // Process removed lines to show at the beginning
+  if (removedLines.length > 0) {
+    let removedHtml = '';
+    for (const line of removedLines) {
+      const removedStyle = isDark
+        ? 'background-color: #632F34; color: white; padding: 2px 4px; border-radius: 3px; margin-bottom: 4px; text-decoration: line-through;'
+        : 'background-color: #ffebe9; color: #24292f; padding: 2px 4px; border-radius: 3px; margin-bottom: 4px; text-decoration: line-through;';
+      
+      removedHtml += `<div style="${removedStyle}"><span style="display: inline-block; width: 16px; text-align: center; margin-right: 8px; color: ${isDark ? '#8c8c8c' : 'rgba(0,0,0,0.5)'}">-</span>${escapeHtml(line)}</div>`;
+    }
+    
+    if (removedHtml) {
+      const removedSectionStyle = isDark
+        ? 'margin-bottom: 16px; padding: 8px; background-color: rgba(99, 47, 52, 0.2); border-radius: 4px;'
+        : 'margin-bottom: 16px; padding: 8px; background-color: rgba(255, 235, 233, 0.4); border-radius: 4px;';
+      
+      diffHtml = `<div style="${removedSectionStyle}"><div style="font-weight: bold; margin-bottom: 8px;">Removed Content:</div>${removedHtml}</div>` + diffHtml;
+    }
+  }
+  
+  return diffHtml;
+}
+
+// Helper to escape HTML
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
 export function ResumeDiffView({ resumeDiff, jobTitle }: ResumeDiffViewProps) {
   const [showChanges, setShowChanges] = useState(true);
+  const [activeTab, setActiveTab] = useState<'diff' | 'original' | 'customized'>('diff');
   const [visibleSections, setVisibleSections] = useState<Record<string, boolean>>({});
   const { theme } = useTheme();
   
   // Determine if dark mode is active for the diff viewer
   const isDarkMode = theme === 'dark';
+  
+  // Debug log to see what's in resumeDiff
+  console.log("ResumeDiffView received resumeDiff:", resumeDiff);
   
   // Toggle a section visibility
   const toggleSection = (section: string) => {
@@ -66,6 +150,9 @@ export function ResumeDiffView({ resumeDiff, jobTitle }: ResumeDiffViewProps) {
         gutterPadding: '10px',
         highlightBackground: '#fffbdd',
         highlightGutterBackground: '#fff5b1',
+        diffViewerTitleBackground: '#fafbfc',
+        diffViewerTitleColor: '#212529',
+        diffViewerTitleBorderColor: '#eee',
       },
       dark: {
         diffViewerBackground: '#1e1e1e',
@@ -89,7 +176,21 @@ export function ResumeDiffView({ resumeDiff, jobTitle }: ResumeDiffViewProps) {
         gutterPadding: '10px',
         highlightBackground: '#594e00',
         highlightGutterBackground: '#524a0a',
+        diffViewerTitleBackground: '#2f323e',
+        diffViewerTitleColor: '#555a7b',
+        diffViewerTitleBorderColor: '#353846',
       },
+    },
+    line: {
+      padding: '8px 2px',
+      minHeight: '20px',
+    },
+    contentText: {
+      fontFamily: '"Menlo", "Monaco", "Courier New", monospace',
+      lineHeight: '1.5',
+    },
+    marker: {
+      width: '8px',
     },
   };
   
@@ -100,6 +201,7 @@ export function ResumeDiffView({ resumeDiff, jobTitle }: ResumeDiffViewProps) {
     
     // Only show section analysis if it exists
     if (!resumeDiff.section_analysis || Object.keys(resumeDiff.section_analysis).length === 0) {
+      console.log("No section analysis data found");
       return (
         <div className="text-center text-muted-foreground py-4">
           <div className="mb-2">No section analysis available</div>
@@ -108,12 +210,20 @@ export function ResumeDiffView({ resumeDiff, jobTitle }: ResumeDiffViewProps) {
       );
     }
     
+    // Log the first section to check its structure
+    const firstSectionKey = Object.keys(resumeDiff.section_analysis)[0];
+    const firstSection = resumeDiff.section_analysis[firstSectionKey];
+    console.log("First section data:", firstSectionKey, firstSection);
+    
     // Process the actual section analysis data
     return renderSectionAnalysisContent(resumeDiff.section_analysis);
   };
   
   // Helper function to actually render the section analysis
   const renderSectionAnalysisContent = (sectionData: Record<string, any>) => {
+    // Log the received section data for debugging
+    console.log("renderSectionAnalysisContent received:", sectionData);
+    
     // Sample section explanations (in a real app, these would come from the backend)
     const sectionExplanations: Record<string, string> = {
       "Skills": "Enhanced skills section to add industry-specific keywords and highlight technical expertise.",
@@ -162,10 +272,33 @@ export function ResumeDiffView({ resumeDiff, jobTitle }: ResumeDiffViewProps) {
         {Object.entries(sectionData).map(([section, analysis]) => {
           const isExpanded = visibleSections[section] || false;
           
-          // Ensure we have the required properties
-          const changesCount = analysis.changes || 0;
-          const additionsCount = analysis.additions || 0;
-          const deletionsCount = analysis.deletions || 0;
+          // Log each section's analysis data
+          console.log(`Section ${section} analysis:`, analysis);
+          
+          // Get section metrics safely, ensuring we have default values
+          // The backend may provide these directly or nested in stats
+          let changesCount = 0;
+          let additionsCount = 0; 
+          let deletionsCount = 0;
+          
+          // Check if properties exist directly on the section analysis
+          if ('changes' in analysis) {
+            changesCount = analysis.changes;
+          } else if (analysis.stats && 'modifications' in analysis.stats) {
+            changesCount = analysis.stats.modifications;
+          }
+          
+          if ('additions' in analysis) {
+            additionsCount = analysis.additions;
+          } else if (analysis.stats && 'additions' in analysis.stats) {
+            additionsCount = analysis.stats.additions;
+          }
+          
+          if ('deletions' in analysis) {
+            deletionsCount = analysis.deletions;
+          } else if (analysis.stats && 'deletions' in analysis.stats) {
+            deletionsCount = analysis.stats.deletions;
+          }
           
           return (
             <div key={section} className="border rounded-md overflow-hidden">
@@ -199,9 +332,18 @@ export function ResumeDiffView({ resumeDiff, jobTitle }: ResumeDiffViewProps) {
                   </div>
                 </div>
                 
+                {/* Display section explanation if available */}
                 {sectionExplanations[section] && (
                   <p className="mt-3 text-sm text-muted-foreground">
                     {sectionExplanations[section]}
+                  </p>
+                )}
+                
+                {/* Display status if available from backend */}
+                {analysis.status && !sectionExplanations[section] && (
+                  <p className="mt-3 text-sm text-muted-foreground">
+                    {analysis.status.replace(/_/g, ' ')}
+                    {analysis.change_percentage && ` (${analysis.change_percentage}% changed)`}
                   </p>
                 )}
               </div>
@@ -383,21 +525,112 @@ export function ResumeDiffView({ resumeDiff, jobTitle }: ResumeDiffViewProps) {
             <div className="max-h-[600px] overflow-auto">
               <div className="p-4">
                 {showChanges ? (
-                  <ReactDiffViewer
-                    oldValue={resumeDiff.original_content}
-                    newValue={resumeDiff.customized_content}
-                    splitView={false}
-                    disableWordDiff={false}
-                    useDarkTheme={isDarkMode}
-                    styles={diffViewerStyles}
-                    compareMethod="diffWords"
-                    hideLineNumbers={false}
-                    showDiffOnly={false}
-                    extraLinesSurroundingDiff={3}
-                  />
+                  <>
+                    {/* Add a debug check for the diff content */}
+                    {console.log("Rendering diff with:", {
+                      originalLength: resumeDiff.original_content?.length || 0, 
+                      customizedLength: resumeDiff.customized_content?.length || 0
+                    })}
+                    
+                    {/* Create a custom diff view with tabs that fit the design system */}
+                    {resumeDiff.original_content && resumeDiff.customized_content ? (
+                      <div className="custom-diff-viewer rounded-lg border bg-card text-card-foreground overflow-hidden">
+                        <div className="flex border-b">
+                          <button
+                            className={`px-4 py-3 text-sm font-medium transition-colors relative ${
+                              activeTab === 'diff' 
+                                ? 'text-primary' 
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                            onClick={() => setActiveTab('diff')}
+                          >
+                            Changes
+                            {activeTab === 'diff' && (
+                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></span>
+                            )}
+                          </button>
+                          <button
+                            className={`px-4 py-3 text-sm font-medium transition-colors relative ${
+                              activeTab === 'customized' 
+                                ? 'text-primary' 
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                            onClick={() => setActiveTab('customized')}
+                          >
+                            Customized Resume
+                            {activeTab === 'customized' && (
+                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></span>
+                            )}
+                          </button>
+                          <button
+                            className={`px-4 py-3 text-sm font-medium transition-colors relative ${
+                              activeTab === 'original' 
+                                ? 'text-primary' 
+                                : 'text-muted-foreground hover:text-foreground'
+                            }`}
+                            onClick={() => setActiveTab('original')}
+                          >
+                            Original Resume
+                            {activeTab === 'original' && (
+                              <span className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary"></span>
+                            )}
+                          </button>
+                        </div>
+                        
+                        <div className="p-4 font-mono text-sm leading-relaxed whitespace-pre-wrap overflow-auto max-h-[500px]">
+                          {activeTab === 'diff' && (
+                            <div dangerouslySetInnerHTML={{ 
+                              __html: createDiffHtml(
+                                resumeDiff.original_content,
+                                resumeDiff.customized_content,
+                                isDarkMode
+                              ) 
+                            }} />
+                          )}
+                          
+                          {activeTab === 'customized' && (
+                            <pre className="m-0 font-mono">
+                              {resumeDiff.customized_content}
+                            </pre>
+                          )}
+                          
+                          {activeTab === 'original' && (
+                            <pre className="m-0 font-mono">
+                              {resumeDiff.original_content}
+                            </pre>
+                          )}
+                        </div>
+                        
+                        {activeTab === 'diff' && (
+                          <div className="flex items-center gap-4 px-4 py-2 border-t text-xs text-muted-foreground">
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block w-3 h-3 rounded-sm ${
+                                isDarkMode ? 'bg-[#044B53] border border-[#055d67]' : 
+                                'bg-[#e6ffec] border border-[#abf2bc]'
+                              }`}></span>
+                              <span>Added content</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className={`inline-block w-3 h-3 rounded-sm ${
+                                isDarkMode ? 'bg-[#632F34] border border-[#7d383f]' : 
+                                'bg-[#ffebe9] border border-[#ffc0bd]'
+                              }`}></span>
+                              <span>Removed content</span>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-4 bg-muted rounded-md">
+                        <p className="text-muted-foreground">
+                          Diff cannot be displayed. Missing original or customized content.
+                        </p>
+                      </div>
+                    )}
+                  </>
                 ) : (
                   <pre className="font-mono text-sm whitespace-pre-wrap">
-                    {resumeDiff.original_content}
+                    {resumeDiff.original_content || "No original content available"}
                   </pre>
                 )}
               </div>

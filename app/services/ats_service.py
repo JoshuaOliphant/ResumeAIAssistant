@@ -134,6 +134,9 @@ async def analyze_resume_for_ats(
     """
     Enhanced analysis of a resume against a job description for ATS compatibility.
     
+    This implementation uses algorithmic analysis rather than an AI model, so it won't
+    depend on the model provider configuration.
+    
     Args:
         resume_content: The content of the resume in Markdown format
         job_description: The job description text

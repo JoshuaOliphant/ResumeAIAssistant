@@ -1,7 +1,6 @@
 import os
 import logfire
-import httpx
-import anthropic
+import traceback
 from app.api.api import app
 from app.db.session import engine
 from app.core.logging import (
@@ -9,7 +8,6 @@ from app.core.logging import (
     setup_fastapi_instrumentation,
     setup_sqlalchemy_instrumentation,
     setup_httpx_instrumentation,
-    setup_anthropic_instrumentation
 )
 
 # Configure Logfire with more detailed options
@@ -43,9 +41,7 @@ try:
         capture_headers=False  # Avoid capturing potentially sensitive headers
     )
     
-    # Set up Anthropic instrumentation
-    # This will catch all LLM calls and provide detailed logs
-    setup_anthropic_instrumentation()
+    logfire.instrument_pydantic_ai()
     
     logfire.info("All instrumentations set up successfully")
 except Exception as e:
@@ -53,18 +49,25 @@ except Exception as e:
         "Error setting up instrumentations", 
         error=str(e), 
         error_type=type(e).__name__,
-        traceback=logfire.format_exception(e)
+        traceback=traceback.format_exception(type(e), e, e.__traceback__)
     )
 
 # Initialize database on startup
 try:
+    # Import Base and all models to ensure they're registered
+    from app.db.session import Base
+    from app.db.base import *  # This imports all models
+    
+    # Create database tables
+    Base.metadata.create_all(bind=engine)
+    
     logfire.info("Database initialized successfully")
 except Exception as e:
     logfire.error(
         "Error initializing database", 
         error=str(e), 
         error_type=type(e).__name__,
-        traceback=logfire.format_exception(e)
+        traceback=traceback.format_exception(type(e), e, e.__traceback__)
     )
     
 # This exposes the ASGI app for gunicorn to use with the uvicorn worker
