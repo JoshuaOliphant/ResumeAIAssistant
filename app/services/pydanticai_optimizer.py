@@ -547,7 +547,7 @@ class PydanticAIOptimizerService:
                 "error": str(e)
             }
     
-    async def _evaluate_match(
+    async def evaluate_match(
         self, 
         resume_content: str, 
         job_description: str, 
@@ -803,7 +803,7 @@ class PydanticAIOptimizerService:
                 "experience_preservation_check": "Could not verify experience preservation due to evaluation error."
             }
     
-    async def _generate_optimization_plan(
+    async def generate_optimization_plan_from_evaluation(
         self, 
         resume_content: str, 
         job_description: str, 

@@ -280,8 +280,8 @@ class ResumeAnalysisSynthesizer:
             add_recommendations("Language/Tone Analysis", language_tone_result.recommendations)
         
         # Sort integrated recommendations by priority (highest first)
-        integrated_recommendations.sort(key=lambda x: x.get("priority", 5), reverse=True)
-        priority_improvements.sort(key=lambda x: x.get("priority", 5), reverse=True)
+        integrated_recommendations.sort(key=lambda x: x["priority"] if isinstance(x, dict) and "priority" in x else getattr(x, "priority", 5), reverse=True)
+        priority_improvements.sort(key=lambda x: x["priority"] if isinstance(x, dict) and "priority" in x else getattr(x, "priority", 5), reverse=True)
         
         # Create an improvement plan structure based on customization level
         improvement_plan = self._create_improvement_plan(

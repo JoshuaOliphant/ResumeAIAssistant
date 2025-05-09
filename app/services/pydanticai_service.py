@@ -66,7 +66,7 @@ from app.core.config import get_pydanticai_model_config
 model_config = get_pydanticai_model_config()
 
 # Extract model settings
-EVALUATOR_MODEL = model_config.get("gemini", {}).get("default_model", "google-gla:gemini-1.5-pro") if "gemini" in model_config else "google-gla:gemini-1.5-pro"
+EVALUATOR_MODEL = model_config.get("gemini", {}).get("default_model", "google:gemini-1.5-pro") if "gemini" in model_config else "google:gemini-1.5-pro"
 OPTIMIZER_MODEL = EVALUATOR_MODEL  # Use same model for optimizer
 COVER_LETTER_MODEL = EVALUATOR_MODEL  # Use same model for cover letter generation
 THINKING_BUDGET = settings.PYDANTICAI_THINKING_BUDGET
@@ -75,7 +75,7 @@ MAX_TOKENS = settings.PYDANTICAI_MAX_TOKENS
 
 # Set fallback models in order of preference
 FALLBACK_MODELS = [
-    "google-gla:gemini-1.5-flash",             # Faster Gemini model as first fallback
+    "google:gemini-1.5-flash",             # Faster Gemini model as first fallback
     "openai:gpt-4.1" if "openai" in model_config else None,  # Latest GPT-4.1 if OpenAI configured
     "anthropic:claude-3-7-sonnet-latest" if "anthropic" in model_config else None,  # Claude if available
     "openai:gpt-4o" if "openai" in model_config else None,  # Older but still capable model
@@ -195,7 +195,7 @@ def create_cover_letter_agent(applicant_name: Optional[str] = None,
     
     # Determine if the model supports thinking
     thinking_config = None
-    if COVER_LETTER_MODEL.startswith("anthropic:claude-3-7") or "claude-3-7-sonnet-latest" in COVER_LETTER_MODEL:
+    if COVER_LETTER_MODEL.startswith("anthropic:claude-3-7") or COVER_LETTER_MODEL.startswith("anthropic:claude-3-7-sonnet-latest"):
         thinking_config = {"budget_tokens": THINKING_BUDGET, "type": "enabled"}
     elif COVER_LETTER_MODEL.startswith("google:gemini-2.5"):
         # Gemini uses thinkingBudget
@@ -239,7 +239,7 @@ def create_cover_letter_agent(applicant_name: Optional[str] = None,
             # Next try OpenAI GPT-4.1 which has strong writing capabilities
             "openai:gpt-4.1",
             # Then try Gemini Pro which is good for creative text generation
-            "google-gla:gemini-1.5-pro",
+            "google:gemini-1.5-pro",
             # For faster/cheaper options if needed
             "anthropic:claude-3-7-haiku-latest",
             "openai:gpt-4o",

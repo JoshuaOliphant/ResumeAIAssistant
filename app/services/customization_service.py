@@ -460,7 +460,7 @@ class CustomizationService:
             
             # Get the resume to find the user_id
             resume = self.db.query(Resume).filter(Resume.id == resume_id).first()
-            user_id = resume.user_id if resume else None
+            user_id = resume.user_id if resume is not None else None
             
             # Convert recommendations to a list of dicts for JSON storage
             recommendations_json = []

@@ -60,12 +60,20 @@ export async function POST(request: NextRequest) {
       );
     }
     
+    // Validate ATS analysis structure
+    if (!ats_analysis.matching_keywords || !ats_analysis.missing_keywords) {
+      return NextResponse.json(
+        { detail: 'Invalid ATS analysis data structure: matching_keywords and missing_keywords are required' },
+        { status: 400 }
+      );
+    }
+    
     // Extract keywords from analysis
     const matching = Array.isArray(ats_analysis.matching_keywords) ? 
-      ats_analysis.matching_keywords.map((k: any) => typeof k === 'object' ? k.keyword : k) : [];
+      ats_analysis.matching_keywords.map((k: any) => typeof k === 'object' ? (k.keyword || k.term || String(k)) : k) : [];
       
     const missing = Array.isArray(ats_analysis.missing_keywords) ? 
-      ats_analysis.missing_keywords.map((k: any) => typeof k === 'object' ? k.keyword : k) : [];
+      ats_analysis.missing_keywords.map((k: any) => typeof k === 'object' ? (k.keyword || k.term || String(k)) : k) : [];
     
     // Generate a basic plan using the keyword data
     const plan = {
