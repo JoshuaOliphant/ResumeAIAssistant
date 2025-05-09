@@ -1,11 +1,16 @@
 """
-Customization service implementing the evaluator-optimizer pattern for resume customization.
+Parallel Customization Service for resume optimization.
+
+This service implements the parallel processing architecture for resume customization,
+using the evaluator-optimizer pattern with concurrent processing of resume sections.
 """
+
 import uuid
 import json
 import time
 import logfire
-from typing import Optional, Dict, Any
+import asyncio
+from typing import Optional, Dict, Any, List
 
 from fastapi import Depends
 from sqlalchemy.orm import Session
@@ -16,37 +21,49 @@ from app.models.job import JobDescription
 from app.schemas.customize import (
     CustomizationLevel, 
     CustomizationPlanRequest,
-    CustomizationPlan
+    CustomizationPlan,
+    RecommendationItem
 )
 
 from app.core.logging import log_function_call
 from app.services import pydanticai_service as ai_service
 from app.services.prompts import MAX_FEEDBACK_ITERATIONS
+from app.services.parallel_processor import (
+    ParallelProcessor,
+    SectionType,
+    TaskPriority,
+    TaskStatus
+)
+from app.core.parallel_config import (
+    SECTION_WEIGHTS,
+    JOB_TYPE_WEIGHTS,
+    get_section_model_preferences
+)
+from app.services.model_selector import get_model_config_for_task
 
-
-class CustomizationService:
+class ParallelCustomizationService:
     """
-    Service for resume customization using the evaluator-optimizer pattern.
-    This implements a multi-stage AI workflow:
-    1. Basic analysis (existing ATS analyzer)
-    2. Evaluation (Claude acting as ATS expert)
-    3. Optimization (Claude generating a detailed plan)
+    Service for resume customization using parallel processing architecture.
+    
+    This service leverages the evaluator-optimizer pattern with parallel processing
+    to improve performance and reduce the time needed for resume customization.
     """
     
     def __init__(self, db: Session):
         """
-        Initialize the customization service with dependencies.
+        Initialize the parallel customization service with dependencies.
         
         Args:
             db: Database session
         """
         self.db = db
+        self.processor = ParallelProcessor()
     
     @log_function_call
     async def generate_customization_plan(self, request: CustomizationPlanRequest) -> CustomizationPlan:
         """
         Generate a detailed customization plan for a resume based on a job description.
-        This implements the evaluator-optimizer pattern.
+        Uses parallel processing architecture to improve performance.
         
         Args:
             request: The customization plan request containing resume_id, job_description_id,
@@ -55,6 +72,9 @@ class CustomizationService:
         Returns:
             A CustomizationPlan with detailed recommendations
         """
+        # Record start time for performance tracking
+        start_time = time.time()
+        
         # Gather the necessary data
         resume_content, job_description = await self._get_resume_and_job(
             request.resume_id, request.job_description_id
@@ -67,28 +87,30 @@ class CustomizationService:
                 request.resume_id, request.job_description_id
             )
         
-        # Evaluate the match (evaluator stage)
+        # Evaluate the match (evaluator stage) using parallel processing
         start_time_evaluator = time.time()
         logfire.info(
-            "Starting evaluator stage with extended thinking",
+            "Starting parallel evaluator stage",
             resume_id=request.resume_id,
             job_id=request.job_description_id,
             customization_level=request.customization_strength.name,
-            industry=request.industry if request.industry else "not specified",
-            using_extended_thinking=True
+            industry=request.industry if request.industry else "not specified"
         )
-        evaluation = await self.evaluate_match(
-            resume_content, 
-            job_description, 
-            basic_analysis,
-            request.customization_strength,
-            request.industry
+        
+        # Process evaluation in parallel across resume sections
+        evaluation = await self.processor.process_resume_analysis(
+            resume_content=resume_content,
+            job_description=job_description,
+            section_analysis_func=self._evaluate_section_match,
+            basic_analysis=basic_analysis,
+            customization_level=request.customization_strength,
+            industry=request.industry
         )
         
         # Log evaluation results with metrics
         elapsed_time_evaluator = time.time() - start_time_evaluator
         logfire.info(
-            "Evaluator stage completed",
+            "Parallel evaluator stage completed",
             resume_id=request.resume_id,
             job_id=request.job_description_id,
             duration_seconds=round(elapsed_time_evaluator, 2),
@@ -97,28 +119,30 @@ class CustomizationService:
             sections_evaluated=len(evaluation.get("section_evaluations", []))
         )
         
-        # Generate the optimization plan (optimizer stage)
+        # Generate the optimization plan (optimizer stage) using parallel processing
         start_time_optimizer = time.time()
         logfire.info(
-            "Starting optimizer stage with extended thinking",
+            "Starting parallel optimizer stage",
             resume_id=request.resume_id,
             job_id=request.job_description_id,
             customization_level=request.customization_strength.name,
-            industry=request.industry if request.industry else "not specified",
-            using_extended_thinking=True
+            industry=request.industry if request.industry else "not specified"
         )
-        plan = await self.generate_optimization_plan(
-            resume_content, 
-            job_description, 
-            evaluation,
-            request.customization_strength,
-            request.industry
+        
+        # Process optimization plan generation in parallel across resume sections
+        plan = await self.processor.process_optimization_plan(
+            resume_content=resume_content,
+            job_description=job_description,
+            evaluation=evaluation,
+            section_optimization_func=self._generate_section_optimization_plan,
+            customization_level=request.customization_strength,
+            industry=request.industry
         )
         
         # Log optimizer results with metrics
         elapsed_time_optimizer = time.time() - start_time_optimizer
         logfire.info(
-            "Optimizer stage completed",
+            "Parallel optimizer stage completed",
             resume_id=request.resume_id,
             job_id=request.job_description_id,
             duration_seconds=round(elapsed_time_optimizer, 2),
@@ -127,14 +151,22 @@ class CustomizationService:
             formatting_suggestions_count=len(plan.formatting_suggestions)
         )
         
-        # Just store the plan for future reference without implementing feedback loop here
-        # The feedback loop will happen during the actual customization process
-        
         # Store the plan for future reference
         await self._store_plan(
             request.resume_id,
             request.job_description_id,
             plan
+        )
+        
+        # Log overall performance
+        total_duration = time.time() - start_time
+        logfire.info(
+            "Parallel customization plan generation completed",
+            resume_id=request.resume_id,
+            job_id=request.job_description_id,
+            total_duration_seconds=round(total_duration, 2),
+            evaluator_duration_seconds=round(elapsed_time_evaluator, 2),
+            optimizer_duration_seconds=round(elapsed_time_optimizer, 2)
         )
         
         return plan
@@ -173,6 +205,7 @@ class CustomizationService:
     async def _perform_basic_analysis(self, resume_id: str, job_id: str) -> Dict:
         """
         Perform basic ATS analysis of resume vs job description.
+        This function remains largely unchanged but now imports ATS service dynamically.
         
         Args:
             resume_id: Resume ID
@@ -231,89 +264,228 @@ class CustomizationService:
                 "error": str(e)
             }
     
-    async def evaluate_match(
+    async def _evaluate_section_match(
         self, 
-        resume_content: str, 
+        section_content: str, 
         job_description: str, 
         basic_analysis: Dict, 
-        level: CustomizationLevel,
+        customization_level: CustomizationLevel,
         industry: Optional[str] = None
     ) -> Dict:
         """
-        Evaluate how well a resume matches a job description.
-        This is the "evaluator" stage of the evaluator-optimizer pattern.
+        Evaluate how well a resume section matches a job description.
+        This is used as a worker function for parallel section processing.
         
         Args:
-            resume_content: Resume content in Markdown format
+            section_content: Content of a specific resume section
             job_description: Job description text
             basic_analysis: Results from basic keyword analysis
-            level: Customization level (affects evaluation detail)
+            customization_level: Customization level (affects evaluation detail)
             industry: Optional industry name for industry-specific guidance
             
         Returns:
-            Dictionary containing detailed evaluation
+            Dictionary containing detailed evaluation of the section
         """
+        # Determine the section type based on the content
+        section_type = self._detect_section_type(section_content)
+        
         logfire.info(
-            "Evaluating resume-job match",
-            resume_length=len(resume_content),
+            f"Evaluating {section_type} section match",
+            section_type=section_type,
+            section_length=len(section_content),
             job_description_length=len(job_description),
-            customization_level=level.name,
-            industry=industry if industry else "not specified"
+            customization_level=customization_level.name
         )
         
-        # Call OpenAI evaluator function
-        return await ai_service.evaluate_resume_job_match(
-            resume_content=resume_content,
+        # Get model preferences for this section
+        model_prefs = get_section_model_preferences(section_type)
+        
+        # Get model configuration for this section
+        model_config = get_model_config_for_task(
+            task_name="resume_evaluation",
+            content=section_content,
             job_description=job_description,
-            basic_analysis=basic_analysis,
-            customization_level=level,
-            industry=industry
+            industry=industry,
+            preferred_provider=model_prefs.get("preferred_provider"),
+            cost_sensitivity=model_prefs.get("cost_sensitivity", 1.0)
         )
         
-    # Keep backward compatibility with the old method name
-    _evaluate_match = evaluate_match
+        # Call PydanticAI service with section-specific config
+        try:
+            section_evaluation = await ai_service.evaluate_resume_job_match(
+                resume_content=section_content,
+                job_description=job_description,
+                basic_analysis=basic_analysis,
+                customization_level=customization_level,
+                industry=industry,
+                model_config=model_config
+            )
+            
+            # Add section type to the result
+            section_evaluation["section_type"] = section_type
+            
+            return section_evaluation
+            
+        except Exception as e:
+            logfire.error(
+                f"Error evaluating {section_type} section",
+                error=str(e),
+                error_type=type(e).__name__,
+                section_type=section_type,
+                section_length=len(section_content)
+            )
+            
+            # Return basic result in case of error
+            return {
+                "section_type": section_type,
+                "match_score": 50,
+                "matching_keywords": [],
+                "missing_keywords": [],
+                "term_mismatches": [],
+                "section_evaluations": [],
+                "error": str(e)
+            }
     
-    async def generate_optimization_plan(
+    async def _generate_section_optimization_plan(
         self, 
-        resume_content: str, 
+        section_content: str, 
         job_description: str, 
-        evaluation: Dict, 
-        level: CustomizationLevel,
+        section_evaluation: Dict, 
+        customization_level: CustomizationLevel,
         industry: Optional[str] = None
-    ) -> CustomizationPlan:
+    ) -> Dict:
         """
-        Generate an optimization plan based on the evaluation.
-        This is the "optimizer" stage of the evaluator-optimizer pattern.
+        Generate an optimization plan for a specific resume section.
+        This is used as a worker function for parallel section processing.
         
         Args:
-            resume_content: Resume content in Markdown format
+            section_content: Content of a specific resume section
             job_description: Job description text
-            evaluation: Evaluation dictionary from evaluator stage
-            level: Customization level (affects optimization detail)
+            section_evaluation: Evaluation dictionary for this section
+            customization_level: Customization level (affects optimization detail)
             industry: Optional industry name for industry-specific guidance
             
         Returns:
-            CustomizationPlan with detailed recommendations
+            Dictionary containing optimization plan for the section
         """
+        # Determine the section type based on the content
+        section_type = self._detect_section_type(section_content)
+        
         logfire.info(
-            "Generating optimization plan",
-            resume_length=len(resume_content),
+            f"Generating optimization plan for {section_type} section",
+            section_type=section_type,
+            section_length=len(section_content),
             job_description_length=len(job_description),
-            customization_level=level.name,
-            industry=industry if industry else "not specified"
+            customization_level=customization_level.name
         )
         
-        # Call OpenAI optimizer function
-        return await ai_service.generate_optimization_plan(
-            resume_content=resume_content,
+        # Get model preferences for this section
+        model_prefs = get_section_model_preferences(section_type)
+        
+        # Get model configuration for this section
+        model_config = get_model_config_for_task(
+            task_name="optimization_plan",
+            content=section_content,
             job_description=job_description,
-            evaluation=evaluation,
-            customization_level=level,
-            industry=industry
+            industry=industry,
+            preferred_provider=model_prefs.get("preferred_provider"),
+            cost_sensitivity=model_prefs.get("cost_sensitivity", 1.0)
         )
         
-    # Keep backward compatibility with the old method name
-    _generate_optimization_plan = generate_optimization_plan
+        # Create a full evaluation dict if only a section evaluation was provided
+        if "section_type" in section_evaluation and "match_score" not in section_evaluation:
+            evaluation = {
+                "match_score": 50,
+                "matching_keywords": [],
+                "missing_keywords": [],
+                "term_mismatches": [],
+                "section_evaluations": [section_evaluation]
+            }
+        else:
+            evaluation = section_evaluation
+        
+        # Call PydanticAI service with section-specific config
+        try:
+            # Check if section is empty or too short
+            if not section_content or len(section_content) < 50:
+                # Return minimal empty plan for empty sections
+                return {
+                    "section_type": section_type,
+                    "summary": f"The {section_type} section is too short or empty to optimize.",
+                    "recommendations": [],
+                    "keywords_to_add": [],
+                    "formatting_suggestions": []
+                }
+            
+            # Generate optimization plan for this section
+            section_plan = await ai_service.generate_optimization_plan(
+                resume_content=section_content,
+                job_description=job_description,
+                evaluation=evaluation,
+                customization_level=customization_level,
+                industry=industry,
+                model_config=model_config
+            )
+            
+            # Convert to dictionary and add section type
+            if hasattr(section_plan, "dict"):
+                plan_dict = section_plan.dict()
+                plan_dict["section_type"] = section_type
+                return plan_dict
+            else:
+                # Handle if section_plan is already a dict
+                section_plan["section_type"] = section_type
+                return section_plan
+            
+        except Exception as e:
+            logfire.error(
+                f"Error generating optimization plan for {section_type} section",
+                error=str(e),
+                error_type=type(e).__name__,
+                section_type=section_type,
+                section_length=len(section_content)
+            )
+            
+            # Return minimal empty plan in case of error
+            return {
+                "section_type": section_type,
+                "summary": f"Unable to generate optimization plan for {section_type} section due to an error.",
+                "recommendations": [],
+                "keywords_to_add": [],
+                "formatting_suggestions": [],
+                "error": str(e)
+            }
+    
+    def _detect_section_type(self, section_content: str) -> str:
+        """
+        Detect the section type from content by looking for common patterns.
+        
+        Args:
+            section_content: Content of a specific resume section
+            
+        Returns:
+            String indicating the section type
+        """
+        # Check for common section indicators in content
+        section_content_lower = section_content.lower()
+        
+        # Define patterns for each section type
+        section_patterns = {
+            "summary": ["summary", "objective", "profile", "about me"],
+            "experience": ["experience", "employment", "work history", "professional background"],
+            "education": ["education", "degree", "university", "college", "academic"],
+            "skills": ["skills", "technologies", "competencies", "expertise", "proficient in"],
+            "projects": ["projects", "portfolio", "case studies", "research"],
+            "certifications": ["certifications", "certificates", "licenses", "credentials"]
+        }
+        
+        # Check for patterns in the content
+        for section_type, patterns in section_patterns.items():
+            if any(pattern in section_content_lower for pattern in patterns):
+                return section_type
+        
+        # Default to other if no match
+        return "other"
     
     async def _implement_optimization_plan(self, resume_content: str, plan: CustomizationPlan) -> str:
         """
@@ -327,7 +499,7 @@ class CustomizationService:
             Optimized resume content with recommendations applied
         """
         # For now, we'll use the OpenAI implementation service to apply the recommendations
-        # Since this is just for evaluation purposes in the feedback loop, we don't need to store versions
+        # This remains largely unchanged as implementation is not parallelized currently
         
         # Create a simplified implementation message
         implementation_message = {
@@ -410,6 +582,7 @@ class CustomizationService:
     async def _store_plan(self, resume_id: str, job_id: str, plan: CustomizationPlan) -> None:
         """
         Store the customization plan for future reference.
+        This function remains largely unchanged.
         
         Args:
             resume_id: Resume ID
@@ -427,14 +600,18 @@ class CustomizationService:
             # Convert recommendations to a list of dicts for JSON storage
             recommendations_json = []
             for rec in plan.recommendations:
-                recommendations_json.append({
-                    "section": rec.section,
-                    "what": rec.what,
-                    "why": rec.why,
-                    "before_text": rec.before_text,
-                    "after_text": rec.after_text,
-                    "description": rec.description
-                })
+                # Handle both dictionary and object formats
+                if isinstance(rec, dict):
+                    recommendations_json.append(rec)
+                else:
+                    recommendations_json.append({
+                        "section": rec.section,
+                        "what": rec.what,
+                        "why": rec.why,
+                        "before_text": rec.before_text,
+                        "after_text": rec.after_text,
+                        "description": rec.description
+                    })
             
             # Create a new plan record
             db_plan = CustomizationPlanModel(
@@ -476,14 +653,14 @@ class CustomizationService:
 
 
 # Factory function to create a customization service
-def get_customization_service(db: Session = Depends(get_db)) -> CustomizationService:
+def get_parallel_customization_service(db: Session = Depends(get_db)) -> ParallelCustomizationService:
     """
-    Create a customization service with all required dependencies.
+    Create a parallel customization service with all required dependencies.
     
     Args:
         db: Database session
         
     Returns:
-        Initialized CustomizationService
+        Initialized ParallelCustomizationService
     """
-    return CustomizationService(db)
+    return ParallelCustomizationService(db)
