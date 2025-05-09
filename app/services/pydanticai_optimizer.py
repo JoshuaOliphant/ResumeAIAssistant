@@ -547,6 +547,48 @@ class PydanticAIOptimizerService:
                 "error": str(e)
             }
     
+    async def analyze_content_and_create_plan(
+        self,
+        resume_content: str,
+        job_description_content: str,
+        basic_analysis: Dict,
+        customization_level: CustomizationLevel,
+        industry: Optional[str] = None
+    ) -> CustomizationPlan:
+        """
+        Public method that combines the evaluation and optimization steps for content-based analysis.
+        This method should be used when you have the actual content rather than database IDs.
+        
+        Args:
+            resume_content: The raw resume content as a string
+            job_description_content: The raw job description content as a string
+            basic_analysis: Results from the basic ATS analysis
+            customization_level: The level of customization to apply
+            industry: Optional industry context for better recommendations
+            
+        Returns:
+            A detailed customization plan with recommendations
+        """
+        # First evaluate the match
+        evaluation = await self.evaluate_match(
+            resume_content,
+            job_description_content,
+            basic_analysis,
+            customization_level,
+            industry
+        )
+        
+        # Then generate an optimization plan based on the evaluation
+        plan = await self.generate_optimization_plan_from_evaluation(
+            resume_content,
+            job_description_content,
+            evaluation,
+            customization_level,
+            industry
+        )
+        
+        return plan
+        
     async def evaluate_match(
         self, 
         resume_content: str, 
