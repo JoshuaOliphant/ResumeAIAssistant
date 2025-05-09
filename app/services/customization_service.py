@@ -77,7 +77,7 @@ class CustomizationService:
             industry=request.industry if request.industry else "not specified",
             using_extended_thinking=True
         )
-        evaluation = await self._evaluate_match(
+        evaluation = await self.evaluate_match(
             resume_content, 
             job_description, 
             basic_analysis,
@@ -107,7 +107,7 @@ class CustomizationService:
             industry=request.industry if request.industry else "not specified",
             using_extended_thinking=True
         )
-        plan = await self._generate_optimization_plan(
+        plan = await self.generate_optimization_plan(
             resume_content, 
             job_description, 
             evaluation,
@@ -231,7 +231,7 @@ class CustomizationService:
                 "error": str(e)
             }
     
-    async def _evaluate_match(
+    async def evaluate_match(
         self, 
         resume_content: str, 
         job_description: str, 
@@ -269,8 +269,11 @@ class CustomizationService:
             customization_level=level,
             industry=industry
         )
+        
+    # Keep backward compatibility with the old method name
+    _evaluate_match = evaluate_match
     
-    async def _generate_optimization_plan(
+    async def generate_optimization_plan(
         self, 
         resume_content: str, 
         job_description: str, 
@@ -308,6 +311,9 @@ class CustomizationService:
             customization_level=level,
             industry=industry
         )
+        
+    # Keep backward compatibility with the old method name
+    _generate_optimization_plan = generate_optimization_plan
     
     async def _implement_optimization_plan(self, resume_content: str, plan: CustomizationPlan) -> str:
         """
