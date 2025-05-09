@@ -217,10 +217,13 @@ def get_task_complexity_from_content(
     # Count sections (based on markdown headings)
     section_count = content.count('\n#') + content.count('\n##') + content.count('\n###')
     if section_count == 0:
-        # Fallback counting - look for common section names
+        # Fallback counting - look for common section names at beginning of lines
         common_sections = ["experience", "education", "skills", "projects", "summary", 
                           "objective", "certifications", "awards", "publications"]
-        section_count = sum(1 for section in common_sections if section.lower() in content.lower())
+        # Look for section-like patterns (word at beginning of line or after newline)
+        section_count = sum(1 for section in common_sections 
+                          if f"\n{section.lower()}" in content.lower() 
+                          or content.lower().startswith(section.lower()))
     
     # Count potential keywords
     # This is a very simple approximation - in a real implementation, 

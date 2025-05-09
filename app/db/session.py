@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import QueuePool
 
 from app.core.config import settings
 
@@ -8,11 +9,10 @@ from app.core.config import settings
 engine = create_engine(
     settings.DATABASE_URL, 
     connect_args={"check_same_thread": False},  # SQLite-specific option
-    # Adding connection pooling to reduce connection overhead
+    # Modified connection pooling settings appropriate for SQLite
+    poolclass=QueuePool,
     pool_pre_ping=True,
-    pool_recycle=3600,
-    pool_size=10,
-    max_overflow=20
+    pool_size=5
 )
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 

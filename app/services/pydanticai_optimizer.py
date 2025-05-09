@@ -570,7 +570,7 @@ class PydanticAIOptimizerService:
             A detailed customization plan with recommendations
         """
         # First evaluate the match
-        evaluation = await self._evaluate_match(
+        evaluation = await self.evaluate_match(
             resume_content,
             job_description_content,
             basic_analysis,
@@ -579,7 +579,7 @@ class PydanticAIOptimizerService:
         )
         
         # Then generate an optimization plan based on the evaluation
-        plan = await self._generate_optimization_plan(
+        plan = await self.generate_optimization_plan_from_evaluation(
             resume_content,
             job_description_content,
             evaluation,
@@ -589,7 +589,7 @@ class PydanticAIOptimizerService:
         
         return plan
         
-    async def _evaluate_match(
+    async def evaluate_match(
         self, 
         resume_content: str, 
         job_description: str, 
@@ -845,7 +845,44 @@ class PydanticAIOptimizerService:
                 "experience_preservation_check": "Could not verify experience preservation due to evaluation error."
             }
     
-    async def _generate_optimization_plan(
+    async def analyze_content_and_create_plan(
+        self, 
+        resume_content: str, 
+        job_description: str, 
+        basic_analysis: Dict, 
+        customization_level: CustomizationLevel
+    ) -> CustomizationPlan:
+        """
+        Analyze resume content and generate a customization plan in one step.
+        
+        Args:
+            resume_content: The resume content as text
+            job_description: The job description content as text
+            basic_analysis: Results from basic ATS analysis
+            customization_level: Level of customization to apply
+            
+        Returns:
+            CustomizationPlan with recommendations
+        """
+        # First evaluate the match
+        evaluation = await self.evaluate_match(
+            resume_content,
+            job_description,
+            basic_analysis,
+            customization_level
+        )
+        
+        # Then generate the plan based on the evaluation
+        plan = await self.generate_optimization_plan_from_evaluation(
+            resume_content,
+            job_description,
+            evaluation,
+            customization_level
+        )
+        
+        return plan
+        
+    async def generate_optimization_plan_from_evaluation(
         self, 
         resume_content: str, 
         job_description: str, 
