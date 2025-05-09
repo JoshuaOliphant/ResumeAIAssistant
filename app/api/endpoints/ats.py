@@ -232,19 +232,11 @@ async def analyze_content_and_generate_plan(
             analysis_request.job_description_content
         )
         
-        # Use the customization service's methods directly since we don't have IDs
-        evaluation = await customization_service.evaluate_match(
+        # Use the customization service's public method for content-based analysis and planning
+        plan = await customization_service.analyze_content_and_create_plan(
             analysis_request.resume_content,
             analysis_request.job_description_content,
             basic_analysis,
-            customization_level
-        )
-        
-        # Generate the plan based on the evaluation
-        plan = await customization_service.generate_optimization_plan_from_evaluation(
-            analysis_request.resume_content,
-            analysis_request.job_description_content,
-            evaluation,
             customization_level
         )
         
