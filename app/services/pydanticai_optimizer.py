@@ -280,7 +280,7 @@ class PydanticAIOptimizerService:
             industry=industry if industry else "not specified",
             using_extended_thinking="claude-3-7" in settings.PYDANTICAI_EVALUATOR_MODEL
         )
-        evaluation = await self._evaluate_match(
+        evaluation = await self.evaluate_match(
             resume_content, 
             job_description, 
             basic_analysis,
@@ -310,7 +310,7 @@ class PydanticAIOptimizerService:
             industry=industry if industry else "not specified",
             using_extended_thinking="claude-3-7" in settings.PYDANTICAI_OPTIMIZER_MODEL
         )
-        plan = await self._generate_optimization_plan(
+        plan = await self.generate_optimization_plan_from_evaluation(
             resume_content, 
             job_description, 
             evaluation,
