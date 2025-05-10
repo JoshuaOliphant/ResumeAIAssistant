@@ -29,10 +29,10 @@ try:
     logfire.info("Successfully initialized SQLite database")
 except Exception as e:
     logfire.error(
-        "Failed to initialize SQLite database", 
-        error=str(e), 
+        "Failed to initialize SQLite database",
+        error=str(e),
         error_type=type(e).__name__,
-        traceback=logfire.format_exception(e)
+        traceback=str(sys.exc_info())
     )
     sys.exit(1)
 
