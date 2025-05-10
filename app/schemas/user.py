@@ -1,11 +1,12 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from pydantic import BaseModel, EmailStr, Field, validator
 
 
 class UserBase(BaseModel):
     """Base schema for user data"""
+
     email: EmailStr
     username: str
     full_name: Optional[str] = None
@@ -13,24 +14,27 @@ class UserBase(BaseModel):
 
 class UserCreate(UserBase):
     """Schema for creating a new user"""
+
     password: str = Field(..., min_length=8)
-    
-    @validator('password')
+
+    @validator("password")
     def password_strength(cls, v):
         """Validate password strength"""
         if len(v) < 8:
-            raise ValueError('Password must be at least 8 characters long')
+            raise ValueError("Password must be at least 8 characters long")
         return v
 
 
 class UserLogin(BaseModel):
     """Schema for user login"""
+
     email: EmailStr
     password: str
 
 
 class UserUpdate(BaseModel):
     """Schema for updating a user"""
+
     email: Optional[EmailStr] = None
     username: Optional[str] = None
     full_name: Optional[str] = None
@@ -39,6 +43,7 @@ class UserUpdate(BaseModel):
 
 class UserInDB(UserBase):
     """Schema for user in database"""
+
     id: str
     is_active: bool
     created_at: datetime
@@ -50,16 +55,19 @@ class UserInDB(UserBase):
 
 class User(UserInDB):
     """Schema for user response"""
+
     pass
 
 
 class Token(BaseModel):
     """Schema for JWT token"""
+
     access_token: str
     token_type: str = "bearer"
 
 
 class TokenData(BaseModel):
     """Schema for JWT token data"""
+
     email: Optional[str] = None
     user_id: Optional[str] = None

@@ -1,20 +1,24 @@
 from datetime import datetime
-from typing import List, Optional, Any
-from pydantic import BaseModel, Field, validator
+from typing import List, Optional
+
+from pydantic import BaseModel, Field
 
 
 class ResumeBase(BaseModel):
     """Base schema for resume data"""
+
     title: str
 
 
 class ResumeCreate(ResumeBase):
     """Schema for creating a new resume"""
+
     content: str = Field(..., description="Resume content in Markdown format")
 
 
 class ResumeVersionBase(BaseModel):
     """Base schema for resume version data"""
+
     content: str
     version_number: int
     is_customized: bool = False
@@ -24,6 +28,7 @@ class ResumeVersionBase(BaseModel):
 
 class ResumeVersionCreate(BaseModel):
     """Schema for creating a new resume version"""
+
     content: str
     is_customized: bool = False
     job_description_id: Optional[str] = None
@@ -31,6 +36,7 @@ class ResumeVersionCreate(BaseModel):
 
 class ResumeVersion(ResumeVersionBase):
     """Schema for a resume version"""
+
     id: str
     resume_id: str
 
@@ -40,6 +46,7 @@ class ResumeVersion(ResumeVersionBase):
 
 class Resume(ResumeBase):
     """Schema for a resume with its most recent version"""
+
     id: str
     created_at: datetime
     updated_at: datetime
@@ -51,6 +58,7 @@ class Resume(ResumeBase):
 
 class ResumeDetail(Resume):
     """Schema for a resume with all its versions"""
+
     versions: List[ResumeVersion]
 
     class Config:
@@ -59,13 +67,18 @@ class ResumeDetail(Resume):
 
 class SectionDiffInfo(BaseModel):
     """Schema for section-level diff information"""
-    status: str  # added, removed, unchanged, minor_changes, moderate_changes, major_changes
+
+    status: (
+        str  # added, removed, unchanged, minor_changes, moderate_changes, major_changes
+    )
     change_percentage: float
     content_length: int
     stats: Optional[dict] = None
 
+
 class ResumeDiffResponse(BaseModel):
     """Schema for a resume diff view response"""
+
     id: str
     title: str
     original_content: str
@@ -78,5 +91,6 @@ class ResumeDiffResponse(BaseModel):
 
 class ResumeUpdate(BaseModel):
     """Schema for updating a resume"""
+
     title: Optional[str] = None
     content: Optional[str] = None

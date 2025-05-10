@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 import logfire
 import traceback
@@ -7,20 +7,19 @@ from app.db.session import get_db
 from app.models.resume import Resume, ResumeVersion
 from app.models.job import JobDescription
 from app.schemas.ats import (
-    ATSAnalysisRequest, 
+    ATSAnalysisRequest,
     ATSAnalysisResponse,
     ATSContentAnalysisRequest,
     ATSContentAnalysisResponse
 )
 from app.schemas.customize import (
-    CustomizationPlanRequest, 
-    CustomizationPlan, 
+    CustomizationPlanRequest,
+    CustomizationPlan,
     CustomizationLevel
 )
 
 from app.services.ats_service import analyze_resume_for_ats
 from app.services.pydanticai_optimizer import get_pydanticai_optimizer_service
-from app.services.customization_service import get_customization_service, CustomizationService
 
 router = APIRouter()
 
@@ -32,7 +31,7 @@ async def analyze_resume(
 ):
     """
     Analyze a resume against a job description for ATS compatibility.
-    
+
     - **resume_id**: ID of the resume to analyze
     - **job_description_id**: ID of the job description to compare against
     """
@@ -40,23 +39,23 @@ async def analyze_resume(
     resume = db.query(Resume).filter(Resume.id == analysis_request.resume_id).first()
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
-    
+
     # Get the latest version of the resume
     resume_version = db.query(ResumeVersion).filter(
         ResumeVersion.resume_id == analysis_request.resume_id
     ).order_by(ResumeVersion.version_number.desc()).first()
-    
+
     if not resume_version:
         raise HTTPException(status_code=404, detail="Resume content not found")
-    
+
     # Verify the job description exists
     job = db.query(JobDescription).filter(JobDescription.id == analysis_request.job_description_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job description not found")
-    
+
     # Perform ATS analysis
     analysis_result = await analyze_resume_for_ats(resume_version.content, job.description)
-    
+
     # Structure the response
     response = ATSAnalysisResponse(
         resume_id=analysis_request.resume_id,
@@ -70,7 +69,7 @@ async def analyze_resume(
         confidence=analysis_result.get("confidence", "medium"),
         keyword_density=analysis_result.get("keyword_density", 0.0)
     )
-    
+
     return response
 
 
@@ -83,11 +82,11 @@ async def analyze_and_generate_plan(
     """
     Analyze a resume against a job description and generate a customization plan in one step.
     This implements the evaluator-optimizer pattern described in the Anthropic blog.
-    
+
     - **resume_id**: ID of the resume to analyze
     - **job_description_id**: ID of the job description to compare against
     - **customization_level**: Strength of customization (1=conservative, 2=balanced, 3=extensive)
-    
+
     Returns a detailed customization plan with specific recommendations.
     """
     logfire.info(
@@ -96,11 +95,11 @@ async def analyze_and_generate_plan(
         job_id=request.job_description_id,
         customization_level=customization_level.name
     )
-    
+
     try:
         # Get the PydanticAI optimizer service
         customization_service = get_pydanticai_optimizer_service(db)
-        
+
         # Create a plan request object
         plan_request = CustomizationPlanRequest(
             resume_id=request.resume_id,
@@ -108,19 +107,19 @@ async def analyze_and_generate_plan(
             customization_strength=customization_level,
             ats_analysis=None  # Let the service perform the basic analysis
         )
-        
+
         # Generate the plan using our service
         plan = await customization_service.generate_customization_plan(plan_request)
-        
+
         logfire.info(
             "Analyze-and-plan completed successfully",
             resume_id=request.resume_id,
             job_id=request.job_description_id,
             recommendation_count=len(plan.recommendations)
         )
-        
+
         return plan
-        
+
     except ValueError as e:
         # Handle errors for missing resources
         error_message = str(e)
@@ -130,12 +129,12 @@ async def analyze_and_generate_plan(
             resume_id=request.resume_id,
             job_id=request.job_description_id
         )
-        
+
         if "not found" in error_message.lower():
             raise HTTPException(status_code=404, detail=error_message)
         else:
             raise HTTPException(status_code=400, detail=error_message)
-            
+
     except Exception as e:
         # Handle unexpected errors
         logfire.error(
@@ -147,7 +146,7 @@ async def analyze_and_generate_plan(
             job_id=request.job_description_id
         )
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"An error occurred during analyze-and-plan: {str(e)}"
         )
 
@@ -158,19 +157,19 @@ async def analyze_resume_content(
 ):
     """
     Analyze resume content against a job description for ATS compatibility.
-    
+
     - **resume_content**: The content of the resume to analyze
     - **job_description_content**: The content of the job description to compare against
-    
+
     Returns a detailed analysis of how well the resume matches the job description.
     """
     try:
         # Perform ATS analysis directly on the content
         analysis_result = await analyze_resume_for_ats(
-            analysis_request.resume_content, 
+            analysis_request.resume_content,
             analysis_request.job_description_content
         )
-        
+
         # Structure the response
         response = ATSContentAnalysisResponse(
             match_score=analysis_result["match_score"],
@@ -182,9 +181,9 @@ async def analyze_resume_content(
             confidence=analysis_result.get("confidence", "medium"),
             keyword_density=analysis_result.get("keyword_density", 0.0)
         )
-        
+
         return response
-        
+
     except Exception as e:
         # Handle unexpected errors
         logfire.error(
@@ -194,7 +193,7 @@ async def analyze_resume_content(
             traceback=traceback.format_exception(type(e), e, e.__traceback__)
         )
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"An error occurred during content analysis: {str(e)}"
         )
 
@@ -208,11 +207,11 @@ async def analyze_content_and_generate_plan(
     """
     Analyze resume content against a job description and generate a customization plan in one step.
     This implements the evaluator-optimizer pattern described in the Anthropic blog.
-    
+
     - **resume_content**: The content of the resume to analyze
     - **job_description_content**: The content of the job description to compare against
     - **customization_level**: Strength of customization (1=conservative, 2=balanced, 3=extensive)
-    
+
     Returns a detailed customization plan with specific recommendations.
     """
     logfire.info(
@@ -221,17 +220,17 @@ async def analyze_content_and_generate_plan(
         job_description_length=len(analysis_request.job_description_content),
         customization_level=customization_level.name
     )
-    
+
     try:
         # Get the PydanticAI optimizer service
         customization_service = get_pydanticai_optimizer_service(db)
-        
+
         # First, perform the basic analysis
         basic_analysis = await analyze_resume_for_ats(
-            analysis_request.resume_content, 
+            analysis_request.resume_content,
             analysis_request.job_description_content
         )
-        
+
         # Use the customization service's public method for content-based analysis and planning
         plan = await customization_service.analyze_content_and_create_plan(
             analysis_request.resume_content,
@@ -239,14 +238,14 @@ async def analyze_content_and_generate_plan(
             basic_analysis,
             customization_level
         )
-        
+
         logfire.info(
             "Content-based analyze-and-plan completed successfully",
             recommendation_count=len(plan.recommendations)
         )
-        
+
         return plan
-        
+
     except Exception as e:
         # Handle unexpected errors
         logfire.error(
@@ -256,6 +255,6 @@ async def analyze_content_and_generate_plan(
             traceback=traceback.format_exception(type(e), e, e.__traceback__)
         )
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"An error occurred during content-based analyze-and-plan: {str(e)}"
         )

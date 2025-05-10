@@ -34,7 +34,7 @@ Usage examples:
 
 import logfire
 from enum import Enum
-from typing import Dict, Any, Optional, List, Tuple, Union
+from typing import Dict, Any, Optional, Tuple
 import math
 
 # Task complexity defines how much thinking a task requires
