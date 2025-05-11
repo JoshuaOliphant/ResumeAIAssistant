@@ -1,7 +1,8 @@
 import re
 import nltk
-from collections import defaultdict
-from typing import Dict, List, Optional, Set, Tuple, Any
+import time
+from collections import defaultdict, OrderedDict
+from typing import Dict, List, Optional, Set, Tuple, Any, Union
 
 import logfire
 
@@ -15,6 +16,76 @@ nltk_initialized, spacy_model = initialize_nlp()
 # Now import NLTK modules after initialization
 from nltk.corpus import stopwords
 from nltk.util import ngrams
+
+# Create a simple LRU cache with size limit and time-based expiration
+class LRUCache:
+    """A simple Least Recently Used (LRU) cache with size limit and time-based expiration."""
+    
+    def __init__(self, max_size: int = 100, ttl: int = 3600):
+        """
+        Initialize the LRU cache.
+        
+        Args:
+            max_size: Maximum number of items to store in the cache
+            ttl: Time to live in seconds (default: 1 hour)
+        """
+        self.cache = OrderedDict()
+        self.max_size = max_size
+        self.ttl = ttl
+        try:
+            logfire.info(f"Initialized LRU cache with max_size={max_size}, ttl={ttl}")
+        except:
+            # Ignore logging errors in tests
+            pass
+    
+    def get(self, key: str) -> Optional[Any]:
+        """
+        Get an item from the cache.
+        
+        Args:
+            key: Cache key
+            
+        Returns:
+            Cached value or None if not found or expired
+        """
+        if key not in self.cache:
+            return None
+        
+        timestamp, value = self.cache[key]
+        current_time = time.time()
+        
+        # Check if the item is expired
+        if current_time - timestamp > self.ttl:
+            del self.cache[key]
+            return None
+        
+        # Move to the end to mark as recently used
+        self.cache.move_to_end(key)
+        
+        return value
+    
+    def put(self, key: str, value: Any) -> None:
+        """
+        Add an item to the cache.
+        
+        Args:
+            key: Cache key
+            value: Value to cache
+        """
+        # If key exists, update it and move to the end
+        if key in self.cache:
+            self.cache.move_to_end(key)
+        
+        # Add new entry with current timestamp
+        self.cache[key] = (time.time(), value)
+        
+        # If cache is over-sized, remove the oldest item (first item in OrderedDict)
+        if len(self.cache) > self.max_size:
+            self.cache.popitem(last=False)
+
+# Initialize caches
+# Cache for extracted keywords (max 50 items, 1 hour TTL)
+keywords_cache = LRUCache(max_size=50, ttl=3600)
 
 # Category definitions with potential indicators
 REQUIREMENT_CATEGORIES = {
@@ -675,6 +746,24 @@ def extract_keywords_with_weights(job_description: str, sections: Dict[str, str]
     Returns:
         Dictionary mapping keywords to importance weights
     """
+    # Create a cache key based on job description content hash
+    # This avoids storing potentially large strings as keys
+    cache_key = f"keywords_{hash(job_description)}"
+    
+    # Check cache first
+    cached_result = keywords_cache.get(cache_key)
+    if cached_result is not None:
+        try:
+            logfire.info(
+                "Retrieved keywords from cache",
+                cache_key=cache_key,
+                keyword_count=len(cached_result)
+            )
+        except:
+            # Ignore logging errors in tests
+            pass
+        return cached_result
+    
     # Get stopwords
     stop_words = set(stopwords.words('english'))
     
@@ -732,11 +821,19 @@ def extract_keywords_with_weights(job_description: str, sections: Dict[str, str]
     # Filter to top keywords and normalize weights
     top_keywords = get_top_keywords(keyword_weights, max_keywords=50)
     
-    logfire.info(
-        "Extracted keywords with weights",
-        keyword_count=len(top_keywords),
-        top_keywords=list(top_keywords.keys())[:10]
-    )
+    # Store in cache
+    keywords_cache.put(cache_key, top_keywords)
+    
+    try:
+        logfire.info(
+            "Extracted keywords with weights",
+            keyword_count=len(top_keywords),
+            top_keywords=list(top_keywords.keys())[:10],
+            cached=False
+        )
+    except:
+        # Ignore logging errors in tests
+        pass
     
     return top_keywords
 

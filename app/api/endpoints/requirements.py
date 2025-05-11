@@ -119,7 +119,7 @@ async def extract_requirements(
 
 @router.post(
     "/extract-from-content",
-    response_model=KeyRequirements,
+    response_model=KeyRequirementsResponse,
     status_code=status.HTTP_200_OK
 )
 async def extract_requirements_from_content(
@@ -148,13 +148,25 @@ async def extract_requirements_from_content(
             company=request.company
         )
         
+        # Create response with specified job_description_id (use a placeholder)
+        response = KeyRequirementsResponse(
+            job_description_id="from_content",
+            job_title=requirements.job_title,
+            company=requirements.company,
+            job_type=requirements.job_type,
+            categories=requirements.categories,
+            keywords=requirements.keywords,
+            confidence=requirements.confidence,
+            total_requirements_count=requirements.total_requirements_count
+        )
+        
         logfire.info(
             "Key requirements extraction from content completed",
             requirement_count=requirements.total_requirements_count,
             confidence=requirements.confidence
         )
         
-        return requirements
+        return response
         
     except Exception as e:
         logfire.error(
