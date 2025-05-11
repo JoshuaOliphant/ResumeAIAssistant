@@ -154,11 +154,20 @@ class EnhancedCustomizationService:
         )
         
         # Store the plan for future reference
-        await self._store_plan(
-            request.resume_id,
-            request.job_description_id,
-            plan
-        )
+        try:
+            await self._store_plan(
+                request.resume_id,
+                request.job_description_id,
+                plan
+            )
+        except Exception as e:
+            logfire.error(
+                "Error storing customization plan",
+                error=str(e),
+                resume_id=request.resume_id,
+                job_id=request.job_description_id
+            )
+            # Don't raise the exception since this is non-critical
         
         # Log overall performance
         total_duration = time.time() - start_time

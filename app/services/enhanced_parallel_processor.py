@@ -668,7 +668,21 @@ class EnhancedTaskScheduler(ParallelTaskScheduler):
                 provider = "openai"
             elif "google" in model or "gemini" in model:
                 provider = "google"
+            else:
+                # Extract provider from the model format (provider:model_name)
+                parts = model.split(":")
+                if len(parts) > 1:
+                    provider = parts[0]
         
+        # Ensure provider is tracked in circuit breakers
+        if provider and provider not in self.circuit_breakers:
+            self.circuit_breakers[provider] = CircuitBreaker(
+                name=provider,
+                failure_threshold=5,
+                recovery_timeout=60,
+                half_open_max_calls=2
+            )
+            
         # Check circuit breaker if provider is identified
         if provider and provider in self.circuit_breakers:
             breaker = self.circuit_breakers[provider]
@@ -775,7 +789,25 @@ class EnhancedTaskScheduler(ParallelTaskScheduler):
             task.error = None
             
             # Check if we should use a fallback model
-            if "TimeoutError" in str(type(error)) or "RateLimitError" in str(type(error)):
+            # Look for various error types that indicate we should try a fallback
+            error_type = type(error).__name__
+            error_str = str(error).lower()
+            
+            # List of error indicators that suggest we should try a fallback model
+            fallback_indicators = [
+                "timeout", "rate limit", "capacity", "overloaded", 
+                "too many requests", "retry", "throttle", "quota", 
+                "server error", "service unavailable", "busy", "limit exceeded"
+            ]
+            
+            # Check if any of the indicators are present in the error
+            should_use_fallback = (
+                "TimeoutError" in error_type or 
+                "RateLimitError" in error_type or
+                any(indicator in error_str for indicator in fallback_indicators)
+            )
+            
+            if should_use_fallback:
                 # Try a fallback model if available
                 model_config = task.kwargs.get("model_config", {})
                 fallbacks = model_config.get("fallback_config", [])
@@ -790,7 +822,9 @@ class EnhancedTaskScheduler(ParallelTaskScheduler):
                         task_id=task.id,
                         task_name=task.name,
                         original_model=original_model,
-                        fallback_model=fallback_model
+                        fallback_model=fallback_model,
+                        error_type=error_type,
+                        error=str(error)
                     )
                     
                     # Update model configuration
@@ -956,12 +990,25 @@ class EnhancedTaskScheduler(ParallelTaskScheduler):
                     coro = self.run_task_with_semaphore(task, provider)
                     coros.append(coro)
                 
-                # Start tasks and continue - don't wait for completion
+                # Start tasks with proper tracking and cleanup
+                pending_asyncio_tasks = []
                 for coro in coros:
-                    asyncio.create_task(coro)
-                    
+                    task = asyncio.create_task(coro)
+                    pending_asyncio_tasks.append(task)
+                
                 # Give the tasks a chance to start and update their status
                 await asyncio.sleep(0.01)
+                
+                # Clean up completed tasks to prevent resource leaks
+                for task in pending_asyncio_tasks[:]:
+                    if task.done():
+                        try:
+                            # Retrieve result to prevent unhandled exceptions
+                            task.result()
+                        except Exception:
+                            # Exceptions are already handled in execute_task
+                            pass
+                        pending_asyncio_tasks.remove(task)
                 
                 # Update pending tasks
                 pending_tasks = {task_id for task_id, task in self.tasks.items() 
@@ -1357,9 +1404,10 @@ class ProcessingCache:
             
         # Check TTL
         current_time = time.time()
-        last_access = self.access_times.get(key, 0)
+        entry = self.cache[key]
+        timestamp = entry.get("timestamp", 0)
         
-        if current_time - last_access > self.ttl_seconds:
+        if current_time - timestamp > self.ttl_seconds:
             # Expired
             del self.cache[key]
             del self.access_times[key]
@@ -1368,7 +1416,7 @@ class ProcessingCache:
         # Update access time
         self.access_times[key] = current_time
         
-        return self.cache[key]
+        return entry.get("value")
     
     def set(self, key: str, value: Any) -> None:
         """
@@ -1380,14 +1428,21 @@ class ProcessingCache:
         """
         # Check if cache is full and evict least recently used item if needed
         if len(self.cache) >= self.max_size and key not in self.cache:
-            # Find least recently used item
-            lru_key = min(self.access_times, key=self.access_times.get)
-            del self.cache[lru_key]
-            del self.access_times[lru_key]
+            # Find least recently used item if access_times is not empty
+            if self.access_times:
+                lru_key = min(self.access_times, key=self.access_times.get)
+                if lru_key in self.cache:
+                    del self.cache[lru_key]
+                if lru_key in self.access_times:
+                    del self.access_times[lru_key]
         
-        # Store value
-        self.cache[key] = value
-        self.access_times[key] = time.time()
+        current_time = time.time()
+        # Store value with timestamp
+        self.cache[key] = {
+            "value": value,
+            "timestamp": current_time
+        }
+        self.access_times[key] = current_time
     
     def generate_key(
         self,
@@ -1663,7 +1718,10 @@ class EnhancedParallelProcessor(ParallelProcessor):
         
         # Merge lists
         for list_key in ["matching_keywords", "missing_keywords", "improvements", "section_scores"]:
-            merged[list_key] = list(merged.get(list_key, []))
+            if list_key not in merged:
+                merged[list_key] = []
+            else:
+                merged[list_key] = list(merged[list_key])
             
             # Add items from other results
             for result in results[1:]:
@@ -1692,7 +1750,7 @@ class EnhancedParallelProcessor(ParallelProcessor):
             scores = [r.get("match_score", 0) for r in results]
             valid_scores = [s for s in scores if s > 0]
             if valid_scores:
-                merged["match_score"] = sum(valid_scores) // len(valid_scores)
+                merged["match_score"] = sum(valid_scores) / len(valid_scores)
         
         return merged
     
@@ -2038,7 +2096,7 @@ class EnhancedParallelProcessor(ParallelProcessor):
                 merged[list_key] = unique_recs
             else:
                 # For other lists, simple deduplication
-                if isinstance(merged[list_key][0], str):
+                if merged[list_key] and isinstance(merged[list_key][0], str):
                     merged[list_key] = list(set(merged[list_key]))
                 else:
                     # Complex objects - deduplicate based on string representation
