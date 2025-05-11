@@ -144,6 +144,9 @@ async def analyze_resume_for_ats(
     Returns:
         Dictionary with match score, matching keywords, missing keywords, and improvements
     """
+    # Start tracking processing time
+    start_time = time.time()
+    
     # Detect job type based on job description
     job_type = detect_job_type(job_description)
     
@@ -211,6 +214,19 @@ async def analyze_resume_for_ats(
                 'weight': SECTION_WEIGHTS.get(job_type, SECTION_WEIGHTS['default']).get(section, 1.0)
             })
     
+    # Calculate processing time
+    processing_time = time.time() - start_time
+    
+    # Log performance metrics
+    logfire.info(
+        "ATS analysis performance metrics",
+        processing_time=round(processing_time, 2),
+        resume_size=len(resume_content),
+        job_description_size=len(job_description),
+        section_count=len(resume_sections),
+        match_score=round(overall_score)
+    )
+    
     return {
         "match_score": round(overall_score),
         "matching_keywords": matching,
@@ -219,7 +235,8 @@ async def analyze_resume_for_ats(
         "job_type": job_type,
         "section_scores": section_analysis,
         "confidence": calculate_confidence(match_results),
-        "keyword_density": match_results.get('keyword_density', 0)
+        "keyword_density": match_results.get('keyword_density', 0),
+        "processing_time": processing_time
     }
 
 
