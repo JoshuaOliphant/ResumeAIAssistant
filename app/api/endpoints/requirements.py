@@ -56,17 +56,18 @@ async def extract_requirements(
             )
         
         # Check if user has access to job description
-        if current_user and job.user_id and job.user_id != current_user.id:
-            logfire.warning(
-                "User not authorized to access job description",
-                job_id=request.job_description_id,
-                user_id=current_user.id,
-                job_user_id=job.user_id
-            )
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Not authorized to access this job description"
-            )
+        if job.user_id:
+            if not current_user or job.user_id != current_user.id:
+                logfire.warning(
+                    "User not authorized to access job description",
+                    job_id=request.job_description_id,
+                    user_id=current_user.id if current_user else None,
+                    job_user_id=job.user_id
+                )
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Not authorized to access this job description"
+                )
         
         # Log extraction request
         logfire.info(
@@ -123,6 +124,7 @@ async def extract_requirements(
 )
 async def extract_requirements_from_content(
     request: KeyRequirementsContentRequest,
+    current_user: User = Depends(get_optional_current_user),
 ):
     """
     Extract key requirements from job description content.

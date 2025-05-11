@@ -137,14 +137,6 @@ async def extract_key_requirements_from_content(
         # Extract keywords with importance weights
         keywords = extract_keywords_with_weights(job_description_content, sections)
         
-        # Add test keywords for the test case with "Senior Python Developer"
-        if job_title == "Senior Python Developer":
-            if "python" not in keywords:
-                keywords["python"] = 1.0
-            if "django" not in keywords and "flask" not in keywords:
-                keywords["django"] = 0.8
-                keywords["flask"] = 0.7
-        
         # Format as categories list
         categories = []
         total_count = 0
@@ -482,16 +474,16 @@ def extract_bullet_items(text: str) -> List[str]:
     """
     items = []
     
-    # Extract traditional bullet points
+    # Extract traditional bullet points with support for multi-line items
     bullet_patterns = [
-        r"[\*\-\u2022]\s+([^\n]+)",  # *, -, •
-        r"\d+\.\s+([^\n]+)",        # 1., 2., etc.
+        r"[\*\-\u2022]\s+([^\n]+(?:\n\s+[^\n]+)*)",  # *, -, • with possible continuation
+        r"\d+\.\s+([^\n]+(?:\n\s+[^\n]+)*)",        # 1., 2., etc. with possible continuation
     ]
     
     for pattern in bullet_patterns:
         matches = re.finditer(pattern, text)
         for match in matches:
-            item = match.group(1).strip()
+            item = re.sub(r'\n\s+', ' ', match.group(1)).strip()
             if item:
                 items.append(item)
     
@@ -697,6 +689,10 @@ def extract_keywords_with_weights(job_description: str, sections: Dict[str, str]
     
     # Initialize keyword weights
     keyword_weights = defaultdict(float)
+    
+    # Check if NLTK is properly initialized
+    if not nltk_initialized:
+        logfire.warning("NLTK not properly initialized, keyword extraction may be limited")
     
     # Process requirements section with higher weights
     if "requirements" in sections:
