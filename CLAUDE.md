@@ -12,6 +12,7 @@
 - This project has a virtual environment that needs to be sourced.
 - After sourcing the virtual environment, `uv sync` can be used to sync the dependencies.
 - Use uv to start the application with `uv run uvicorn main:app --host 0.0.0.0 --port 5001 --reload`
+- Always source the virtual environment and use `uv sync` to install existing dependencies in pyproject.toml. If you need to install a new dependency, use `uv add`, never use pip.
 
 ## Project Architecture
 
