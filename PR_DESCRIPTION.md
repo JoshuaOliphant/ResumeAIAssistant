@@ -106,3 +106,7 @@ Run the demo with:
 ```
 python scripts/demo_smart_request.py --show-stats
 ```
+
+## Related Issues
+
+Resolves #8
