@@ -44,6 +44,64 @@ class TaskImportance(str, Enum):
     LOW = "low"               # Tasks with minimal impact on output
     BACKGROUND = "background" # Ancillary tasks with indirect impact on output
 
+# Circuit breaker implementation for model provider health
+class CircuitBreaker:
+    """
+    Implements a circuit breaker pattern to avoid making calls to failing model providers.
+    
+    This helps prevent waiting for timeouts when a service is down or degraded.
+    """
+    def __init__(self, failure_threshold=3, recovery_time_seconds=300):
+        self.failure_counts = {}  # provider -> failure count
+        self.circuit_open_until = {}  # provider -> datetime when circuit closes
+        self.failure_threshold = failure_threshold
+        self.recovery_time = timedelta(seconds=recovery_time_seconds)
+    
+    def record_failure(self, provider: str):
+        """Record a failure for a provider and potentially open the circuit"""
+        if provider not in self.failure_counts:
+            self.failure_counts[provider] = 0
+        
+        self.failure_counts[provider] += 1
+        
+        if self.failure_counts[provider] >= self.failure_threshold:
+            self.open_circuit(provider)
+            logfire.warning(
+                f"Circuit opened for provider {provider} due to repeated failures",
+                provider=provider,
+                failure_count=self.failure_counts[provider],
+                open_until=self.circuit_open_until.get(provider)
+            )
+    
+    def record_success(self, provider: str):
+        """Record a success for a provider and reset failure count"""
+        if provider in self.failure_counts:
+            self.failure_counts[provider] = 0
+        
+        if provider in self.circuit_open_until:
+            del self.circuit_open_until[provider]
+    
+    def open_circuit(self, provider: str):
+        """Open the circuit for a provider for the recovery time"""
+        self.circuit_open_until[provider] = datetime.now() + self.recovery_time
+    
+    def is_circuit_open(self, provider: str) -> bool:
+        """Check if the circuit is open for a provider"""
+        if provider not in self.circuit_open_until:
+            return False
+        
+        # Check if recovery time has elapsed
+        if datetime.now() > self.circuit_open_until[provider]:
+            # Allow one request through to test if service has recovered
+            del self.circuit_open_until[provider]
+            return False
+        
+        return True
+
+# Create circuit breaker instance with thread safety
+optimizer_circuit_breaker = CircuitBreaker()
+optimizer_circuit_breaker_lock = threading.Lock()
+
 # Cost tracking data store
 # Using a thread-safe dict for simplicity
 _cost_data_lock = threading.Lock()
@@ -340,18 +398,27 @@ def select_optimized_model(
     request_id = f"{task_name}_{int(time.time())}"
     
     # Check budget limits before proceeding
-    if not _check_budget_limits():
-        # Use most economical model if approaching budget limits
-        logfire.warning(
-            "Budget limit approaching, using economical model selection",
-            task_name=task_name,
-            budget_status="high_usage"
+    try:
+        budget_status = _get_budget_status()
+        
+        # If we're approaching limits, return False to trigger cost saving measures
+        if budget_status["overall_status"] in ["warning", "critical"]:
+            logfire.warning(
+                "Budget limit approaching, using economical model selection",
+                task_name=task_name,
+                budget_status="high_usage"
+            )
+            # Force economy tier selection
+            if user_override is None:
+                user_override = {}
+            user_override["tier"] = ModelTier.ECONOMY.value
+            user_override["cost_sensitivity"] = 2.0  # Highest cost sensitivity
+    except Exception as e:
+        logfire.error(
+            "Error checking budget limits, defaulting to normal operation",
+            error=str(e),
+            error_type=type(e).__name__
         )
-        # Force economy tier selection
-        if user_override is None:
-            user_override = {}
-        user_override["tier"] = ModelTier.ECONOMY.value
-        user_override["cost_sensitivity"] = 2.0  # Highest cost sensitivity
     
     # Classify the task
     task_complexity, task_importance = classify_task(
@@ -404,15 +471,26 @@ def select_optimized_model(
     # Convert preferred provider to enum if provided
     provider_enum = None
     if preferred_provider:
-        try:
-            from app.services.model_selector import ModelProvider
-            provider_enum = ModelProvider(preferred_provider)
-        except ValueError:
+        # Check if the preferred provider has an open circuit
+        with optimizer_circuit_breaker_lock:
+            provider_circuit_open = optimizer_circuit_breaker.is_circuit_open(preferred_provider)
+        
+        if provider_circuit_open:
             logfire.warning(
-                f"Unknown provider: {preferred_provider}, ignoring preference",
-                preferred_provider=preferred_provider,
-                valid_providers=[p.value for p in ModelProvider]
+                f"Circuit open for provider {preferred_provider}, ignoring preference",
+                preferred_provider=preferred_provider
             )
+            preferred_provider = None
+        else:
+            try:
+                from app.services.model_selector import ModelProvider
+                provider_enum = ModelProvider(preferred_provider)
+            except ValueError:
+                logfire.warning(
+                    f"Unknown provider: {preferred_provider}, ignoring preference",
+                    preferred_provider=preferred_provider,
+                    valid_providers=[p.value for p in ModelProvider]
+                )
     
     # Apply token optimization strategies based on task complexity
     optimization_strategy = TOKEN_OPTIMIZATION_STRATEGIES.get(
@@ -681,10 +759,41 @@ def track_token_usage(
         total_cost=round(total_cost, 4)
     )
     
+    # Record success in circuit breaker
+    # Extract provider from model name (e.g., "anthropic" from "anthropic:claude-3-7-sonnet-latest")
+    provider = model.split(':')[0] if ':' in model else model
+    with optimizer_circuit_breaker_lock:
+        optimizer_circuit_breaker.record_success(provider)
+    
     # Check if we should save a cost report (do this periodically)
     _maybe_save_cost_report()
     
     return cost_details
+
+def record_model_failure(
+    provider: str, 
+    error: Optional[str] = None, 
+    error_type: Optional[str] = None
+) -> None:
+    """
+    Record a model provider failure in the circuit breaker.
+    
+    Args:
+        provider: Provider name (e.g., 'anthropic', 'google', 'openai')
+        error: Optional error message
+        error_type: Optional error type
+    """
+    # Log the failure
+    logfire.error(
+        f"Model provider failure recorded: {provider}",
+        provider=provider,
+        error=error,
+        error_type=error_type
+    )
+    
+    # Record in circuit breaker
+    with optimizer_circuit_breaker_lock:
+        optimizer_circuit_breaker.record_failure(provider)
 
 def get_cost_report() -> Dict[str, Any]:
     """
@@ -929,19 +1038,27 @@ def _check_budget_limits() -> bool:
     Returns:
         True if within limits, False if approaching or exceeding limits
     """
-    budget_status = _get_budget_status()
-    
-    # If we're approaching limits, return False to trigger cost saving measures
-    if budget_status["overall_status"] in ["warning", "critical"]:
-        logfire.warning(
-            "Approaching budget limits",
-            daily_percent=round(budget_status["daily_percent"], 2),
-            monthly_percent=round(budget_status["monthly_percent"], 2),
-            status=budget_status["overall_status"]
+    try:
+        budget_status = _get_budget_status()
+        
+        # If we're approaching limits, return False to trigger cost saving measures
+        if budget_status["overall_status"] in ["warning", "critical"]:
+            logfire.warning(
+                "Approaching budget limits",
+                daily_percent=round(budget_status["daily_percent"], 2),
+                monthly_percent=round(budget_status["monthly_percent"], 2),
+                status=budget_status["overall_status"]
+            )
+            return False
+        
+        return True
+    except Exception as e:
+        logfire.error(
+            "Error checking budget limits, defaulting to normal operation",
+            error=str(e),
+            error_type=type(e).__name__
         )
-        return False
-    
-    return True
+        return True
 
 # Decorator for tracking model usage in functions
 def track_model_usage(task_name: str):
@@ -983,13 +1100,32 @@ def track_model_usage(task_name: str):
                 )
             
             # Call the original function
-            result = await func(*args, **kwargs)
-            
-            # TODO: In a real implementation, we would extract input and output token
-            # counts from the result and update the cost tracking
-            # This would require standardizing the return format from AI services
-            
-            return result
+            try:
+                result = await func(*args, **kwargs)
+                
+                # Try to extract token usage from the result (if available)
+                if hasattr(result, "_input_tokens") and hasattr(result, "_output_tokens"):
+                    model_name = model_config.get("model", "unknown") if model_config else "unknown"
+                    track_token_usage(
+                        model=model_name,
+                        task_name=task_name,
+                        request_id=request_id,
+                        input_tokens=getattr(result, "_input_tokens", 0),
+                        output_tokens=getattr(result, "_output_tokens", 0)
+                    )
+                
+                return result
+            except Exception as e:
+                # Record failure if possible
+                if model_config and "model" in model_config:
+                    model_name = model_config["model"]
+                    provider = model_name.split(':')[0] if ':' in model_name else model_name
+                    record_model_failure(
+                        provider=provider, 
+                        error=str(e),
+                        error_type=type(e).__name__
+                    )
+                raise e  # Re-raise the exception
         
         return wrapper
     

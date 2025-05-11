@@ -65,8 +65,10 @@ class CircuitBreaker:
         
         return True
 
-# Create a global circuit breaker instance
+# Create a global circuit breaker instance with thread safety
+import threading
 circuit_breaker = CircuitBreaker()
+circuit_breaker_lock = threading.Lock()
 
 # Import from PydanticAI directly - it's a core dependency
 from pydantic_ai import Agent
@@ -845,7 +847,9 @@ async def generate_optimization_plan(
         provider = model_name.split(':')[0] if ':' in model_name else model_name
         
         # Skip this provider if circuit is open and try a fallback instead
-        if circuit_breaker.is_circuit_open(provider):
+        with circuit_breaker_lock:
+            circuit_open = circuit_breaker.is_circuit_open(provider)
+        if circuit_open:
             logfire.warning(
                 f"Circuit open for provider {provider}, trying fallback",
                 provider=provider,
@@ -855,7 +859,9 @@ async def generate_optimization_plan(
             # Try to find a fallback from a different provider
             for fallback in fallback_chain:
                 fallback_provider = fallback.split(':')[0] if ':' in fallback else fallback
-                if not circuit_breaker.is_circuit_open(fallback_provider):
+                with circuit_breaker_lock:
+                    circuit_open = circuit_breaker.is_circuit_open(fallback_provider)
+                if not circuit_open:
                     logfire.info(
                         f"Using fallback model {fallback} due to open circuit",
                         original_provider=provider,
@@ -915,7 +921,8 @@ async def generate_optimization_plan(
                 )
                 
                 # Record successful call to provider
-                circuit_breaker.record_success(provider)
+                with circuit_breaker_lock:
+                    circuit_breaker.record_success(provider)
             except asyncio.TimeoutError:
                 api_duration = time.time() - api_start_time
                 logfire.error(
@@ -924,7 +931,8 @@ async def generate_optimization_plan(
                     duration_seconds=round(api_duration, 2),
                     timeout_seconds=TASK_TIMEOUT_SECONDS
                 )
-                circuit_breaker.record_failure(provider)
+                with circuit_breaker_lock:
+                    circuit_breaker.record_failure(provider)
                 raise asyncio.TimeoutError(f"Optimizer API call to {provider} timed out after {round(api_duration, 2)} seconds")
             
             # Calculate elapsed time
@@ -1001,7 +1009,8 @@ async def generate_optimization_plan(
             elapsed_time = time.time() - start_time
             
             # Record failure for this provider
-            circuit_breaker.record_failure(provider)
+            with circuit_breaker_lock:
+                circuit_breaker.record_failure(provider)
             
             # Log error
             logfire.error(
@@ -1020,7 +1029,8 @@ async def generate_optimization_plan(
             elapsed_time = time.time() - start_time
             
             # Record failure for this provider
-            circuit_breaker.record_failure(provider)
+            with circuit_breaker_lock:
+                circuit_breaker.record_failure(provider)
             
             # Log error
             logfire.error(
