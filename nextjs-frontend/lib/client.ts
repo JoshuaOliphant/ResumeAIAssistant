@@ -417,7 +417,8 @@ export const JobService = {
 export const ATSService = {
   async analyzeResume(
     resumeId: string,
-    jobDescriptionId: string
+    jobDescriptionId: string,
+    options?: { headers?: Record<string, string> }
   ): Promise<ATSAnalysisResult> {
     console.log('ATSService.analyzeResume - input params:', { resumeId, jobDescriptionId });
     const requestBody = JSON.stringify({
@@ -429,12 +430,15 @@ export const ATSService = {
     // Bypass NextJS API routes and go directly to the backend
     // to avoid path prefixing issues
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(options?.headers || {})
+    };
+    
     const response = await fetch(`${BACKEND_API_URL}/api/v1/ats/analyze`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
+      headers,
       body: requestBody,
     });
     
@@ -511,7 +515,8 @@ export const CustomizationService = {
     resumeId: string,
     jobDescriptionId: string,
     customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced',
-    customizationPlan?: any
+    customizationPlan?: any,
+    options?: { headers?: Record<string, string> }
   ): Promise<ResumeVersion> {
     console.log('customizeResume - input params:', { 
       resumeId, 
@@ -530,12 +535,15 @@ export const CustomizationService = {
     
     // Bypass NextJS API routes and go directly to the backend
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(options?.headers || {})
+    };
+    
     const response = await fetch(`${BACKEND_API_URL}/api/v1/customize/`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
+      headers,
       body: requestBody,
     });
     
@@ -580,7 +588,8 @@ export const CustomizationService = {
     resumeId: string,
     jobDescriptionId: string,
     customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced',
-    atsAnalysis?: any
+    atsAnalysis?: any,
+    options?: { headers?: Record<string, string> }
   ): Promise<any> {
     console.log('generateCustomizationPlan - input params:', { 
       resumeId, 
@@ -599,12 +608,15 @@ export const CustomizationService = {
     // Use NextJS API routes to handle the request instead of direct backend call
     // This ensures proper error handling and authentication forwarding
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      ...(options?.headers || {})
+    };
+    
     const response = await fetch('/api/customize/plan', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token && { Authorization: `Bearer ${token}` }),
-      },
+      headers,
       body: requestBody,
     });
     
