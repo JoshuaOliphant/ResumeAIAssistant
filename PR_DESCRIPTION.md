@@ -1,81 +1,113 @@
-# Enhanced Parallel Processing Architecture for Resume Customization
+# Smart Request Handling Implementation
 
 ## Summary
 
-This PR implements a significantly enhanced parallel processing architecture for resume customization, addressing Issue #1. The implementation provides major improvements in performance, reliability, and result quality through several advanced features:
+This PR implements a comprehensive smart request handling system that optimizes API requests based on complexity, priority, and resource requirements. The system significantly enhances the performance, reliability, and cost-effectiveness of API requests, particularly for AI-intensive endpoints.
 
-1. **Enhanced Task Scheduling**: Implements dynamic priority adjustment based on task urgency and waiting time
-2. **Request Batching**: Groups similar requests to improve throughput and reduce API overhead
-3. **Circuit Breaker Pattern**: Prevents cascading failures when AI providers experience issues
-4. **Intelligent Caching**: Stores intermediate results to avoid redundant processing
-5. **Sequential Consistency Pass**: Ensures consistent terminology and style across independently processed sections
-6. **More Granular Section Processing**: Breaks down large sections into subsections for more parallel processing
+## Key Features
 
-## Changes
+- **Request Classification**: Automatically categorizes requests by complexity and priority
+- **Dynamic Timeouts**: Sets timeouts based on request complexity and historical performance
+- **Priority Queuing**: Ensures critical requests are processed first during high load
+- **Circuit Breaker Pattern**: Prevents cascading failures when services are degraded (with thread safety)
+- **Comprehensive Monitoring**: Tracks request status, duration, and resource usage
+- **Resource Optimization**: Distributes load to prevent system overload
 
-- Added `EnhancedParallelProcessor` class with advanced scheduling and error handling
-- Implemented circuit breaker pattern for API failure handling
-- Added caching layer for intermediate processing results
-- Created sequential consistency pass to ensure coherent results
-- Implemented batch processing for similar tasks
-- Added comprehensive test suite for new functionality
-- Created new API endpoints under `/enhance-customize` that leverage the enhanced architecture
+## Implementation Details
 
-## Performance Improvements
+The implementation includes:
 
-Initial testing shows significant performance improvements:
+1. **Core Components**:
+   - `SmartRequestMiddleware`: FastAPI middleware for global request handling
+   - `RequestTracker`: Tracks request status, duration, and statistics (thread-safe)
+   - `RequestQueue`: Prioritizes and batches requests based on importance
+   - `CircuitBreaker`: Thread-safe implementation to prevent calls to failing services
 
-- **Processing Time**: 40-60% reduction in processing time compared to the original implementation
-- **Error Handling**: 70-80% reduction in processing failures through better error recovery
-- **Resource Utilization**: 40-50% improvement in CPU utilization through intelligent scheduling
-- **Consistency**: Better terminology standardization across resume sections
+2. **Decorator API**:
+   - `@smart_request` decorator for simple integration with existing endpoints
+   - Configurable complexity and priority levels
+   - Automatic request ID generation and tracking
+
+3. **Monitoring Endpoints**:
+   - `/api/v1/stats/requests`: Overall request statistics
+   - `/api/v1/stats/request/{request_id}`: Individual request details
+   - `/api/v1/stats/health`: System health metrics
+
+4. **Testing and Demo Utilities**:
+   - Integration tests to verify functionality
+   - Demo script for showcasing capabilities
+
+## Performance Benefits
+
+- **Reduced Timeouts**: Dynamic timeout adjustment based on request complexity
+- **Improved Stability**: Thread-safe circuit breaker prevents cascading failures
+- **Better Prioritization**: Critical user-facing requests processed first
+- **Resource Efficiency**: Batching and queuing reduce overall system load
+- **Enhanced Monitoring**: Detailed metrics for performance optimization
+- **Thread Safety**: All components are thread-safe for concurrent request handling
+
+## Files Changed
+
+- New Files:
+  - `/app/services/smart_request_handler.py`: Core implementation
+  - `/app/services/README_SMART_REQUEST.md`: Documentation
+  - `/tests/integration/test_smart_request.py`: Integration tests
+  - `/scripts/demo_smart_request.py`: Demo utility
+
+- Modified Files:
+  - `/app/api/endpoints/ats.py`: Added smart request decorator
+  - `/app/api/endpoints/stats.py`: Added monitoring endpoints
+  - `/app/schemas/ats.py`: Updated for request tracking
+  - `/main.py`: Initialized smart request middleware
+  - `/pyproject.toml`: Added dependencies
+  - `/requirements-cli.txt`: Added demo dependencies
+  - `/app/api/api.py`: Added support for smart request handling
+
+## Breaking Changes
+
+None. The implementation is backward compatible and only enhances existing endpoints.
+
+## Future Enhancements
+
+- Rate limiting per user/client
+- Machine learning for predicting optimal timeouts
+- More sophisticated load balancing strategies
+- Enhanced caching for repeated requests
+
+## How to Use
+
+### Basic Usage (Automatic)
+
+The middleware automatically handles requests to configured endpoints.
+
+### Decorator Usage (Explicit)
+
+```python
+from app.services.smart_request_handler import smart_request, TaskComplexity, RequestPriority
+
+@router.post("/analyze")
+@smart_request(complexity=TaskComplexity.MODERATE, priority=RequestPriority.HIGH)
+async def analyze_data(request_data: AnalysisRequest, request_id: str = None):
+    # Your implementation here
+    return {"result": result, "request_id": request_id}
+```
+
+### Monitoring
+
+Access the monitoring dashboard at `/api/v1/stats/requests` (requires admin privileges).
 
 ## Testing
 
-- Added comprehensive tests in `test_enhanced_parallel_processing.py`
-- All tests are passing with good coverage of new functionality
-- Added a performance comparison endpoint at `/enhance-customize/performance-comparison` to measure improvements
-
-## Architecture Decisions
-
-1. **Circuit Breaker Pattern**: Protects against API rate limits and failures by temporarily stopping requests to failing services
-2. **Request Batching**: Similar tasks are grouped for more efficient processing, reducing API overhead
-3. **Caching Layer**: Uses time-based caching with LRU eviction policy to optimize repeat processing
-4. **Adaptive Prioritization**: Dynamically adjusts task priorities based on waiting time and importance
-5. **Enhanced Error Recovery**: Implements sophisticated retry and fallback mechanisms with appropriate backoff
-
-## Future Improvements
-
-While this PR significantly enhances the architecture, there are several opportunities for future improvements:
-
-1. **Distributed Processing**: Extend to multiple machines for larger workloads
-2. **Model Selection Telemetry**: Use performance data to continuously optimize model selection
-3. **Progressive Results**: Stream partial results as they become available
-4. **Context-Aware Cache Invalidation**: More sophisticated cache management based on content changes
-5. **Fine-grained Model Cost Optimization**: Further optimize model selection based on section complexity
-
-## How to Test
-
-1. Run the test suite:
-```bash
-python -m unittest tests/integration/test_enhanced_parallel_processing.py
+Run the tests with:
+```
+pytest tests/integration/test_smart_request.py -v
 ```
 
-2. Start the server and use the enhanced endpoints:
-```bash
-python -m uvicorn main:app --host 0.0.0.0 --port 5001 --reload
+Run the demo with:
 ```
-
-3. Compare performance with the performance comparison endpoint:
-```bash
-curl -X POST "http://localhost:5001/api/v1/enhance-customize/performance-comparison" -H "Content-Type: application/json" -d '{"resume_id":"test-resume-id","job_description_id":"test-job-id","customization_strength":"BALANCED"}'
+python scripts/demo_smart_request.py --show-stats
 ```
-
-## Dependencies
-
-- No new external dependencies were added
-- Uses existing Python standard library (asyncio) for concurrency
 
 ## Related Issues
 
-Resolves #1
+Resolves #8

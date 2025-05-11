@@ -42,6 +42,7 @@ class ATSAnalysisResponse(BaseModel):
     section_scores: List[Dict[str, Any]] = []
     confidence: str = "medium"
     keyword_density: float = 0.0
+    request_id: Optional[str] = None  # Added for smart request tracking
 
 
 class ATSContentAnalysisRequest(BaseModel):

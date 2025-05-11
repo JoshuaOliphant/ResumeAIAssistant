@@ -203,7 +203,8 @@ class ParallelTaskScheduler:
                 task.status = TaskStatus.COMPLETED
                 task.end_time = time.time()
                 self.completed_tasks.add(task.id)
-                self.running_tasks.remove(task.id)
+                if task.id in self.running_tasks:
+                    self.running_tasks.remove(task.id)
                 
                 duration = task.end_time - task.start_time
                 logfire.info(

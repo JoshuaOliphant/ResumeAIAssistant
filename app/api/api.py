@@ -7,7 +7,7 @@ import sys
 import logfire
 from fastapi.responses import JSONResponse
 
-from app.api.endpoints import resumes, jobs, ats, customize, cover_letter, export, auth, enhance_customize
+from app.api.endpoints import resumes, jobs, ats, customize, cover_letter, export, auth, stats, enhance_customize
 from app.core.config import settings
 from app.db.session import Base, engine
 from app.core.nltk_init import initialize_nltk
@@ -86,6 +86,7 @@ api_router.include_router(customize.router, prefix="/customize", tags=["customiz
 api_router.include_router(enhance_customize.router, prefix="/enhance-customize", tags=["enhanced-customize"])
 api_router.include_router(cover_letter.router, prefix="/cover-letter", tags=["cover-letter"])
 api_router.include_router(export.router, prefix="/export", tags=["export"])
+api_router.include_router(stats.router, prefix="/stats", tags=["stats"])
 
 # Add the API router to the FastAPI application
 app.include_router(api_router, prefix=settings.API_V1_STR)
