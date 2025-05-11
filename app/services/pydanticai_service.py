@@ -609,6 +609,55 @@ async def evaluate_resume_job_match(
             # Convert the result to a dictionary
             evaluation_result = result.dict()
             
+            # Try to track token usage via model_optimizer
+            try:
+                from app.services.model_optimizer import track_token_usage
+                
+                # Extract request_id if it's in the model config
+                request_id = "unknown"
+                if model_config and "optimization_metadata" in model_config:
+                    request_id = model_config["optimization_metadata"].get("request_id", "unknown")
+                
+                # Try to extract token usage from the result
+                # This implementation will depend on how PydanticAI reports token usage
+                input_tokens = getattr(result, "_input_tokens", 0)
+                output_tokens = getattr(result, "_output_tokens", 0)
+                
+                # If we can't get them directly, use approximation
+                if input_tokens == 0:
+                    # Approximate tokens (4 chars per token)
+                    input_tokens = len(user_message) // 4
+                if output_tokens == 0:
+                    # Approximate tokens (4 chars per token)
+                    output_tokens = len(str(evaluation_result)) // 4
+                
+                # Track the usage
+                track_token_usage(
+                    model=model_name,
+                    task_name="resume_evaluation",
+                    request_id=request_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens
+                )
+                
+                logfire.info(
+                    "Token usage tracked for evaluation",
+                    model=model_name,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    duration_seconds=round(elapsed_time, 2)
+                )
+            except ImportError:
+                # model_optimizer might not be available
+                pass
+            except Exception as tracking_error:
+                # Log but don't fail if token tracking has an error
+                logfire.warning(
+                    "Error tracking token usage for evaluation",
+                    error=str(tracking_error),
+                    model=model_name
+                )
+            
             # Log success
             logfire.info(
                 "Resume-job evaluation completed successfully",
@@ -882,6 +931,59 @@ async def generate_optimization_plan(
             elapsed_time = time.time() - start_time
             
             # Result is already a validated CustomizationPlan instance
+            
+            # Try to track token usage via model_optimizer
+            try:
+                from app.services.model_optimizer import track_token_usage
+                
+                # Extract request_id if it's in the model config
+                request_id = "unknown"
+                if model_config and "optimization_metadata" in model_config:
+                    request_id = model_config["optimization_metadata"].get("request_id", "unknown")
+                else:
+                    # Generate a unique request ID
+                    request_id = f"optimize_{provider}_{int(time.time())}"
+                
+                # Try to extract token usage from the result
+                # This implementation will depend on how PydanticAI reports token usage
+                input_tokens = getattr(result, "_input_tokens", 0)
+                output_tokens = getattr(result, "_output_tokens", 0)
+                
+                # If we can't get them directly, use approximation
+                if input_tokens == 0:
+                    # Approximate tokens (4 chars per token)
+                    input_tokens = len(user_message) // 4
+                if output_tokens == 0:
+                    # Approximate tokens (4 chars per token)
+                    output_tokens = len(str(result)) // 4
+                
+                # Track the usage
+                track_token_usage(
+                    model=optimizer_agent.model,
+                    task_name="optimization_plan",
+                    request_id=request_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens
+                )
+                
+                logfire.info(
+                    "Token usage tracked for optimization plan",
+                    model=optimizer_agent.model,
+                    provider=provider,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    duration_seconds=round(elapsed_time, 2)
+                )
+            except ImportError:
+                # model_optimizer might not be available
+                pass
+            except Exception as tracking_error:
+                # Log but don't fail if token tracking has an error
+                logfire.warning(
+                    "Error tracking token usage for optimization",
+                    error=str(tracking_error),
+                    provider=provider
+                )
             
             # Log success
             logfire.info(
