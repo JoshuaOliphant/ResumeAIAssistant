@@ -1,37 +1,40 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
-import logfire
 import traceback
 
+import logfire
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
 from app.db.session import get_db
-from app.models.resume import Resume, ResumeVersion
 from app.models.job import JobDescription
+from app.models.resume import Resume, ResumeVersion
 from app.schemas.ats import (
     ATSAnalysisRequest,
     ATSAnalysisResponse,
     ATSContentAnalysisRequest,
-    ATSContentAnalysisResponse
+    ATSContentAnalysisResponse,
 )
 from app.schemas.customize import (
-    CustomizationPlanRequest,
+    CustomizationLevel,
     CustomizationPlan,
-    CustomizationLevel
+    CustomizationPlanRequest,
 )
-
 from app.services.ats_service import analyze_resume_for_ats
 from app.services.pydanticai_optimizer import get_pydanticai_optimizer_service
+from app.services.smart_request_handler import (
+    RequestPriority,
+    TaskComplexity,
+    smart_request,
+)
 
 router = APIRouter()
 
-
-from app.services.smart_request_handler import smart_request, TaskComplexity, RequestPriority
 
 @router.post("/analyze", response_model=ATSAnalysisResponse)
 @smart_request(complexity=TaskComplexity.MODERATE, priority=RequestPriority.HIGH)
 async def analyze_resume(
     analysis_request: ATSAnalysisRequest,
     db: Session = Depends(get_db),
-    request_id: str = None  # Added for smart request handling
+    request_id: str = None,  # Added for smart request handling
 ):
     """
     Analyze a resume against a job description for ATS compatibility.
@@ -45,15 +48,22 @@ async def analyze_resume(
         raise HTTPException(status_code=404, detail="Resume not found")
 
     # Get the latest version of the resume
-    resume_version = db.query(ResumeVersion).filter(
-        ResumeVersion.resume_id == analysis_request.resume_id
-    ).order_by(ResumeVersion.version_number.desc()).first()
+    resume_version = (
+        db.query(ResumeVersion)
+        .filter(ResumeVersion.resume_id == analysis_request.resume_id)
+        .order_by(ResumeVersion.version_number.desc())
+        .first()
+    )
 
     if not resume_version:
         raise HTTPException(status_code=404, detail="Resume content not found")
 
     # Verify the job description exists
-    job = db.query(JobDescription).filter(JobDescription.id == analysis_request.job_description_id).first()
+    job = (
+        db.query(JobDescription)
+        .filter(JobDescription.id == analysis_request.job_description_id)
+        .first()
+    )
     if not job:
         raise HTTPException(status_code=404, detail="Job description not found")
 
@@ -63,11 +73,13 @@ async def analyze_resume(
         request_id=request_id,
         resume_id=analysis_request.resume_id,
         job_id=analysis_request.job_description_id,
-        user_id=resume.user_id
+        user_id=resume.user_id,
     )
 
     # Perform ATS analysis
-    analysis_result = await analyze_resume_for_ats(resume_version.content, job.description)
+    analysis_result = await analyze_resume_for_ats(
+        resume_version.content, job.description
+    )
 
     # Structure the response
     response = ATSAnalysisResponse(
@@ -81,7 +93,7 @@ async def analyze_resume(
         section_scores=analysis_result.get("section_scores", []),
         confidence=analysis_result.get("confidence", "medium"),
         keyword_density=analysis_result.get("keyword_density", 0.0),
-        request_id=request_id  # Include request ID in response for tracking
+        request_id=request_id,  # Include request ID in response for tracking
     )
 
     # Log completion for monitoring
@@ -91,7 +103,7 @@ async def analyze_resume(
         resume_id=analysis_request.resume_id,
         job_id=analysis_request.job_description_id,
         match_score=analysis_result["match_score"],
-        processing_time=f"{analysis_result.get('processing_time', 0):.2f}s"
+        processing_time=f"{analysis_result.get('processing_time', 0):.2f}s",
     )
 
     return response
@@ -101,7 +113,7 @@ async def analyze_resume(
 async def analyze_and_generate_plan(
     request: ATSAnalysisRequest,
     customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Analyze a resume against a job description and generate a customization plan in one step.
@@ -117,7 +129,7 @@ async def analyze_and_generate_plan(
         "Starting analyze-and-plan workflow",
         resume_id=request.resume_id,
         job_id=request.job_description_id,
-        customization_level=customization_level.name
+        customization_level=customization_level.name,
     )
 
     try:
@@ -129,7 +141,7 @@ async def analyze_and_generate_plan(
             resume_id=request.resume_id,
             job_description_id=request.job_description_id,
             customization_strength=customization_level,
-            ats_analysis=None  # Let the service perform the basic analysis
+            ats_analysis=None,  # Let the service perform the basic analysis
         )
 
         # Generate the plan using our service
@@ -139,7 +151,7 @@ async def analyze_and_generate_plan(
             "Analyze-and-plan completed successfully",
             resume_id=request.resume_id,
             job_id=request.job_description_id,
-            recommendation_count=len(plan.recommendations)
+            recommendation_count=len(plan.recommendations),
         )
 
         return plan
@@ -151,7 +163,7 @@ async def analyze_and_generate_plan(
             "Error in analyze-and-plan",
             error=error_message,
             resume_id=request.resume_id,
-            job_id=request.job_description_id
+            job_id=request.job_description_id,
         )
 
         if "not found" in error_message.lower():
@@ -167,18 +179,16 @@ async def analyze_and_generate_plan(
             error_type=type(e).__name__,
             traceback=traceback.format_exception(type(e), e, e.__traceback__),
             resume_id=request.resume_id,
-            job_id=request.job_description_id
+            job_id=request.job_description_id,
         )
         raise HTTPException(
             status_code=500,
-            detail=f"An error occurred during analyze-and-plan: {str(e)}"
+            detail=f"An error occurred during analyze-and-plan: {str(e)}",
         )
 
 
 @router.post("/analyze-content", response_model=ATSContentAnalysisResponse)
-async def analyze_resume_content(
-    analysis_request: ATSContentAnalysisRequest
-):
+async def analyze_resume_content(analysis_request: ATSContentAnalysisRequest):
     """
     Analyze resume content against a job description for ATS compatibility.
 
@@ -190,8 +200,7 @@ async def analyze_resume_content(
     try:
         # Perform ATS analysis directly on the content
         analysis_result = await analyze_resume_for_ats(
-            analysis_request.resume_content,
-            analysis_request.job_description_content
+            analysis_request.resume_content, analysis_request.job_description_content
         )
 
         # Structure the response
@@ -203,7 +212,7 @@ async def analyze_resume_content(
             job_type=analysis_result.get("job_type", "default"),
             section_scores=analysis_result.get("section_scores", []),
             confidence=analysis_result.get("confidence", "medium"),
-            keyword_density=analysis_result.get("keyword_density", 0.0)
+            keyword_density=analysis_result.get("keyword_density", 0.0),
         )
 
         return response
@@ -214,11 +223,11 @@ async def analyze_resume_content(
             "Error analyzing resume content",
             error=str(e),
             error_type=type(e).__name__,
-            traceback=traceback.format_exception(type(e), e, e.__traceback__)
+            traceback=traceback.format_exception(type(e), e, e.__traceback__),
         )
         raise HTTPException(
             status_code=500,
-            detail=f"An error occurred during content analysis: {str(e)}"
+            detail=f"An error occurred during content analysis: {str(e)}",
         )
 
 
@@ -226,7 +235,7 @@ async def analyze_resume_content(
 async def analyze_content_and_generate_plan(
     analysis_request: ATSContentAnalysisRequest,
     customization_level: CustomizationLevel = CustomizationLevel.BALANCED,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Analyze resume content against a job description and generate a customization plan in one step.
@@ -242,7 +251,7 @@ async def analyze_content_and_generate_plan(
         "Starting content-based analyze-and-plan workflow",
         resume_length=len(analysis_request.resume_content),
         job_description_length=len(analysis_request.job_description_content),
-        customization_level=customization_level.name
+        customization_level=customization_level.name,
     )
 
     try:
@@ -251,8 +260,7 @@ async def analyze_content_and_generate_plan(
 
         # First, perform the basic analysis
         basic_analysis = await analyze_resume_for_ats(
-            analysis_request.resume_content,
-            analysis_request.job_description_content
+            analysis_request.resume_content, analysis_request.job_description_content
         )
 
         # Use the customization service's public method for content-based analysis and planning
@@ -260,12 +268,12 @@ async def analyze_content_and_generate_plan(
             analysis_request.resume_content,
             analysis_request.job_description_content,
             basic_analysis,
-            customization_level
+            customization_level,
         )
 
         logfire.info(
             "Content-based analyze-and-plan completed successfully",
-            recommendation_count=len(plan.recommendations)
+            recommendation_count=len(plan.recommendations),
         )
 
         return plan
@@ -276,9 +284,9 @@ async def analyze_content_and_generate_plan(
             "Error in content-based analyze-and-plan",
             error=str(e),
             error_type=type(e).__name__,
-            traceback=traceback.format_exception(type(e), e, e.__traceback__)
+            traceback=traceback.format_exception(type(e), e, e.__traceback__),
         )
         raise HTTPException(
             status_code=500,
-            detail=f"An error occurred during content-based analyze-and-plan: {str(e)}"
+            detail=f"An error occurred during content-based analyze-and-plan: {str(e)}",
         )

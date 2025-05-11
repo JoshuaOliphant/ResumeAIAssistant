@@ -107,6 +107,21 @@ def get_current_user_required(
     return current_user
 
 
+def get_current_active_superuser(
+    current_user: Any = Depends(get_current_user_required)
+) -> Any:
+    """
+    Get the current user, raising an exception if not a superuser
+    For endpoints that require superuser permissions
+    """
+    if not current_user.is_superuser:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions",
+        )
+    return current_user
+
+
 def get_optional_api_key(api_key: str = Depends(API_KEY_HEADER)) -> Optional[str]:
     """
     Optional API key validation for backward compatibility

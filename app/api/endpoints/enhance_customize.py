@@ -5,6 +5,7 @@ Enhanced API endpoints for resume customization with advanced parallel processin
 import time
 import traceback
 import uuid
+from typing import Dict, Any
 
 import logfire
 from fastapi import APIRouter, Depends, HTTPException
