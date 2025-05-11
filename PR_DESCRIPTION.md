@@ -61,6 +61,7 @@ The implementation includes:
   - `/main.py`: Initialized smart request middleware
   - `/pyproject.toml`: Added dependencies
   - `/requirements-cli.txt`: Added demo dependencies
+  - `/app/api/api.py`: Added support for smart request handling
 
 ## Breaking Changes
 
@@ -106,3 +107,7 @@ Run the demo with:
 ```
 python scripts/demo_smart_request.py --show-stats
 ```
+
+## Related Issues
+
+Resolves #8
