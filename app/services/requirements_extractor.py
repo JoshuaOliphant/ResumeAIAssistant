@@ -1,6 +1,7 @@
 import re
 import nltk
 import time
+import threading
 from collections import defaultdict, OrderedDict
 from typing import Dict, List, Optional, Set, Tuple, Any, Union
 
@@ -32,6 +33,7 @@ class LRUCache:
         self.cache = OrderedDict()
         self.max_size = max_size
         self.ttl = ttl
+        self.lock = threading.RLock()
         try:
             logfire.info(f"Initialized LRU cache with max_size={max_size}, ttl={ttl}")
         except:
@@ -48,21 +50,22 @@ class LRUCache:
         Returns:
             Cached value or None if not found or expired
         """
-        if key not in self.cache:
-            return None
-        
-        timestamp, value = self.cache[key]
-        current_time = time.time()
-        
-        # Check if the item is expired
-        if current_time - timestamp > self.ttl:
-            del self.cache[key]
-            return None
-        
-        # Move to the end to mark as recently used
-        self.cache.move_to_end(key)
-        
-        return value
+        with self.lock:
+            if key not in self.cache:
+                return None
+            
+            timestamp, value = self.cache[key]
+            current_time = time.time()
+            
+            # Check if the item is expired
+            if current_time - timestamp > self.ttl:
+                del self.cache[key]
+                return None
+            
+            # Move to the end to mark as recently used
+            self.cache.move_to_end(key)
+            
+            return value
     
     def put(self, key: str, value: Any) -> None:
         """
@@ -72,16 +75,17 @@ class LRUCache:
             key: Cache key
             value: Value to cache
         """
-        # If key exists, update it and move to the end
-        if key in self.cache:
-            self.cache.move_to_end(key)
-        
-        # Add new entry with current timestamp
-        self.cache[key] = (time.time(), value)
-        
-        # If cache is over-sized, remove the oldest item (first item in OrderedDict)
-        if len(self.cache) > self.max_size:
-            self.cache.popitem(last=False)
+        with self.lock:
+            # If key exists, update it and move to the end
+            if key in self.cache:
+                self.cache.move_to_end(key)
+            
+            # Add new entry with current timestamp
+            self.cache[key] = (time.time(), value)
+            
+            # If cache is over-sized, remove the oldest item (first item in OrderedDict)
+            if len(self.cache) > self.max_size:
+                self.cache.popitem(last=False)
 
 # Initialize caches
 # Cache for extracted keywords (max 50 items, 1 hour TTL)
@@ -545,20 +549,34 @@ def extract_bullet_items(text: str) -> List[str]:
     """
     items = []
     
-    # Extract traditional bullet points with support for multi-line items
-    bullet_patterns = [
-        r"[\*\-\u2022]\s+([^\n]+(?:\n\s+[^\n]+)*)",  # *, -, • with possible continuation
-        r"\d+\.\s+([^\n]+(?:\n\s+[^\n]+)*)",        # 1., 2., etc. with possible continuation
-    ]
+    # Handle each bullet point pattern separately to avoid grouping them together
+    # First, process asterisks and hyphens
+    asterisk_items = re.findall(r'(?:^|\n)\s*[\*\-\u2022]\s+(.*?)(?=\n\s*[\*\-\u2022\d+\.]|$)', text, re.DOTALL)
+    for item in asterisk_items:
+        # Clean up and add each item
+        cleaned = re.sub(r'\n\s+', ' ', item).strip()
+        if cleaned:
+            items.append(cleaned)
     
-    for pattern in bullet_patterns:
-        matches = re.finditer(pattern, text)
-        for match in matches:
-            item = re.sub(r'\n\s+', ' ', match.group(1)).strip()
-            if item:
-                items.append(item)
+    # Process numbered items
+    numbered_items = re.findall(r'(?:^|\n)\s*(\d+\.)\s+(.*?)(?=\n\s*[\*\-\u2022\d+\.]|$)', text, re.DOTALL)
+    for _, item in numbered_items:
+        # Clean up and add each item
+        cleaned = re.sub(r'\n\s+', ' ', item).strip()
+        if cleaned:
+            items.append(cleaned)
     
-    # If no bullet points, try to split by newlines
+    # If we still have no items, try a simpler approach
+    if not items:
+        # Asterisk/hyphen items
+        simple_asterisk = re.findall(r'(?:^|\n)\s*[\*\-\u2022]\s+([^\n]+)', text)
+        items.extend([item.strip() for item in simple_asterisk if item.strip()])
+        
+        # Numbered items
+        simple_numbered = re.findall(r'(?:^|\n)\s*\d+\.\s+([^\n]+)', text)
+        items.extend([item.strip() for item in simple_numbered if item.strip()])
+    
+    # If still no bullet points, try to split by newlines
     if not items and len(text) > 0:
         sentences = re.split(r'[\.\n]', text)
         for sentence in sentences:
