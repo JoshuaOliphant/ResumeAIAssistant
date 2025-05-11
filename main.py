@@ -10,6 +10,13 @@ from app.core.logging import (
     setup_httpx_instrumentation,
 )
 
+# Import smart request handler setup function
+try:
+    from app.services.smart_request_handler import setup_smart_request_handling
+    SMART_REQUEST_AVAILABLE = True
+except ImportError:
+    SMART_REQUEST_AVAILABLE = False
+
 # Configure Logfire with more detailed options
 configure_logging(
     service_name="resume-ai-assistant",
@@ -42,6 +49,19 @@ try:
     )
     
     logfire.instrument_pydantic_ai()
+    
+    # Set up smart request handling
+    if SMART_REQUEST_AVAILABLE:
+        try:
+            setup_smart_request_handling(app)
+            logfire.info("Smart request handling initialized successfully")
+        except Exception as e:
+            logfire.error(
+                "Error setting up smart request handling",
+                error=str(e),
+                error_type=type(e).__name__,
+                traceback=traceback.format_exception(type(e), e, e.__traceback__)
+            )
     
     logfire.info("All instrumentations set up successfully")
 except Exception as e:

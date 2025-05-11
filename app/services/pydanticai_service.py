@@ -65,8 +65,10 @@ class CircuitBreaker:
         
         return True
 
-# Create a global circuit breaker instance
+# Create a global circuit breaker instance with thread safety
+import threading
 circuit_breaker = CircuitBreaker()
+circuit_breaker_lock = threading.Lock()
 
 # Import from PydanticAI directly - it's a core dependency
 from pydantic_ai import Agent
@@ -609,6 +611,55 @@ async def evaluate_resume_job_match(
             # Convert the result to a dictionary
             evaluation_result = result.dict()
             
+            # Try to track token usage via model_optimizer
+            try:
+                from app.services.model_optimizer import track_token_usage
+                
+                # Extract request_id if it's in the model config
+                request_id = "unknown"
+                if model_config and "optimization_metadata" in model_config:
+                    request_id = model_config["optimization_metadata"].get("request_id", "unknown")
+                
+                # Try to extract token usage from the result
+                # This implementation will depend on how PydanticAI reports token usage
+                input_tokens = getattr(result, "_input_tokens", 0)
+                output_tokens = getattr(result, "_output_tokens", 0)
+                
+                # If we can't get them directly, use approximation
+                if input_tokens == 0:
+                    # Approximate tokens (4 chars per token)
+                    input_tokens = len(user_message) // 4
+                if output_tokens == 0:
+                    # Approximate tokens (4 chars per token)
+                    output_tokens = len(str(evaluation_result)) // 4
+                
+                # Track the usage
+                track_token_usage(
+                    model=model_name,
+                    task_name="resume_evaluation",
+                    request_id=request_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens
+                )
+                
+                logfire.info(
+                    "Token usage tracked for evaluation",
+                    model=model_name,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    duration_seconds=round(elapsed_time, 2)
+                )
+            except ImportError:
+                # model_optimizer might not be available
+                pass
+            except Exception as tracking_error:
+                # Log but don't fail if token tracking has an error
+                logfire.warning(
+                    "Error tracking token usage for evaluation",
+                    error=str(tracking_error),
+                    model=model_name
+                )
+            
             # Log success
             logfire.info(
                 "Resume-job evaluation completed successfully",
@@ -796,7 +847,9 @@ async def generate_optimization_plan(
         provider = model_name.split(':')[0] if ':' in model_name else model_name
         
         # Skip this provider if circuit is open and try a fallback instead
-        if circuit_breaker.is_circuit_open(provider):
+        with circuit_breaker_lock:
+            circuit_open = circuit_breaker.is_circuit_open(provider)
+        if circuit_open:
             logfire.warning(
                 f"Circuit open for provider {provider}, trying fallback",
                 provider=provider,
@@ -806,7 +859,9 @@ async def generate_optimization_plan(
             # Try to find a fallback from a different provider
             for fallback in fallback_chain:
                 fallback_provider = fallback.split(':')[0] if ':' in fallback else fallback
-                if not circuit_breaker.is_circuit_open(fallback_provider):
+                with circuit_breaker_lock:
+                    circuit_open = circuit_breaker.is_circuit_open(fallback_provider)
+                if not circuit_open:
                     logfire.info(
                         f"Using fallback model {fallback} due to open circuit",
                         original_provider=provider,
@@ -866,7 +921,8 @@ async def generate_optimization_plan(
                 )
                 
                 # Record successful call to provider
-                circuit_breaker.record_success(provider)
+                with circuit_breaker_lock:
+                    circuit_breaker.record_success(provider)
             except asyncio.TimeoutError:
                 api_duration = time.time() - api_start_time
                 logfire.error(
@@ -875,13 +931,67 @@ async def generate_optimization_plan(
                     duration_seconds=round(api_duration, 2),
                     timeout_seconds=TASK_TIMEOUT_SECONDS
                 )
-                circuit_breaker.record_failure(provider)
+                with circuit_breaker_lock:
+                    circuit_breaker.record_failure(provider)
                 raise asyncio.TimeoutError(f"Optimizer API call to {provider} timed out after {round(api_duration, 2)} seconds")
             
             # Calculate elapsed time
             elapsed_time = time.time() - start_time
             
             # Result is already a validated CustomizationPlan instance
+            
+            # Try to track token usage via model_optimizer
+            try:
+                from app.services.model_optimizer import track_token_usage
+                
+                # Extract request_id if it's in the model config
+                request_id = "unknown"
+                if model_config and "optimization_metadata" in model_config:
+                    request_id = model_config["optimization_metadata"].get("request_id", "unknown")
+                else:
+                    # Generate a unique request ID
+                    request_id = f"optimize_{provider}_{int(time.time())}"
+                
+                # Try to extract token usage from the result
+                # This implementation will depend on how PydanticAI reports token usage
+                input_tokens = getattr(result, "_input_tokens", 0)
+                output_tokens = getattr(result, "_output_tokens", 0)
+                
+                # If we can't get them directly, use approximation
+                if input_tokens == 0:
+                    # Approximate tokens (4 chars per token)
+                    input_tokens = len(user_message) // 4
+                if output_tokens == 0:
+                    # Approximate tokens (4 chars per token)
+                    output_tokens = len(str(result)) // 4
+                
+                # Track the usage
+                track_token_usage(
+                    model=optimizer_agent.model,
+                    task_name="optimization_plan",
+                    request_id=request_id,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens
+                )
+                
+                logfire.info(
+                    "Token usage tracked for optimization plan",
+                    model=optimizer_agent.model,
+                    provider=provider,
+                    input_tokens=input_tokens,
+                    output_tokens=output_tokens,
+                    duration_seconds=round(elapsed_time, 2)
+                )
+            except ImportError:
+                # model_optimizer might not be available
+                pass
+            except Exception as tracking_error:
+                # Log but don't fail if token tracking has an error
+                logfire.warning(
+                    "Error tracking token usage for optimization",
+                    error=str(tracking_error),
+                    provider=provider
+                )
             
             # Log success
             logfire.info(
@@ -899,7 +1009,8 @@ async def generate_optimization_plan(
             elapsed_time = time.time() - start_time
             
             # Record failure for this provider
-            circuit_breaker.record_failure(provider)
+            with circuit_breaker_lock:
+                circuit_breaker.record_failure(provider)
             
             # Log error
             logfire.error(
@@ -918,7 +1029,8 @@ async def generate_optimization_plan(
             elapsed_time = time.time() - start_time
             
             # Record failure for this provider
-            circuit_breaker.record_failure(provider)
+            with circuit_breaker_lock:
+                circuit_breaker.record_failure(provider)
             
             # Log error
             logfire.error(
