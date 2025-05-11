@@ -16,7 +16,7 @@ from fastapi.testclient import TestClient as FastAPITestClient
 
 from app.api.endpoints.progress import (
     ProgressUpdate, 
-    ProgressStageModel, 
+    ProgressStage, 
     ProgressConnectionManager,
     router
 )
@@ -40,13 +40,13 @@ def progress_update():
         status="in_progress",
         current_stage="analysis",
         stages={
-            "initialization": ProgressStageModel(
+            "initialization": ProgressStage(
                 name="initialization",
                 description="Initializing task",
                 progress=1.0,
                 status="completed"
             ),
-            "analysis": ProgressStageModel(
+            "analysis": ProgressStage(
                 name="analysis",
                 description="Analyzing content",
                 progress=0.5,
@@ -81,9 +81,9 @@ def test_progress_update_model():
 
 
 def test_progress_stage_model():
-    """Test the ProgressStageModel model validation"""
+    """Test the ProgressStage model validation"""
     # Test valid stage model
-    stage = ProgressStageModel(
+    stage = ProgressStage(
         name="test",
         description="Test stage",
         progress=0.5,
@@ -93,7 +93,7 @@ def test_progress_stage_model():
     assert stage.status == "in_progress"
     
     # Test progress bounds
-    stage = ProgressStageModel(
+    stage = ProgressStage(
         name="test",
         description="Test stage",
         progress=1.5,

@@ -104,108 +104,188 @@ export function ProgressTracker({
 
   // Format time remaining in a human-readable way
   const formatTimeRemaining = (seconds: number): string => {
-    if (seconds < 60) {
-      return `${Math.ceil(seconds)} seconds`;
-    } else if (seconds < 3600) {
-      return `${Math.ceil(seconds / 60)} minutes`;
+    // Handle invalid or very small values
+    if (seconds <= 0) {
+      return 'Almost done';
+    }
+    
+    // Round to the nearest integer to avoid decimal places
+    const roundedSeconds = Math.round(seconds);
+    
+    if (roundedSeconds < 15) {
+      return 'Just a few seconds';
+    } else if (roundedSeconds < 60) {
+      return `${roundedSeconds} seconds`;
+    } else if (roundedSeconds < 3600) {
+      const minutes = Math.ceil(roundedSeconds / 60);
+      return `${minutes} minute${minutes !== 1 ? 's' : ''}`;
     } else {
-      return `${Math.floor(seconds / 3600)}h ${Math.ceil((seconds % 3600) / 60)}m`;
+      const hours = Math.floor(roundedSeconds / 3600);
+      const minutes = Math.ceil((roundedSeconds % 3600) / 60);
+      
+      if (minutes === 0) {
+        return `${hours} hour${hours !== 1 ? 's' : ''}`;
+      } else {
+        return `${hours} hour${hours !== 1 ? 's' : ''} ${minutes} min`;
+      }
     }
   };
 
   // Request browser notification permission
   useEffect(() => {
-    if (showNotifications && "Notification" in window) {
-      Notification.requestPermission();
+    if (showNotifications && typeof window !== 'undefined' && "Notification" in window) {
+      // Check if permission isn't denied (could be "default" or "granted")
+      if (Notification.permission !== "denied") {
+        // Request permission and handle the promise return (modern browsers)
+        Notification.requestPermission().then(permission => {
+          if (permission === "granted") {
+            console.log("Notification permission granted");
+          }
+        }).catch(error => {
+          console.error("Error requesting notification permission:", error);
+        });
+      }
     }
   }, [showNotifications]);
 
   // Send browser notification
   const sendNotification = useCallback((title: string, body: string) => {
-    if (showNotifications && "Notification" in window && Notification.permission === "granted") {
-      new Notification(title, {
-        body,
-        icon: '/favicon.ico'
-      });
+    if (!showNotifications || typeof window === 'undefined' || !("Notification" in window)) {
+      return;
+    }
+    
+    try {
+      if (Notification.permission === "granted") {
+        const notification = new Notification(title, {
+          body,
+          icon: '/favicon.ico',
+          tag: 'resume-customization-progress', // Group similar notifications
+          requireInteraction: true // Keep notification visible until user interacts with it
+        });
+        
+        // Handle notification clicks
+        notification.onclick = () => {
+          window.focus(); // Focus the window when notification is clicked
+          notification.close();
+        };
+      } else if (Notification.permission !== "denied") {
+        // If permission is "default" (not yet decided), try requesting it one more time
+        Notification.requestPermission().then(permission => {
+          if (permission === "granted") {
+            sendNotification(title, body); // Try again after permission is granted
+          }
+        });
+      }
+    } catch (error) {
+      console.error("Error sending notification:", error);
     }
   }, [showNotifications]);
 
   // Connect to WebSocket and handle reconnection
   useEffect(() => {
     const connectWebSocket = async () => {
-      if (!isAuthenticated || connectionAttempts >= 3) {
+      if (!isAuthenticated) {
+        console.log('Not authenticated, skipping WebSocket connection');
+        return;
+      }
+      
+      if (connectionAttempts >= 3) {
         // After 3 failed attempts, fall back to simulated progress
-        if (connectionAttempts >= 3) {
-          setFallbackMode(true);
-        }
+        console.log('Maximum reconnection attempts reached, falling back to simulated progress');
+        setFallbackMode(true);
         return;
       }
 
       try {
         const token = await getAccessToken();
         const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5000/api/v1'}/progress/ws/${taskId}?token=${token}`;
+        console.log(`Connecting to WebSocket: ${wsUrl.replace(/token=.*/, 'token=***')}`);
+        
         const ws = new WebSocket(wsUrl);
+        let reconnectTimeout: NodeJS.Timeout;
 
         ws.onopen = () => {
           console.log('WebSocket connection established');
           setSocket(ws);
+          // Reset connection attempts on successful connection
+          if (connectionAttempts > 0) {
+            setConnectionAttempts(0);
+          }
         };
 
         ws.onmessage = (event) => {
-          const data: ProgressUpdate = JSON.parse(event.data);
-          
-          if (data.task_id === taskId) {
-            setHasReceivedUpdate(true);
-            setProgress(data.overall_progress * 100);
-            setStatus(data.status);
+          try {
+            const data: ProgressUpdate = JSON.parse(event.data);
             
-            if (data.message) {
-              setMessage(data.message);
+            if (data.task_id === taskId) {
+              setHasReceivedUpdate(true);
+              setProgress(data.overall_progress * 100);
+              setStatus(data.status);
+              
+              if (data.message) {
+                setMessage(data.message);
+              }
+              
+              if (data.current_stage) {
+                setCurrentStage(data.current_stage);
+              }
+              
+              if (data.stages) {
+                setStages(data.stages);
+              }
+              
+              if (data.estimated_time_remaining !== undefined) {
+                setEstimatedTimeRemaining(data.estimated_time_remaining);
+              }
+              
+              // Handle completion and errors
+              if (data.status === 'completed' && onComplete) {
+                onComplete(data);
+                sendNotification('Operation Complete', 'Your resume customization has been completed successfully.');
+              } else if (data.status === 'error' && onError) {
+                onError(new Error(data.message || 'Unknown error'));
+                sendNotification('Operation Failed', data.message || 'An error occurred during processing.');
+              }
             }
-            
-            if (data.current_stage) {
-              setCurrentStage(data.current_stage);
-            }
-            
-            if (data.stages) {
-              setStages(data.stages);
-            }
-            
-            if (data.estimated_time_remaining !== undefined) {
-              setEstimatedTimeRemaining(data.estimated_time_remaining);
-            }
-            
-            // Handle completion and errors
-            if (data.status === 'completed' && onComplete) {
-              onComplete(data);
-              sendNotification('Operation Complete', 'Your resume customization has been completed successfully.');
-            } else if (data.status === 'error' && onError) {
-              onError(new Error(data.message || 'Unknown error'));
-              sendNotification('Operation Failed', data.message || 'An error occurred during processing.');
-            }
+          } catch (error) {
+            console.error('Error parsing WebSocket message:', error);
           }
         };
 
         ws.onerror = (error) => {
           console.error('WebSocket error:', error);
-          setConnectionAttempts(prev => prev + 1);
-          ws.close();
+          // Only increment connection attempts if the socket isn't already closed
+          if (ws.readyState !== WebSocket.CLOSED) {
+            setConnectionAttempts(prev => prev + 1);
+          }
         };
 
-        ws.onclose = () => {
-          console.log('WebSocket connection closed. Reconnecting in 2 seconds...');
+        ws.onclose = (event) => {
+          console.log(`WebSocket connection closed (code: ${event.code}, reason: ${event.reason || 'No reason provided'})`);
           setSocket(null);
-          setTimeout(connectWebSocket, 2000);
+          
+          // Use exponential backoff for reconnection (1s, 2s, 4s)
+          const backoffTime = Math.min(1000 * Math.pow(2, connectionAttempts), 8000);
+          console.log(`Reconnecting in ${backoffTime}ms...`);
+          
+          reconnectTimeout = setTimeout(connectWebSocket, backoffTime);
         };
 
         return () => {
-          if (ws && ws.readyState === WebSocket.OPEN) {
+          if (reconnectTimeout) {
+            clearTimeout(reconnectTimeout);
+          }
+          if (ws && ws.readyState !== WebSocket.CLOSED) {
             ws.close();
           }
         };
       } catch (error) {
         console.error('Error connecting to WebSocket:', error);
         setConnectionAttempts(prev => prev + 1);
+        
+        // Schedule reconnection
+        const backoffTime = Math.min(1000 * Math.pow(2, connectionAttempts), 8000);
+        setTimeout(connectWebSocket, backoffTime);
       }
     };
 

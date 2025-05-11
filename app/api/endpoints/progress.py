@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisco
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core.security import get_current_user, get_token_from_cookie
+from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.user import User
 
@@ -115,20 +115,38 @@ class ProgressConnectionManager:
     async def broadcast_to_user(self, user_id: str, message: dict):
         """Send a message to all connections for a specific user."""
         if user_id not in self.active_connections:
+            logger.debug(f"No active connections for user {user_id}")
             return
         
         connections = self.active_connections[user_id]
+        if not connections:
+            logger.debug(f"Empty connections list for user {user_id}")
+            return
+            
         disconnected = []
         
         for websocket in connections:
             try:
                 await websocket.send_json(message)
-            except RuntimeError:
+                logger.debug(f"Message sent to user {user_id}")
+            except RuntimeError as e:
                 # Connection already closed
+                logger.warning(f"RuntimeError sending to WebSocket: {str(e)}")
+                disconnected.append(websocket)
+            except ConnectionRefusedError:
+                logger.warning(f"Connection refused for user {user_id}")
+                disconnected.append(websocket)
+            except ConnectionResetError:
+                logger.warning(f"Connection reset for user {user_id}")
+                disconnected.append(websocket)
+            except Exception as e:
+                # Catch all other exceptions to prevent broadcast failures
+                logger.error(f"Unexpected error sending message to user {user_id}: {str(e)}")
                 disconnected.append(websocket)
         
         # Clean up any disconnected sockets
         for websocket in disconnected:
+            logger.info(f"Cleaning up disconnected WebSocket for user {user_id}")
             self.disconnect(websocket, user_id)
 
 
@@ -145,25 +163,37 @@ async def get_user_from_token(websocket: WebSocket, db: Session):
     # Try to get token from cookie
     if "access_token" in cookies:
         token = cookies["access_token"]
+        logger.debug("Found token in cookies")
     
     # Try to get token from Authorization header
     elif "authorization" in headers:
         auth_header = headers["authorization"]
         if auth_header.startswith("Bearer "):
             token = auth_header[7:]
+            logger.debug("Found token in authorization header")
     
     # Try to get token from query parameter
     else:
         token = websocket.query_params.get("token")
+        if token:
+            logger.debug("Found token in query parameters")
     
     if not token:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        logger.warning("No authentication token found in WebSocket connection")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Authentication token missing")
         return None
     
     try:
-        return get_current_user(token=token, db=db)
-    except HTTPException:
-        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        user = get_current_user(token=token, db=db)
+        logger.info(f"WebSocket authenticated for user ID: {user.id}")
+        return user
+    except HTTPException as e:
+        logger.warning(f"Authentication failed: {str(e.detail)}")
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION, reason="Invalid authentication token")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error during authentication: {str(e)}")
+        await websocket.close(code=status.WS_1011_INTERNAL_ERROR, reason="Server error during authentication")
         return None
 
 
@@ -174,11 +204,22 @@ async def websocket_endpoint(
     db: Session = Depends(get_db)
 ):
     """WebSocket endpoint for receiving real-time progress updates."""
+    # Validate task_id format
+    if not task_id or len(task_id) < 3:
+        logger.warning(f"Invalid task_id format: {task_id}")
+        await websocket.close(code=status.WS_1003_UNSUPPORTED_DATA, reason="Invalid task ID format")
+        return
+        
+    # Authenticate user
     user = await get_user_from_token(websocket, db)
     if not user:
+        logger.warning(f"Authentication failed for WebSocket connection to task {task_id}")
         return
     
     user_id = str(user.id)
+    logger.info(f"User {user_id} connecting to WebSocket for task {task_id}")
+    
+    # Accept connection and subscribe to task updates
     await connection_manager.connect(websocket, user_id)
     connection_manager.subscribe(task_id, user_id)
     
@@ -189,14 +230,37 @@ async def websocket_endpoint(
             data = await websocket.receive_text()
             try:
                 message = json.loads(data)
+                logger.debug(f"Received WebSocket message from user {user_id}: {message}")
+                
                 if "type" in message:
                     if message["type"] == "subscribe" and "task_id" in message:
-                        connection_manager.subscribe(message["task_id"], user_id)
+                        new_task_id = message["task_id"]
+                        if new_task_id and len(new_task_id) >= 3:
+                            connection_manager.subscribe(new_task_id, user_id)
+                            logger.info(f"User {user_id} subscribed to additional task {new_task_id}")
+                        else:
+                            logger.warning(f"Invalid task_id in subscribe message: {new_task_id}")
+                            
                     elif message["type"] == "unsubscribe" and "task_id" in message:
-                        connection_manager.unsubscribe(message["task_id"], user_id)
-            except json.JSONDecodeError:
-                pass
+                        unsub_task_id = message["task_id"]
+                        connection_manager.unsubscribe(unsub_task_id, user_id)
+                        logger.info(f"User {user_id} unsubscribed from task {unsub_task_id}")
+                        
+                    elif message["type"] == "ping":
+                        # Handle ping messages to keep connection alive
+                        await websocket.send_json({"type": "pong", "timestamp": message.get("timestamp")})
+                        
+                    else:
+                        logger.warning(f"Unknown message type: {message['type']}")
+            except json.JSONDecodeError as e:
+                logger.warning(f"Invalid JSON from client: {e}")
+            except Exception as e:
+                logger.error(f"Error processing WebSocket message: {str(e)}")
     except WebSocketDisconnect:
+        logger.info(f"WebSocket disconnected for user {user_id} and task {task_id}")
+        connection_manager.disconnect(websocket, user_id)
+    except Exception as e:
+        logger.error(f"Unexpected WebSocket error: {str(e)}")
         connection_manager.disconnect(websocket, user_id)
 
 
