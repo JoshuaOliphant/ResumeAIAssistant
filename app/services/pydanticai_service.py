@@ -9,6 +9,64 @@ import json
 from typing import Optional, Dict, Any, List
 import asyncio
 import logfire
+from datetime import datetime, timedelta
+
+# Circuit breaker implementation for model provider health
+class CircuitBreaker:
+    """
+    Implements a circuit breaker pattern to avoid making calls to failing model providers.
+    
+    This helps prevent waiting for timeouts when a service is down or degraded.
+    """
+    def __init__(self, failure_threshold=3, recovery_time_seconds=300):
+        self.failure_counts = {}  # provider -> failure count
+        self.circuit_open_until = {}  # provider -> datetime when circuit closes
+        self.failure_threshold = failure_threshold
+        self.recovery_time = timedelta(seconds=recovery_time_seconds)
+    
+    def record_failure(self, provider: str):
+        """Record a failure for a provider and potentially open the circuit"""
+        if provider not in self.failure_counts:
+            self.failure_counts[provider] = 0
+        
+        self.failure_counts[provider] += 1
+        
+        if self.failure_counts[provider] >= self.failure_threshold:
+            self.open_circuit(provider)
+            logfire.warning(
+                f"Circuit opened for provider {provider} due to repeated failures",
+                provider=provider,
+                failure_count=self.failure_counts[provider],
+                open_until=self.circuit_open_until.get(provider)
+            )
+    
+    def record_success(self, provider: str):
+        """Record a success for a provider and reset failure count"""
+        if provider in self.failure_counts:
+            self.failure_counts[provider] = 0
+        
+        if provider in self.circuit_open_until:
+            del self.circuit_open_until[provider]
+    
+    def open_circuit(self, provider: str):
+        """Open the circuit for a provider for the recovery time"""
+        self.circuit_open_until[provider] = datetime.now() + self.recovery_time
+    
+    def is_circuit_open(self, provider: str) -> bool:
+        """Check if the circuit is open for a provider"""
+        if provider not in self.circuit_open_until:
+            return False
+        
+        # Check if recovery time has elapsed
+        if datetime.now() > self.circuit_open_until[provider]:
+            # Allow one request through to test if service has recovered
+            del self.circuit_open_until[provider]
+            return False
+        
+        return True
+
+# Create a global circuit breaker instance
+circuit_breaker = CircuitBreaker()
 
 # Import from PydanticAI directly - it's a core dependency
 from pydantic_ai import Agent
@@ -73,16 +131,40 @@ THINKING_BUDGET = settings.PYDANTICAI_THINKING_BUDGET
 TEMPERATURE = settings.PYDANTICAI_TEMPERATURE
 MAX_TOKENS = settings.PYDANTICAI_MAX_TOKENS
 
-# Set fallback models in order of preference
-FALLBACK_MODELS = [
-    "google:gemini-1.5-flash",             # Faster Gemini model as first fallback
-    "openai:gpt-4.1" if "openai" in model_config else None,  # Latest GPT-4.1 if OpenAI configured
-    "anthropic:claude-3-7-sonnet-latest" if "anthropic" in model_config else None,  # Claude if available
-    "openai:gpt-4o" if "openai" in model_config else None,  # Older but still capable model
-]
+# Set fallback models in order of preference per user request: Gemini, Anthropic, OpenAI
+FALLBACK_MODELS = []
 
-# Filter out None values from fallback models
-FALLBACK_MODELS = [model for model in FALLBACK_MODELS if model is not None]
+# Start with Google models (Gemini is primary model provider as requested)
+FALLBACK_MODELS.extend([
+    "google:gemini-1.5-flash"  # Faster Gemini model for when the main one times out
+])
+    
+# Include Anthropic models next if configured
+if "anthropic" in model_config:
+    FALLBACK_MODELS.extend([
+        "anthropic:claude-3-7-sonnet-latest",
+        "anthropic:claude-3-7-haiku-latest"
+    ])
+    
+# Include OpenAI models last if configured
+if "openai" in model_config:
+    FALLBACK_MODELS.extend([
+        "openai:gpt-4.1", 
+        "openai:gpt-4o"
+    ])
+
+# Ensure we have at least one fallback model
+if not FALLBACK_MODELS:
+    if "google" in model_config:
+        FALLBACK_MODELS.append("google:gemini-1.5-flash")
+    else:
+        logfire.warning("No fallback models available, will rely only on primary models")
+
+# Log the fallback configuration
+logfire.info(
+    "Fallback models configured",
+    models=FALLBACK_MODELS
+)
 
 # Get the complete model provider configuration
 MODEL_CONFIG = get_pydanticai_model_config()
@@ -222,13 +304,15 @@ def create_cover_letter_agent(applicant_name: Optional[str] = None,
             
         temperature = max(0.3, min(0.9, base_temperature + temperature_adjustment))
         
+        from app.core.parallel_config import TASK_TIMEOUT_SECONDS
         cover_letter_agent = Agent(
             model,
             output_type=CoverLetter,
             system_prompt=system_prompt,
             thinking_config=thinking_config,
             temperature=temperature,
-            max_tokens=MAX_TOKENS
+            max_tokens=MAX_TOKENS,
+            timeout=TASK_TIMEOUT_SECONDS
         )
         
         # For cover letters, we want fallback models that excel at creative writing
@@ -418,14 +502,16 @@ async def evaluate_resume_job_match(
                 has_thinking_config=thinking_config is not None
             )
         
-        # Create the agent with the selected configuration
+        # Create the agent with the selected configuration and timeout
+        from app.core.parallel_config import TASK_TIMEOUT_SECONDS
         evaluator_agent = Agent(
             model_name,
             output_type=ResumeEvaluation,
             system_prompt=prompt_template,
             thinking_config=thinking_config,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            timeout=TASK_TIMEOUT_SECONDS
         )
         
         # Apply fallback chain
@@ -481,10 +567,41 @@ async def evaluate_resume_job_match(
             return simulate_ats(resume, job_desc)
         
         try:
-            # Run the agent
-            result = await evaluator_agent.run(
-                user_message
+            # Run the agent with explicit timeout handling
+            from app.core.parallel_config import TASK_TIMEOUT_SECONDS
+            
+            # Log the start time for better debugging
+            api_start_time = time.time()
+            logfire.info(
+                "Starting evaluator API call with timeout",
+                model=model_name,
+                timeout_seconds=TASK_TIMEOUT_SECONDS,
+                start_time=api_start_time
             )
+            
+            # Use asyncio.wait_for to add an additional timeout layer
+            try:
+                result = await asyncio.wait_for(
+                    evaluator_agent.run(user_message),
+                    timeout=TASK_TIMEOUT_SECONDS - 1  # Set slightly lower to ensure it triggers before the model timeout
+                )
+                api_end_time = time.time()
+                api_duration = api_end_time - api_start_time
+                
+                logfire.info(
+                    "Evaluator API call completed successfully",
+                    model=model_name, 
+                    duration_seconds=round(api_duration, 2)
+                )
+            except asyncio.TimeoutError:
+                api_duration = time.time() - api_start_time
+                logfire.error(
+                    "Evaluator API call timed out",
+                    model=model_name,
+                    duration_seconds=round(api_duration, 2),
+                    timeout_seconds=TASK_TIMEOUT_SECONDS
+                )
+                raise asyncio.TimeoutError(f"Evaluator API call to {model_name} timed out after {round(api_duration, 2)} seconds")
             
             # Calculate elapsed time
             elapsed_time = time.time() - start_time
@@ -609,14 +726,38 @@ async def generate_optimization_plan(
                 has_thinking_config=thinking_config is not None
             )
         
-        # Create the agent with the selected configuration
+        # Choose a more efficient model for the optimizer task if the primary model is Gemini
+        from app.core.parallel_config import TASK_TIMEOUT_SECONDS
+        
+        # If Gemini is selected as the primary model, check if we have fallback models to prioritize
+        # This helps avoid hanging with slow Gemini models and has better chance of success
+        if model_name.startswith("google:gemini") and fallback_chain:
+            # Find first non-Gemini model in fallback chain for better reliability
+            for fallback in fallback_chain:
+                if not fallback.startswith("google:gemini"):
+                    logfire.info(
+                        "Preemptively selecting non-Gemini model for optimizer due to known timeouts",
+                        original_model=model_name,
+                        selected_model=fallback
+                    )
+                    model_name = fallback
+                    # Adjust thinking config if switching provider
+                    if model_name.startswith("anthropic:claude"):
+                        thinking_config = {"budget_tokens": THINKING_BUDGET, "type": "enabled"}
+                    elif model_name.startswith("openai"):
+                        # OpenAI doesn't support thinking budget in the same way
+                        thinking_config = None
+                    break
+        
+        # Create the agent with the selected configuration and timeout
         optimizer_agent = Agent(
             model_name,
             output_type=CustomizationPlan,
             system_prompt=prompt_template,
             thinking_config=thinking_config,
             temperature=temperature,
-            max_tokens=max_tokens
+            max_tokens=max_tokens,
+            timeout=TASK_TIMEOUT_SECONDS
         )
         
         # Apply fallback chain
@@ -651,6 +792,45 @@ async def generate_optimization_plan(
             Please apply the industry-specific guidance for {industry.upper()} in your optimization plan.
             """
         
+        # Extract provider name from the model
+        provider = model_name.split(':')[0] if ':' in model_name else model_name
+        
+        # Skip this provider if circuit is open and try a fallback instead
+        if circuit_breaker.is_circuit_open(provider):
+            logfire.warning(
+                f"Circuit open for provider {provider}, trying fallback",
+                provider=provider,
+                fallbacks=fallback_chain
+            )
+            
+            # Try to find a fallback from a different provider
+            for fallback in fallback_chain:
+                fallback_provider = fallback.split(':')[0] if ':' in fallback else fallback
+                if not circuit_breaker.is_circuit_open(fallback_provider):
+                    logfire.info(
+                        f"Using fallback model {fallback} due to open circuit",
+                        original_provider=provider,
+                        fallback_provider=fallback_provider
+                    )
+                    
+                    # Update the agent to use the fallback model
+                    optimizer_agent = Agent(
+                        fallback,
+                        output_type=CustomizationPlan,
+                        system_prompt=prompt_template,
+                        thinking_config=thinking_config,
+                        temperature=temperature,
+                        max_tokens=max_tokens,
+                        timeout=TASK_TIMEOUT_SECONDS
+                    )
+                    
+                    # Update provider for circuit breaker tracking
+                    provider = fallback_provider
+                    break
+            else:
+                # No available fallbacks
+                raise ValueError(f"All model providers have open circuits, cannot generate optimization plan")
+        
         try:
             # Register tools if needed (optimizer doesn't seem to need tools at the moment)
             @optimizer_agent.tool
@@ -658,8 +838,45 @@ async def generate_optimization_plan(
                 """Extract important keywords from the job description."""
                 return extract_keywords(job_description, max_keywords)
             
-            # Run the agent
-            result = await optimizer_agent.run(user_message)
+            # Run the agent with explicit timeout handling
+            from app.core.parallel_config import TASK_TIMEOUT_SECONDS
+            
+            # Log the start time for better debugging
+            api_start_time = time.time()
+            logfire.info(
+                "Starting optimizer API call with timeout",
+                provider=provider,
+                timeout_seconds=TASK_TIMEOUT_SECONDS,
+                start_time=api_start_time
+            )
+            
+            # Use asyncio.wait_for to add an additional timeout layer
+            try:
+                result = await asyncio.wait_for(
+                    optimizer_agent.run(user_message),
+                    timeout=TASK_TIMEOUT_SECONDS - 1  # Set slightly lower to ensure it triggers before the model timeout
+                )
+                api_end_time = time.time()
+                api_duration = api_end_time - api_start_time
+                
+                logfire.info(
+                    "Optimizer API call completed successfully",
+                    provider=provider, 
+                    duration_seconds=round(api_duration, 2)
+                )
+                
+                # Record successful call to provider
+                circuit_breaker.record_success(provider)
+            except asyncio.TimeoutError:
+                api_duration = time.time() - api_start_time
+                logfire.error(
+                    "Optimizer API call timed out",
+                    provider=provider,
+                    duration_seconds=round(api_duration, 2),
+                    timeout_seconds=TASK_TIMEOUT_SECONDS
+                )
+                circuit_breaker.record_failure(provider)
+                raise asyncio.TimeoutError(f"Optimizer API call to {provider} timed out after {round(api_duration, 2)} seconds")
             
             # Calculate elapsed time
             elapsed_time = time.time() - start_time
@@ -669,6 +886,7 @@ async def generate_optimization_plan(
             # Log success
             logfire.info(
                 "Optimization plan generation completed successfully",
+                provider=provider,
                 response_length=len(str(result)),
                 duration_seconds=round(elapsed_time, 2),
                 recommendation_count=len(result.recommendations)
@@ -676,13 +894,36 @@ async def generate_optimization_plan(
             
             return result
             
+        except asyncio.TimeoutError as e:
+            # Calculate elapsed time
+            elapsed_time = time.time() - start_time
+            
+            # Record failure for this provider
+            circuit_breaker.record_failure(provider)
+            
+            # Log error
+            logfire.error(
+                "Timeout generating optimization plan",
+                provider=provider,
+                error="Request timed out after {0} seconds".format(TASK_TIMEOUT_SECONDS),
+                error_type="TimeoutError",
+                duration_seconds=round(elapsed_time, 2)
+            )
+            
+            # Re-raise the exception
+            raise e
+            
         except Exception as e:
             # Calculate elapsed time
             elapsed_time = time.time() - start_time
             
+            # Record failure for this provider
+            circuit_breaker.record_failure(provider)
+            
             # Log error
             logfire.error(
                 "Error generating optimization plan",
+                provider=provider,
                 error=str(e),
                 error_type=type(e).__name__,
                 duration_seconds=round(elapsed_time, 2)
@@ -766,13 +1007,15 @@ async def customize_resume(
         Return ONLY the customized resume in Markdown format, maintaining proper formatting.
         """
         
-        # Create a specialized agent for text generation
+        # Create a specialized agent for text generation with timeout
+        from app.core.parallel_config import TASK_TIMEOUT_SECONDS
         customization_agent = Agent(
             DEFAULT_MODEL,
             output_format="text",  # Use text format for direct output
             system_prompt=system_prompt,
             temperature=TEMPERATURE,
-            max_tokens=MAX_TOKENS
+            max_tokens=MAX_TOKENS,
+            timeout=TASK_TIMEOUT_SECONDS
         )
         
         # Build the user message
@@ -965,12 +1208,14 @@ async def generate_cover_letter(
                     )
                     
                     # Create a new agent with the fallback model
+                    from app.core.parallel_config import TASK_TIMEOUT_SECONDS
                     cover_letter_agent = Agent(
                         fallback_model,
                         output_type=CoverLetter,
                         system_prompt=cover_letter_agent.system_prompt,
                         temperature=TEMPERATURE,
-                        max_tokens=MAX_TOKENS
+                        max_tokens=MAX_TOKENS,
+                        timeout=TASK_TIMEOUT_SECONDS
                     )
                 
                 # Wait briefly before retrying
