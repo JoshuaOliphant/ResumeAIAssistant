@@ -577,7 +577,7 @@ class ParallelTaskScheduler:
         
     async def execute_task(self, task: ParallelTask) -> Any:
         """
-        Execute a single task with error handling and retries.
+        Execute a single task with error handling, retries, and timeout.
         
         Args:
             task: The task to execute
@@ -585,6 +585,8 @@ class ParallelTaskScheduler:
         Returns:
             The result of the task
         """
+        from app.core.parallel_config import TASK_TIMEOUT_SECONDS
+        
         task.status = TaskStatus.RUNNING
         task.start_time = time.time()
         self.running_tasks.add(task.id)
@@ -629,9 +631,12 @@ class ParallelTaskScheduler:
             )
         
         try:
-            # Execute the task function with its arguments
+            # Execute the task function with its arguments and timeout
             if task.func:
-                result = await task.func(*task.args, **task.kwargs)
+                # Create a future for the task and wait with timeout
+                task_coroutine = task.func(*task.args, **task.kwargs)
+                result = await asyncio.wait_for(task_coroutine, timeout=TASK_TIMEOUT_SECONDS)
+                
                 task.result = result
                 task.status = TaskStatus.COMPLETED
                 task.end_time = time.time()
@@ -698,6 +703,25 @@ class ParallelTaskScheduler:
                     )
                 
                 return result
+        except asyncio.TimeoutError as e:
+            task.status = TaskStatus.FAILED
+            task.error = e
+            task.end_time = time.time()
+            self.failed_tasks.add(task.id)
+            self.running_tasks.remove(task.id)
+            
+            duration = task.end_time - task.start_time
+            logfire.error(
+                "Task execution timed out",
+                task_id=task.id,
+                task_name=task.name,
+                timeout_seconds=TASK_TIMEOUT_SECONDS,
+                duration_seconds=round(duration, 2)
+            )
+            
+            # Re-raise with specific timeout error
+            raise asyncio.TimeoutError(f"Task {task.name} timed out after {TASK_TIMEOUT_SECONDS} seconds")
+            
         except Exception as e:
             task.status = TaskStatus.FAILED
             task.error = e

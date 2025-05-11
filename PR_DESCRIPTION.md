@@ -7,9 +7,7 @@
 - Added notification system for process completion
 - Designed visual progress indicator with detailed stage information
 
-## Implementation Details
-
-### Core Features
+## Core Features
 - **Real-time Updates**: WebSocket communication for live progress tracking
 - **Granular Stages**: Detailed tracking across initialization, analysis, planning, implementation, and finalization
 - **Complexity-based Estimation**: Smart time estimation based on section complexity
@@ -17,7 +15,7 @@
 - **Reconnection Logic**: Automatic WebSocket reconnection if connection drops
 - **Fallback Mechanism**: Client-side simulation when WebSocket isn't available
 
-### Technical Changes
+## Technical Changes
 - Added new `progress.py` endpoint for WebSocket connections:
   - Implemented `ProgressConnectionManager` for handling connections
   - Created pub/sub model for distributing updates to subscribed clients
@@ -34,7 +32,7 @@
   - Built `notification-badge.tsx` for system-wide notifications
   - Updated existing components to use real-time progress
 
-### Testing
+## Testing
 - Added comprehensive tests for WebSocket implementation
 - Created tests for progress tracking integration
 - Added frontend component tests

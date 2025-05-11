@@ -327,9 +327,88 @@ class PydanticAIOptimizerService:
             )
 
         # Store the plan for future reference
-        await self._store_plan(resume_id, job_id, plan)
-
+        try:
+            await self._store_plan(resume_id, job_id, plan)
+        except AttributeError:
+            # In case the method is not implemented yet, log and continue
+            logfire.warning(
+                "Could not store customization plan - method not implemented",
+                resume_id=resume_id,
+                job_id=job_id
+            )
+            
         return plan
+        
+    async def _store_plan(self, resume_id: str, job_id: str, plan: CustomizationPlan) -> None:
+        """
+        Store the customization plan for future reference.
+        
+        Args:
+            resume_id: Resume ID
+            job_id: Job description ID
+            plan: The generated customization plan
+        """
+        try:
+            # Import the database model
+            from app.models.customization import CustomizationPlan as CustomizationPlanModel
+            from app.models.resume import Resume
+            import uuid
+            
+            # Get the resume to find the user_id
+            resume = self.db.query(Resume).filter(Resume.id == resume_id).first()
+            user_id = resume.user_id if resume is not None else None
+            
+            # Convert recommendations to a list of dicts for JSON storage
+            recommendations_json = []
+            for rec in plan.recommendations:
+                rec_dict = rec.dict() if hasattr(rec, "dict") else {
+                    "section": getattr(rec, "section", None),
+                    "what": getattr(rec, "what", None),
+                    "why": getattr(rec, "why", None),
+                    "before_text": getattr(rec, "before_text", None),
+                    "after_text": getattr(rec, "after_text", None),
+                    "description": getattr(rec, "description", None)
+                }
+                recommendations_json.append(rec_dict)
+            
+            # Create a new plan record
+            db_plan = CustomizationPlanModel(
+                id=str(uuid.uuid4()),
+                resume_id=resume_id,
+                job_description_id=job_id,
+                user_id=user_id,
+                customization_strength=2,  # Default to balanced
+                summary=plan.summary or "No summary provided",
+                job_analysis=plan.job_analysis or "No job analysis provided",
+                keywords_to_add=plan.keywords_to_add or [],
+                formatting_suggestions=[str(s) for s in plan.formatting_suggestions] if plan.formatting_suggestions else [],
+                recommendations=recommendations_json or []
+            )
+            
+            # Add and commit to database
+            self.db.add(db_plan)
+            self.db.commit()
+            
+            logfire.info(
+                "Customization plan stored successfully",
+                resume_id=resume_id,
+                job_id=job_id,
+                plan_id=db_plan.id,
+                recommendation_count=len(plan.recommendations)
+            )
+            
+            return db_plan.id
+            
+        except Exception as e:
+            logfire.error(
+                "Error storing customization plan",
+                error=str(e),
+                error_type=type(e).__name__,
+                resume_id=resume_id,
+                job_id=job_id
+            )
+            # Don't raise the exception since this is non-critical
+            # We want the overall workflow to succeed even if storage fails
 
     @log_function_call
     async def customize_resume(
