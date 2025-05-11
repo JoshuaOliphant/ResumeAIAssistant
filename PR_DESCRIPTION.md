@@ -1,113 +1,60 @@
-# Smart Request Handling Implementation
+# Implement Enhanced Progress Tracking System
 
 ## Summary
+- Added WebSocket-based real-time progress updates for long-running operations
+- Implemented granular process tracking with detailed stage information
+- Created accurate time estimation based on task complexity calculation
+- Added notification system for process completion
+- Designed visual progress indicator with detailed stage information
 
-This PR implements a comprehensive smart request handling system that optimizes API requests based on complexity, priority, and resource requirements. The system significantly enhances the performance, reliability, and cost-effectiveness of API requests, particularly for AI-intensive endpoints.
+## Core Features
+- **Real-time Updates**: WebSocket communication for live progress tracking
+- **Granular Stages**: Detailed tracking across initialization, analysis, planning, implementation, and finalization
+- **Complexity-based Estimation**: Smart time estimation based on section complexity
+- **Browser Notifications**: System notifications when operations complete
+- **Reconnection Logic**: Automatic WebSocket reconnection if connection drops
+- **Fallback Mechanism**: Client-side simulation when WebSocket isn't available
 
-## Key Features
+## Technical Changes
+- Added new `progress.py` endpoint for WebSocket connections:
+  - Implemented `ProgressConnectionManager` for handling connections
+  - Created pub/sub model for distributing updates to subscribed clients
+  - Added JWT authentication for WebSocket connections
+  - Implemented REST API endpoints for fallback
 
-- **Request Classification**: Automatically categorizes requests by complexity and priority
-- **Dynamic Timeouts**: Sets timeouts based on request complexity and historical performance
-- **Priority Queuing**: Ensures critical requests are processed first during high load
-- **Circuit Breaker Pattern**: Prevents cascading failures when services are degraded (with thread safety)
-- **Comprehensive Monitoring**: Tracks request status, duration, and resource usage
-- **Resource Optimization**: Distributes load to prevent system overload
+- Enhanced the `parallel_processor.py`:
+  - Added `ProgressTracker` class for monitoring operations
+  - Updated `ParallelTaskScheduler` to report progress
+  - Implemented task complexity calculation
 
-## Implementation Details
-
-The implementation includes:
-
-1. **Core Components**:
-   - `SmartRequestMiddleware`: FastAPI middleware for global request handling
-   - `RequestTracker`: Tracks request status, duration, and statistics (thread-safe)
-   - `RequestQueue`: Prioritizes and batches requests based on importance
-   - `CircuitBreaker`: Thread-safe implementation to prevent calls to failing services
-
-2. **Decorator API**:
-   - `@smart_request` decorator for simple integration with existing endpoints
-   - Configurable complexity and priority levels
-   - Automatic request ID generation and tracking
-
-3. **Monitoring Endpoints**:
-   - `/api/v1/stats/requests`: Overall request statistics
-   - `/api/v1/stats/request/{request_id}`: Individual request details
-   - `/api/v1/stats/health`: System health metrics
-
-4. **Testing and Demo Utilities**:
-   - Integration tests to verify functionality
-   - Demo script for showcasing capabilities
-
-## Performance Benefits
-
-- **Reduced Timeouts**: Dynamic timeout adjustment based on request complexity
-- **Improved Stability**: Thread-safe circuit breaker prevents cascading failures
-- **Better Prioritization**: Critical user-facing requests processed first
-- **Resource Efficiency**: Batching and queuing reduce overall system load
-- **Enhanced Monitoring**: Detailed metrics for performance optimization
-- **Thread Safety**: All components are thread-safe for concurrent request handling
-
-## Files Changed
-
-- New Files:
-  - `/app/services/smart_request_handler.py`: Core implementation
-  - `/app/services/README_SMART_REQUEST.md`: Documentation
-  - `/tests/integration/test_smart_request.py`: Integration tests
-  - `/scripts/demo_smart_request.py`: Demo utility
-
-- Modified Files:
-  - `/app/api/endpoints/ats.py`: Added smart request decorator
-  - `/app/api/endpoints/stats.py`: Added monitoring endpoints
-  - `/app/schemas/ats.py`: Updated for request tracking
-  - `/main.py`: Initialized smart request middleware
-  - `/pyproject.toml`: Added dependencies
-  - `/requirements-cli.txt`: Added demo dependencies
-  - `/app/api/api.py`: Added support for smart request handling
-
-## Breaking Changes
-
-None. The implementation is backward compatible and only enhances existing endpoints.
-
-## Future Enhancements
-
-- Rate limiting per user/client
-- Machine learning for predicting optimal timeouts
-- More sophisticated load balancing strategies
-- Enhanced caching for repeated requests
-
-## How to Use
-
-### Basic Usage (Automatic)
-
-The middleware automatically handles requests to configured endpoints.
-
-### Decorator Usage (Explicit)
-
-```python
-from app.services.smart_request_handler import smart_request, TaskComplexity, RequestPriority
-
-@router.post("/analyze")
-@smart_request(complexity=TaskComplexity.MODERATE, priority=RequestPriority.HIGH)
-async def analyze_data(request_data: AnalysisRequest, request_id: str = None):
-    # Your implementation here
-    return {"result": result, "request_id": request_id}
-```
-
-### Monitoring
-
-Access the monitoring dashboard at `/api/v1/stats/requests` (requires admin privileges).
+- Added frontend components:
+  - Created `progress-tracker.tsx` component for WebSocket integration
+  - Built `notification-badge.tsx` for system-wide notifications
+  - Updated existing components to use real-time progress
 
 ## Testing
+- Added comprehensive tests for WebSocket implementation
+- Created tests for progress tracking integration
+- Added frontend component tests
 
-Run the tests with:
-```
-pytest tests/integration/test_smart_request.py -v
-```
+## Testing Instructions
+1. Start the backend server:
+   ```bash
+   python -m uvicorn main:app --host 0.0.0.0 --port 5000 --reload
+   ```
+2. Start the frontend:
+   ```bash
+   cd nextjs-frontend && npm run dev
+   ```
+3. Start a resume customization operation and observe real-time updates
+4. Verify browser notifications appear when operations complete
 
-Run the demo with:
-```
-python scripts/demo_smart_request.py --show-stats
-```
+## Screenshots
+The enhanced progress tracking includes:
+- Real-time progress bar with current stage indicator
+- Time estimation based on task complexity
+- Notification badge in application header
+- Browser notifications for completed operations
 
 ## Related Issues
-
-Resolves #8
+Resolves #2

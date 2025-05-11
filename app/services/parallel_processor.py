@@ -9,6 +9,7 @@ efficiency of resume customization and analysis by:
 3. Implementing request batching and prioritization
 4. Providing error recovery and fallback mechanisms
 5. Combining results from parallel tasks
+6. Real-time progress tracking with WebSocket updates
 
 The architecture is designed to be model-agnostic and can be used with any AI provider
 (Anthropic Claude, Google Gemini, OpenAI) supported by the application.
@@ -18,13 +19,15 @@ import asyncio
 import time
 import uuid
 import re
+import json
+import httpx
+from datetime import datetime
 from typing import Dict, List, Any, Optional, Tuple, Callable, Union, Set
 from enum import Enum
 import logging
 import logfire
 from pydantic import BaseModel, Field
 from app.core.config import settings
-from app.schemas.customize import CustomizationLevel, CustomizationPlan, RecommendationItem
 
 # Limit for concurrent tasks to prevent overloading
 MAX_CONCURRENT_TASKS = settings.MAX_CONCURRENT_TASKS if hasattr(settings, 'MAX_CONCURRENT_TASKS') else 5
@@ -55,6 +58,406 @@ class TaskStatus(str, Enum):
     FAILED = "failed"
     CANCELLED = "cancelled"
 
+class ProcessStage(str, Enum):
+    """Stages in the resume customization process."""
+    INITIALIZATION = "initialization"
+    ANALYSIS = "analysis"
+    PLANNING = "planning"
+    IMPLEMENTATION = "implementation"
+    FINALIZATION = "finalization"
+    
+class ProgressStageModel(BaseModel):
+    """Represents a stage in a multi-stage process with its own progress tracking."""
+    
+    name: str
+    description: str
+    progress: float = Field(0.0, ge=0.0, le=1.0)
+    status: str = "pending"  # pending, in_progress, completed, error
+    message: Optional[str] = None
+    estimated_time_remaining: Optional[float] = None  # in seconds
+    
+class ProgressUpdate(BaseModel):
+    """Progress update model that will be sent through WebSockets."""
+    
+    task_id: str
+    overall_progress: float = Field(0.0, ge=0.0, le=1.0)
+    status: str = "in_progress"  # initialization, in_progress, completed, error
+    current_stage: Optional[str] = None
+    stages: Dict[str, ProgressStageModel] = {}
+    message: Optional[str] = None
+    estimated_time_remaining: Optional[float] = None  # in seconds
+    started_at: Optional[str] = None
+    updated_at: Optional[str] = None
+
+class ProgressTracker:
+    """
+    Manages real-time progress tracking and updates for long-running operations.
+    
+    This class sends progress updates to clients via API calls to the progress
+    endpoint, which then broadcasts the updates to WebSocket clients.
+    """
+    
+    def __init__(self, task_id: str, progress_api_url: Optional[str] = None):
+        """
+        Initialize the progress tracker.
+        
+        Args:
+            task_id: Unique identifier for the task being tracked
+            progress_api_url: URL to the progress update API endpoint
+        """
+        self.task_id = task_id
+        self.api_url = progress_api_url or f"{settings.API_URL}/progress/update"
+        self.started_at = datetime.now().isoformat()
+        self.last_updated_at = self.started_at
+        
+        # Initialize stage tracking
+        self.stages = {
+            ProcessStage.INITIALIZATION.value: ProgressStageModel(
+                name=ProcessStage.INITIALIZATION.value,
+                description="Setting up resources and preparing for processing",
+                progress=0.0,
+                status="pending"
+            ),
+            ProcessStage.ANALYSIS.value: ProgressStageModel(
+                name=ProcessStage.ANALYSIS.value,
+                description="Analyzing resume and job description",
+                progress=0.0,
+                status="pending"
+            ),
+            ProcessStage.PLANNING.value: ProgressStageModel(
+                name=ProcessStage.PLANNING.value,
+                description="Creating customization plan",
+                progress=0.0,
+                status="pending"
+            ),
+            ProcessStage.IMPLEMENTATION.value: ProgressStageModel(
+                name=ProcessStage.IMPLEMENTATION.value,
+                description="Implementing customized resume sections",
+                progress=0.0,
+                status="pending"
+            ),
+            ProcessStage.FINALIZATION.value: ProgressStageModel(
+                name=ProcessStage.FINALIZATION.value,
+                description="Finalizing and assembling customized resume",
+                progress=0.0,
+                status="pending"
+            )
+        }
+        
+        self.current_stage = ProcessStage.INITIALIZATION.value
+        self.overall_progress = 0.0
+        self.status = "initializing"
+        self.message = "Initializing task"
+        self.estimated_total_time = 120.0  # Default 2 minutes estimate
+        self.elapsed_time = 0.0
+        
+        # Stage weights for overall progress calculation
+        self.stage_weights = {
+            ProcessStage.INITIALIZATION.value: 0.05,
+            ProcessStage.ANALYSIS.value: 0.20,
+            ProcessStage.PLANNING.value: 0.25,
+            ProcessStage.IMPLEMENTATION.value: 0.40,
+            ProcessStage.FINALIZATION.value: 0.10
+        }
+        
+        # Estimated time for each stage in seconds (defaults)
+        self.stage_time_estimates = {
+            ProcessStage.INITIALIZATION.value: 5.0,
+            ProcessStage.ANALYSIS.value: 25.0,
+            ProcessStage.PLANNING.value: 30.0,
+            ProcessStage.IMPLEMENTATION.value: 50.0,
+            ProcessStage.FINALIZATION.value: 10.0
+        }
+    
+    def set_time_estimates(self, complexity_score: float):
+        """
+        Set time estimates based on task complexity (1-10 scale).
+        
+        Args:
+            complexity_score: Complexity score between 1-10
+        """
+        # Base time in seconds for a complexity of 5
+        base_times = {
+            ProcessStage.INITIALIZATION.value: 5.0,
+            ProcessStage.ANALYSIS.value: 25.0,
+            ProcessStage.PLANNING.value: 30.0,
+            ProcessStage.IMPLEMENTATION.value: 50.0,
+            ProcessStage.FINALIZATION.value: 10.0
+        }
+        
+        # Adjust times based on complexity (linear scaling)
+        complexity_factor = complexity_score / 5.0
+        for stage in self.stage_time_estimates:
+            self.stage_time_estimates[stage] = base_times[stage] * complexity_factor
+        
+        # Update total estimated time
+        self.estimated_total_time = sum(self.stage_time_estimates.values())
+        
+        logfire.info(
+            "Set time estimates based on complexity",
+            task_id=self.task_id,
+            complexity_score=complexity_score,
+            estimated_total_time=self.estimated_total_time
+        )
+    
+    def update_stage(self, stage: str, progress: float, message: Optional[str] = None, status: Optional[str] = None):
+        """
+        Update progress for a specific stage.
+        
+        Args:
+            stage: The process stage to update
+            progress: Progress value between 0.0 and 1.0
+            message: Optional status message
+            status: Optional status update (pending, in_progress, completed, error)
+        """
+        if stage not in self.stages:
+            logfire.warning(f"Attempted to update unknown stage: {stage}")
+            return
+        
+        # Update the stage
+        self.stages[stage].progress = min(1.0, max(0.0, progress))
+        
+        if message:
+            self.stages[stage].message = message
+        
+        if status:
+            self.stages[stage].status = status
+            
+            # If a stage is marked as in_progress, set it as the current stage
+            if status == "in_progress" and self.current_stage != stage:
+                self.current_stage = stage
+                self.stages[stage].status = "in_progress"
+                
+            # If a stage is completed, potentially move to the next stage
+            if status == "completed":
+                # Find the next pending stage
+                stages_list = list(ProcessStage)
+                for i, process_stage in enumerate(stages_list):
+                    if process_stage.value == stage and i < len(stages_list) - 1:
+                        next_stage = stages_list[i + 1].value
+                        if self.stages[next_stage].status == "pending":
+                            self.current_stage = next_stage
+                            self.stages[next_stage].status = "in_progress"
+                            break
+        
+        # Calculate estimated time remaining for this stage
+        stage_progress = self.stages[stage].progress
+        if 0.0 < stage_progress < 1.0:
+            time_spent_on_stage = time.time() - (
+                time.time() - (time.time() - time.mktime(datetime.fromisoformat(self.started_at).timetuple()))
+            )
+            if time_spent_on_stage > 0:
+                estimated_stage_completion = (time_spent_on_stage / stage_progress) - time_spent_on_stage
+                self.stages[stage].estimated_time_remaining = estimated_stage_completion
+        elif stage_progress >= 1.0:
+            self.stages[stage].estimated_time_remaining = 0
+        
+        # Update overall progress based on weighted stage progress
+        self._calculate_overall_progress()
+        
+        # Send update
+        self._send_update()
+    
+    def set_task_complexity(self, complexity_score: float):
+        """
+        Set the complexity of the current task to improve time estimates.
+        
+        Args:
+            complexity_score: Complexity score between 1-10
+        """
+        self.set_time_estimates(complexity_score)
+        self._send_update()
+    
+    def start_stage(self, stage: str, message: Optional[str] = None):
+        """
+        Mark a stage as started.
+        
+        Args:
+            stage: The process stage to start
+            message: Optional status message
+        """
+        if stage not in self.stages:
+            return
+        
+        self.current_stage = stage
+        self.stages[stage].status = "in_progress"
+        self.stages[stage].progress = 0.1  # Start with a small initial progress
+        
+        if message:
+            self.stages[stage].message = message
+        else:
+            self.stages[stage].message = f"Starting {stage} stage"
+            
+        self._calculate_overall_progress()
+        self._send_update()
+    
+    def complete_stage(self, stage: str, message: Optional[str] = None):
+        """
+        Mark a stage as completed.
+        
+        Args:
+            stage: The process stage to complete
+            message: Optional completion message
+        """
+        if stage not in self.stages:
+            return
+        
+        self.stages[stage].status = "completed"
+        self.stages[stage].progress = 1.0
+        self.stages[stage].estimated_time_remaining = 0
+        
+        if message:
+            self.stages[stage].message = message
+        else:
+            self.stages[stage].message = f"Completed {stage} stage"
+        
+        # Find the next pending stage
+        stages_list = list(ProcessStage)
+        for i, process_stage in enumerate(stages_list):
+            if process_stage.value == stage and i < len(stages_list) - 1:
+                next_stage = stages_list[i + 1].value
+                if self.stages[next_stage].status == "pending":
+                    self.current_stage = next_stage
+                    self.stages[next_stage].status = "in_progress"
+                    self.stages[next_stage].progress = 0.1
+                    self.stages[next_stage].message = f"Starting {next_stage} stage"
+                    break
+        
+        self._calculate_overall_progress()
+        self._send_update()
+    
+    def complete_all(self, message: str = "Process completed successfully"):
+        """
+        Mark all stages as completed and the task as done.
+        
+        Args:
+            message: Completion message
+        """
+        # Complete any incomplete stages
+        for stage in self.stages:
+            if self.stages[stage].status != "completed":
+                self.stages[stage].status = "completed"
+                self.stages[stage].progress = 1.0
+                self.stages[stage].estimated_time_remaining = 0
+        
+        # Update overall status
+        self.status = "completed"
+        self.overall_progress = 1.0
+        self.message = message
+        self.estimated_total_time = time.time() - time.mktime(datetime.fromisoformat(self.started_at).timetuple())
+        
+        self._send_update()
+        
+        logfire.info(
+            "Process completed",
+            task_id=self.task_id,
+            message=message,
+            total_time=self.estimated_total_time
+        )
+    
+    def set_error(self, message: str, stage: Optional[str] = None):
+        """
+        Mark the current task or a specific stage as having an error.
+        
+        Args:
+            message: Error message
+            stage: Optional stage where the error occurred
+        """
+        self.status = "error"
+        self.message = message
+        
+        if stage and stage in self.stages:
+            self.stages[stage].status = "error"
+            self.stages[stage].message = message
+        else:
+            # Mark the current stage as having an error
+            self.stages[self.current_stage].status = "error"
+            self.stages[self.current_stage].message = message
+        
+        self._send_update()
+        
+        logfire.error(
+            "Error in process",
+            task_id=self.task_id,
+            stage=stage or self.current_stage,
+            message=message
+        )
+    
+    def _calculate_overall_progress(self):
+        """Calculate the overall progress based on weighted stage progress."""
+        weighted_progress = 0.0
+        
+        for stage, data in self.stages.items():
+            weight = self.stage_weights.get(stage, 0.0)
+            weighted_progress += data.progress * weight
+        
+        self.overall_progress = min(1.0, max(0.0, weighted_progress))
+        
+        # Calculate estimated time remaining
+        if 0.0 < self.overall_progress < 1.0:
+            elapsed_time = (datetime.now() - datetime.fromisoformat(self.started_at)).total_seconds()
+            self.elapsed_time = elapsed_time
+            
+            if elapsed_time > 0:
+                estimated_total = elapsed_time / self.overall_progress
+                estimated_remaining = estimated_total - elapsed_time
+                
+                # Cap the estimate at a reasonable value (10x the original estimate)
+                max_estimate = self.estimated_total_time * 10
+                self.estimated_total_time = min(estimated_total, max_estimate)
+                
+                # Set message based on estimated time
+                if estimated_remaining > 60:
+                    self.message = f"Processing... Est. {int(estimated_remaining/60)} min remaining"
+                else:
+                    self.message = f"Processing... Est. {int(estimated_remaining)} sec remaining"
+            
+        elif self.overall_progress >= 0.99:
+            self.message = "Finalizing process..."
+            self.overall_progress = 0.99  # Leave room for the final update
+    
+    async def _send_update(self):
+        """Send progress update to the API endpoint."""
+        self.last_updated_at = datetime.now().isoformat()
+        
+        update = ProgressUpdate(
+            task_id=self.task_id,
+            overall_progress=self.overall_progress,
+            status=self.status,
+            current_stage=self.current_stage,
+            stages={name: stage for name, stage in self.stages.items()},
+            message=self.message,
+            estimated_time_remaining=(
+                self.estimated_total_time - self.elapsed_time if 
+                self.overall_progress < 1.0 else 0
+            ),
+            started_at=self.started_at,
+            updated_at=self.last_updated_at
+        )
+        
+        # Send the update to the API using httpx
+        try:
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    self.api_url,
+                    json=update.dict(),
+                    timeout=5.0
+                )
+                
+                if response.status_code != 200:
+                    logfire.warning(
+                        "Failed to send progress update",
+                        status_code=response.status_code,
+                        response=response.text
+                    )
+        except Exception as e:
+            # Don't fail the main task if progress updates fail
+            logfire.warning(
+                "Error sending progress update",
+                error=str(e),
+                task_id=self.task_id
+            )
+
 class ParallelTask(BaseModel):
     """Definition of a task for parallel processing."""
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
@@ -82,12 +485,13 @@ class ParallelTaskScheduler:
     and implements prioritization to ensure critical tasks are completed first.
     """
     
-    def __init__(self, max_concurrent_tasks: int = MAX_CONCURRENT_TASKS):
+    def __init__(self, max_concurrent_tasks: int = MAX_CONCURRENT_TASKS, progress_tracker: Optional[ProgressTracker] = None):
         """
         Initialize the parallel task scheduler.
         
         Args:
             max_concurrent_tasks: Maximum number of tasks to run concurrently
+            progress_tracker: Optional progress tracker for real-time updates
         """
         self.tasks: Dict[str, ParallelTask] = {}
         self.max_concurrent_tasks = max_concurrent_tasks
@@ -95,6 +499,7 @@ class ParallelTaskScheduler:
         self.running_tasks: Set[str] = set()
         self.completed_tasks: Set[str] = set()
         self.failed_tasks: Set[str] = set()
+        self.progress_tracker = progress_tracker
         
     def add_task(self, task: ParallelTask) -> str:
         """
@@ -192,6 +597,39 @@ class ParallelTaskScheduler:
             task_name=task.name
         )
         
+        # Update progress tracking if available
+        if self.progress_tracker and task.section_type:
+            # Map section types to process stages
+            stage_mapping = {
+                SectionType.SUMMARY: ProcessStage.IMPLEMENTATION,
+                SectionType.EXPERIENCE: ProcessStage.IMPLEMENTATION,
+                SectionType.EDUCATION: ProcessStage.IMPLEMENTATION,
+                SectionType.SKILLS: ProcessStage.IMPLEMENTATION,
+                SectionType.PROJECTS: ProcessStage.IMPLEMENTATION,
+                SectionType.CERTIFICATIONS: ProcessStage.IMPLEMENTATION,
+                SectionType.OTHER: ProcessStage.IMPLEMENTATION
+            }
+            
+            # If the task name starts with "analyze", it's part of the analysis stage
+            if task.name.startswith("analyze"):
+                stage = ProcessStage.ANALYSIS.value
+            # If the task name starts with "optimize", it's part of the planning stage
+            elif task.name.startswith("optimize"):
+                stage = ProcessStage.PLANNING.value
+            # Otherwise, map based on section type
+            elif task.section_type in stage_mapping:
+                stage = stage_mapping[task.section_type].value
+            else:
+                stage = ProcessStage.IMPLEMENTATION.value
+                
+            # Update the progress for this stage
+            self.progress_tracker.update_stage(
+                stage=stage,
+                progress=0.2,  # Starting progress
+                message=f"Processing {task.section_type} section",
+                status="in_progress"
+            )
+        
         try:
             # Execute the task function with its arguments and timeout
             if task.func:
@@ -213,6 +651,57 @@ class ParallelTaskScheduler:
                     task_name=task.name,
                     duration_seconds=round(duration, 2)
                 )
+                
+                # Update progress tracking if available
+                if self.progress_tracker and task.section_type:
+                    # Map section types to process stages (similar to above)
+                    stage_mapping = {
+                        SectionType.SUMMARY: ProcessStage.IMPLEMENTATION,
+                        SectionType.EXPERIENCE: ProcessStage.IMPLEMENTATION,
+                        SectionType.EDUCATION: ProcessStage.IMPLEMENTATION,
+                        SectionType.SKILLS: ProcessStage.IMPLEMENTATION,
+                        SectionType.PROJECTS: ProcessStage.IMPLEMENTATION,
+                        SectionType.CERTIFICATIONS: ProcessStage.IMPLEMENTATION,
+                        SectionType.OTHER: ProcessStage.IMPLEMENTATION
+                    }
+                    
+                    # Determine the stage based on task name
+                    if task.name.startswith("analyze"):
+                        stage = ProcessStage.ANALYSIS.value
+                    elif task.name.startswith("optimize"):
+                        stage = ProcessStage.PLANNING.value
+                    elif task.section_type in stage_mapping:
+                        stage = stage_mapping[task.section_type].value
+                    else:
+                        stage = ProcessStage.IMPLEMENTATION.value
+                        
+                    # Calculate the stage progress based on completed tasks
+                    total_tasks_for_stage = sum(1 for t in self.tasks.values() 
+                                              if (t.name.startswith("analyze") and stage == ProcessStage.ANALYSIS.value) or
+                                                 (t.name.startswith("optimize") and stage == ProcessStage.PLANNING.value) or
+                                                 (t.section_type in stage_mapping and 
+                                                  stage_mapping[t.section_type].value == stage and
+                                                  not (t.name.startswith("analyze") or t.name.startswith("optimize"))))
+                    
+                    completed_tasks_for_stage = sum(1 for t_id in self.completed_tasks 
+                                                  if t_id in self.tasks and
+                                                  ((self.tasks[t_id].name.startswith("analyze") and stage == ProcessStage.ANALYSIS.value) or
+                                                   (self.tasks[t_id].name.startswith("optimize") and stage == ProcessStage.PLANNING.value) or
+                                                   (self.tasks[t_id].section_type in stage_mapping and 
+                                                    stage_mapping[self.tasks[t_id].section_type].value == stage and
+                                                    not (self.tasks[t_id].name.startswith("analyze") or self.tasks[t_id].name.startswith("optimize")))))
+                    
+                    if total_tasks_for_stage > 0:
+                        stage_progress = min(0.9, completed_tasks_for_stage / total_tasks_for_stage)
+                    else:
+                        stage_progress = 0.5
+                    
+                    # Update the progress for this stage
+                    self.progress_tracker.update_stage(
+                        stage=stage,
+                        progress=stage_progress,
+                        message=f"Processed {completed_tasks_for_stage}/{total_tasks_for_stage} sections"
+                    )
                 
                 return result
         except asyncio.TimeoutError as e:
@@ -251,6 +740,13 @@ class ParallelTaskScheduler:
                 duration_seconds=round(duration, 2)
             )
             
+            # Update progress tracking if available
+            if self.progress_tracker:
+                self.progress_tracker.set_error(
+                    message=f"Error processing {task.name}: {str(e)}",
+                    stage=ProcessStage.IMPLEMENTATION.value
+                )
+            
             # Re-raise to allow for custom error handling by caller
             raise e
             
@@ -277,9 +773,29 @@ class ParallelTaskScheduler:
         start_time = time.time()
         logfire.info("Starting execution of all tasks")
         
+        # Update progress tracking if available
+        if self.progress_tracker:
+            self.progress_tracker.start_stage(
+                stage=ProcessStage.INITIALIZATION.value,
+                message="Preparing to execute tasks"
+            )
+        
         results = {}
         pending_tasks = {task_id for task_id, task in self.tasks.items() 
                          if task.status == TaskStatus.PENDING}
+        
+        # Complete initialization stage
+        if self.progress_tracker:
+            self.progress_tracker.complete_stage(
+                stage=ProcessStage.INITIALIZATION.value,
+                message="Resources initialized successfully"
+            )
+            
+            # Start analysis stage
+            self.progress_tracker.start_stage(
+                stage=ProcessStage.ANALYSIS.value,
+                message="Starting analysis"
+            )
         
         while pending_tasks:
             # Get tasks that are ready to run
@@ -299,6 +815,14 @@ class ParallelTaskScheduler:
                         pending_tasks=list(pending_tasks),
                         level="warning"
                     )
+                    
+                    # Update progress tracking if available
+                    if self.progress_tracker:
+                        self.progress_tracker.set_error(
+                            message="Dependency issue detected. Some tasks cannot be completed.",
+                            stage=ProcessStage.IMPLEMENTATION.value
+                        )
+                    
                     break
             
             # Start as many ready tasks as allowed by concurrency limit
@@ -343,6 +867,26 @@ class ParallelTaskScheduler:
             failed_count=len(self.failed_tasks),
             total_duration_seconds=round(duration, 2)
         )
+        
+        # Update progress tracking for final stages if available
+        if self.progress_tracker:
+            # Start finalization stage if it hasn't been started yet
+            if self.progress_tracker.stages[ProcessStage.FINALIZATION.value].status == "pending":
+                self.progress_tracker.start_stage(
+                    stage=ProcessStage.FINALIZATION.value,
+                    message="Finalizing results"
+                )
+            
+            # Complete finalization stage
+            self.progress_tracker.complete_stage(
+                stage=ProcessStage.FINALIZATION.value,
+                message="Processing completed successfully"
+            )
+            
+            # Mark the entire process as complete
+            self.progress_tracker.complete_all(
+                message="Resume customization completed successfully"
+            )
         
         return results
 
@@ -614,7 +1158,7 @@ class ResultsAggregator:
     @staticmethod
     async def aggregate_optimization_plans(
         section_plans: Dict[SectionType, Dict[str, Any]]
-    ) -> CustomizationPlan:
+    ) -> Dict[str, Any]:
         """
         Aggregate optimization plans from multiple resume sections.
         
@@ -624,6 +1168,8 @@ class ResultsAggregator:
         Returns:
             Consolidated CustomizationPlan
         """
+        from app.schemas.customize import CustomizationPlan
+        
         # Start with base structure for the plan
         aggregated_plan = CustomizationPlan(
             summary="",
@@ -700,12 +1246,98 @@ class ParallelProcessor:
         self.scheduler = ParallelTaskScheduler()
         self.segmenter = ResumeSegmenter
         self.aggregator = ResultsAggregator
+        self.progress_tracker = None
+    
+    def initialize_progress_tracking(self, task_id: Optional[str] = None) -> str:
+        """
+        Initialize progress tracking for a parallel processing operation.
+        
+        Args:
+            task_id: Optional task ID to use. If not provided, a new one will be generated.
+            
+        Returns:
+            The task ID for progress tracking
+        """
+        task_id = task_id or str(uuid.uuid4())
+        self.progress_tracker = ProgressTracker(task_id=task_id)
+        
+        # Create a new scheduler with progress tracking
+        self.scheduler = ParallelTaskScheduler(
+            progress_tracker=self.progress_tracker
+        )
+        
+        return task_id
+    
+    def calculate_complexity_score(self, resume_content: str, job_description: str) -> float:
+        """
+        Calculate a complexity score for the resume customization task.
+        
+        Args:
+            resume_content: The resume content
+            job_description: The job description
+            
+        Returns:
+            Complexity score between 1.0 and 10.0
+        """
+        # Base complexity starts at 3.0
+        complexity = 3.0
+        
+        # Factor 1: Length of content
+        resume_length = len(resume_content)
+        if resume_length > 5000:
+            complexity += 2.0
+        elif resume_length > 3000:
+            complexity += 1.0
+        elif resume_length > 1500:
+            complexity += 0.5
+            
+        job_length = len(job_description)
+        if job_length > 3000:
+            complexity += 1.5
+        elif job_length > 1500:
+            complexity += 1.0
+        elif job_length > 800:
+            complexity += 0.5
+            
+        # Factor 2: Number of sections
+        sections = self.segmenter.identify_sections(resume_content)
+        if len(sections) > 6:
+            complexity += 1.5
+        elif len(sections) > 4:
+            complexity += 1.0
+        elif len(sections) > 2:
+            complexity += 0.5
+            
+        # Factor 3: Technical complexity (number of technical terms)
+        technical_patterns = [
+            r'\b[A-Z]+\b',  # Acronyms
+            r'\b[A-Za-z]+\+\+\b',  # C++, etc.
+            r'\b[A-Za-z]+#\b',  # C#, etc.
+            r'\b[A-Za-z0-9]+-[A-Za-z0-9]+\b',  # Hyphenated terms
+            r'\b[A-Za-z0-9]+\.[A-Za-z0-9]+\b'  # Dotted terms like framework.js
+        ]
+        
+        technical_count = 0
+        for pattern in technical_patterns:
+            technical_count += len(re.findall(pattern, resume_content))
+            technical_count += len(re.findall(pattern, job_description))
+            
+        if technical_count > 30:
+            complexity += 2.0
+        elif technical_count > 15:
+            complexity += 1.0
+        elif technical_count > 5:
+            complexity += 0.5
+            
+        # Cap the complexity at 10.0
+        return min(10.0, complexity)
     
     async def process_resume_analysis(
         self, 
         resume_content: str, 
         job_description: str,
         section_analysis_func: Callable,
+        task_id: Optional[str] = None,
         **kwargs
     ) -> Dict[str, Any]:
         """
@@ -715,6 +1347,7 @@ class ParallelProcessor:
             resume_content: The full resume content
             job_description: The job description text
             section_analysis_func: Function to analyze each section
+            task_id: Optional task ID for progress tracking
             **kwargs: Additional arguments to pass to the analysis function
             
         Returns:
@@ -727,11 +1360,39 @@ class ParallelProcessor:
             job_description_length=len(job_description)
         )
         
+        # Initialize progress tracking if a task_id is provided
+        if task_id:
+            self.initialize_progress_tracking(task_id)
+            
+            # Set complexity-based time estimates
+            complexity_score = self.calculate_complexity_score(resume_content, job_description)
+            self.progress_tracker.set_task_complexity(complexity_score)
+            
+            # Start initialization stage
+            self.progress_tracker.start_stage(
+                stage=ProcessStage.INITIALIZATION.value,
+                message="Preparing resume analysis"
+            )
+        
         # Identify sections in the resume
         sections = self.segmenter.identify_sections(resume_content)
         
+        # Complete initialization if tracking progress
+        if self.progress_tracker:
+            self.progress_tracker.complete_stage(
+                stage=ProcessStage.INITIALIZATION.value,
+                message="Resume sections identified"
+            )
+            
+            # Start analysis stage
+            self.progress_tracker.start_stage(
+                stage=ProcessStage.ANALYSIS.value,
+                message="Analyzing resume sections"
+            )
+        
         # Clear existing tasks and prepare new ones
-        self.scheduler = ParallelTaskScheduler()
+        if not self.progress_tracker:
+            self.scheduler = ParallelTaskScheduler()
         section_tasks = {}
         
         # Create analysis tasks for each section
@@ -773,6 +1434,13 @@ class ParallelProcessor:
             match_score=aggregated_results.get("match_score", 0)
         )
         
+        # Complete analysis stage if tracking progress
+        if self.progress_tracker:
+            self.progress_tracker.complete_stage(
+                stage=ProcessStage.ANALYSIS.value,
+                message="Resume analysis completed successfully"
+            )
+        
         return aggregated_results
     
     async def process_optimization_plan(
@@ -781,8 +1449,9 @@ class ParallelProcessor:
         job_description: str,
         evaluation: Dict[str, Any],
         section_optimization_func: Callable,
+        task_id: Optional[str] = None,
         **kwargs
-    ) -> CustomizationPlan:
+    ) -> Dict[str, Any]:
         """
         Process optimization plan generation in parallel across sections.
         
@@ -791,6 +1460,7 @@ class ParallelProcessor:
             job_description: The job description text
             evaluation: Evaluation dictionary from the evaluation stage
             section_optimization_func: Function to generate optimization plan for each section
+            task_id: Optional task ID for progress tracking
             **kwargs: Additional arguments to pass to the optimization function
             
         Returns:
@@ -802,6 +1472,21 @@ class ParallelProcessor:
             resume_length=len(resume_content),
             job_description_length=len(job_description)
         )
+        
+        # Initialize progress tracking if a task_id is provided and not already initialized
+        if task_id and not self.progress_tracker:
+            self.initialize_progress_tracking(task_id)
+            
+            # Set complexity-based time estimates
+            complexity_score = self.calculate_complexity_score(resume_content, job_description)
+            self.progress_tracker.set_task_complexity(complexity_score)
+        
+        # Start planning stage if tracking progress
+        if self.progress_tracker and self.progress_tracker.stages[ProcessStage.PLANNING.value].status == "pending":
+            self.progress_tracker.start_stage(
+                stage=ProcessStage.PLANNING.value,
+                message="Creating customization plan"
+            )
         
         # Identify sections in the resume
         sections = self.segmenter.identify_sections(resume_content)
@@ -817,7 +1502,8 @@ class ParallelProcessor:
                         break
         
         # Clear existing tasks and prepare new ones
-        self.scheduler = ParallelTaskScheduler()
+        if not self.progress_tracker:
+            self.scheduler = ParallelTaskScheduler()
         section_tasks = {}
         
         # Create optimization tasks for each section
@@ -861,6 +1547,19 @@ class ParallelProcessor:
             processed_sections=len(section_results),
             recommendation_count=len(aggregated_plan.recommendations)
         )
+        
+        # Complete planning stage if tracking progress
+        if self.progress_tracker:
+            self.progress_tracker.complete_stage(
+                stage=ProcessStage.PLANNING.value,
+                message="Customization plan created successfully"
+            )
+            
+            # Start implementation stage
+            self.progress_tracker.start_stage(
+                stage=ProcessStage.IMPLEMENTATION.value,
+                message="Implementing customized resume"
+            )
         
         return aggregated_plan
     

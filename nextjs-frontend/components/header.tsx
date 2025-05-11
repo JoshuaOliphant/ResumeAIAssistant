@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/sheet'
 import { useAuth } from '@/lib/auth'
 import { UserMenu } from '@/components/user-menu'
+import { NotificationBadge } from '@/components/notification-badge'
 
 const navigation = [
   { name: 'Features', href: '/#features' },
@@ -64,7 +65,10 @@ export default function Header() {
           {!isLoading && (
             <>
               {isAuthenticated ? (
-                <UserMenu />
+                <>
+                  <NotificationBadge />
+                  <UserMenu />
+                </>
               ) : (
                 <Button asChild size="sm">
                   <Link href="/login">
@@ -82,7 +86,10 @@ export default function Header() {
           <ThemeToggle />
           
           {!isLoading && isAuthenticated && (
-            <UserMenu />
+            <>
+              <NotificationBadge />
+              <UserMenu />
+            </>
           )}
           
           <Sheet>

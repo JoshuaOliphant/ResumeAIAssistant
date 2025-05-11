@@ -10,6 +10,8 @@ import { Loader2, FileCheck, RefreshCw, AlertCircle, Check, ChevronRight, Sparkl
 import { Label } from "@/components/ui/label"
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
 import { getCustomizationLevelPrompt } from "@/lib/prompts"
+import { ProgressTracker } from "./progress-tracker"
+import { addNotification } from "./notification-badge"
 
 export interface CustomizeResumeProps {
   resumeId: string
@@ -52,16 +54,14 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [progress, setProgress] = useState(0)
   const [stage, setStage] = useState<CustomizationStage>('analysis')
   const [customizationLevel, setCustomizationLevel] = useState<CustomizationLevel>('balanced')
-  const [estimatedTime, setEstimatedTime] = useState(60) // In seconds
-  const [timeRemaining, setTimeRemaining] = useState(60) // In seconds
   const [customizedVersion, setCustomizedVersion] = useState<ResumeVersion | null>(null)
   const [customizationPlan, setCustomizationPlan] = useState<CustomizationPlan | null>(null)
   const [resume, setResume] = useState<string | null>(null)
   const [jobDescription, setJobDescription] = useState<string | null>(null)
-  const [progressTimer, setProgressTimer] = useState<NodeJS.Timeout | null>(null)
+  const [operationId, setOperationId] = useState<string | null>(null)
+  const [useRealTimeProgress, setUseRealTimeProgress] = useState(true)
 
   // Load resume and job description
   useEffect(() => {
@@ -84,52 +84,33 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
     }
   }, [resumeId, jobId]);
 
-  // Function to update progress bar
-  useEffect(() => {
-    if (loading && progressTimer === null) {
-      // Set estimated time based on current stage
-      let stageTime = 60; // default
+  // Initialize operation ID for progress tracking
+  const initializeOperation = async () => {
+    try {
+      // Make a POST request to create a new progress tracker
+      const response = await fetch(`${API_BASE_URL}/progress/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
       
-      switch (stage) {
-        case 'analysis':
-          stageTime = 20;
-          break;
-        case 'plan':
-          stageTime = 30;
-          break;
-        case 'implementation':
-          stageTime = 45;
-          break;
+      if (!response.ok) {
+        console.error('Failed to initialize progress tracking, falling back to client-side simulation');
+        setUseRealTimeProgress(false);
+        return null;
       }
       
-      setEstimatedTime(stageTime);
-      setTimeRemaining(stageTime);
-      setProgress(0);
-      
-      // Set up progress timer - increments every second
-      const timer = setInterval(() => {
-        setProgress((prevProgress) => {
-          // Cap progress at 95% until we get real results
-          const newProgress = prevProgress + (100 / stageTime);
-          return Math.min(newProgress, 95);
-        });
-        
-        setTimeRemaining((prevTime) => {
-          const newTime = prevTime - 1;
-          return Math.max(newTime, 0);
-        });
-      }, 1000);
-      
-      setProgressTimer(timer);
+      const data = await response.json();
+      console.log('Progress tracking initialized with ID:', data.task_id);
+      return data.task_id;
+    } catch (error) {
+      console.error('Error initializing progress tracking:', error);
+      setUseRealTimeProgress(false);
+      return null;
     }
-    
-    return () => {
-      if (progressTimer) {
-        clearInterval(progressTimer);
-        setProgressTimer(null);
-      }
-    };
-  }, [loading, stage, progressTimer]);
+  };
 
   // Function to analyze resume and create a customization plan
   const analyzeResume = async () => {
@@ -139,6 +120,10 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
     }
     
     try {
+      // Initialize progress tracking
+      const taskId = await initializeOperation();
+      setOperationId(taskId);
+      
       setLoading(true);
       setStage('analysis');
       setError(null);
@@ -147,20 +132,20 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       console.log("Analyzing resume and job description...");
       
       try {
-        // Step 1: Basic keyword analysis using ATSService
+        // Step 1: Basic keyword analysis using ATSService with operation ID header
         console.log("Step 1: Performing basic keyword analysis...");
-        console.log(`Analyzing resume ID: ${resumeId}, job ID: ${jobId}`);
-        const analysisResult = await ATSService.analyzeResume(resumeId, jobId);
+        console.log(`Analyzing resume ID: ${resumeId}, job ID: ${jobId}, operation ID: ${taskId}`);
+        
+        const analysisResult = await ATSService.analyzeResume(
+          resumeId, 
+          jobId, 
+          taskId ? { headers: { 'X-Operation-ID': taskId } } : undefined
+        );
+        
         console.log("Basic analysis result:", analysisResult);
         
         // Step 2: Move to the plan stage with AI-enhanced analysis
         setStage('plan');
-        
-        // Reset progress for the next stage
-        if (progressTimer) {
-          clearInterval(progressTimer);
-          setProgressTimer(null);
-        }
         
         // Step 3: Use enhanced AI analysis to create a better customization plan
         console.log("Step 2: Generating AI-enhanced customization plan...");
@@ -170,14 +155,14 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
             resumeId,
             jobId,
             customizationLevel,
-            analysisResult
+            analysisResult,
+            taskId ? { headers: { 'X-Operation-ID': taskId } } : undefined
           );
           
           console.log("Enhanced plan generated:", enhancedPlan);
           
           // Set the enhanced customization plan
           setCustomizationPlan(enhancedPlan);
-          setLoading(false);
         } catch (enhancedPlanError) {
           console.error("Error generating enhanced plan:", enhancedPlanError);
           console.log("Falling back to basic plan generation...");
@@ -246,8 +231,10 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
           
           // Set fallback customization plan
           setCustomizationPlan(fallbackPlan);
-          setLoading(false);
         }
+        
+        // Keep loading state true until user confirms plan
+        // The loading indicator will be replaced by the ProgressTracker
       } catch (analysisError) {
         // If initial analysis fails, log the error and proceed directly to implementation
         console.error("Error during analysis stage:", analysisError);
@@ -272,6 +259,12 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
     }
     
     try {
+      // Make sure we have an operation ID for tracking
+      if (!operationId) {
+        const taskId = await initializeOperation();
+        setOperationId(taskId);
+      }
+      
       setLoading(true);
       setStage('implementation');
       setError(null);
@@ -284,28 +277,25 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       console.log("Starting resume customization:", resumeId, jobId, "with level:", customizationLevel);
       console.log("Using customization plan:", customizationPlan);
       
-      // Pass the customization level and plan to the API
+      // Pass the customization level and plan to the API with the operation ID header
       const result = await CustomizationService.customizeResume(
         resumeId,
         jobId,
         customizationLevel,
-        customizationPlan
+        customizationPlan,
+        operationId ? { headers: { 'X-Operation-ID': operationId } } : undefined
       );
       console.log("Customization result:", result);
-      
-      // Clear the timer
-      if (progressTimer) {
-        clearInterval(progressTimer);
-        setProgressTimer(null);
-      }
-      
-      // Set progress to 100%
-      setProgress(100);
-      setTimeRemaining(0);
       
       // Store the result
       setCustomizedVersion(result);
       setStage('complete');
+      
+      // Add notification
+      addNotification({
+        title: "Resume Customization Complete",
+        message: "Your resume has been successfully customized for this job."
+      });
       
       // Call onSuccess callback if provided
       if (onSuccess) {
@@ -315,12 +305,16 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       console.error("Error customizing resume:", err);
       setError(err instanceof Error ? err.message : "Failed to customize resume");
       
+      // Add error notification
+      addNotification({
+        title: "Customization Error",
+        message: err instanceof Error ? err.message : "Failed to customize resume"
+      });
+      
       // Call onError callback if provided
       if (onError && err instanceof Error) {
         onError(err);
       }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -356,6 +350,30 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
   // Render stage-specific content
   const renderStageContent = () => {
     if (loading) {
+      // Use real-time progress tracker if available
+      if (operationId && useRealTimeProgress) {
+        return (
+          <ProgressTracker 
+            taskId={operationId}
+            title="Resume Customization Progress"
+            description="Track the progress of your resume customization"
+            onComplete={(result) => {
+              // When the progress tracker signals completion, we can update the UI
+              if (stage === 'implementation' && customizedVersion) {
+                setStage('complete');
+              }
+            }}
+            onError={(error) => {
+              if (!customizedVersion) {
+                setError(error.message);
+              }
+            }}
+            showNotifications={true}
+          />
+        );
+      }
+      
+      // Fallback to static progress display if real-time tracking isn't available
       return (
         <div className="space-y-4">
           <div className="flex items-center space-x-2">
@@ -365,19 +383,6 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
               {stage === 'plan' && "Creating customization plan..."}
               {stage === 'implementation' && "Implementing customizations..."}
             </span>
-          </div>
-          
-          <div className="space-y-2">
-            <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
-              <div 
-                className="h-full bg-primary transition-all duration-300 ease-in-out"
-                style={{ width: `${progress}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-sm text-muted-foreground">
-              <span>Progress: {Math.round(progress)}%</span>
-              <span>Estimated time: {formatTime(timeRemaining)}</span>
-            </div>
           </div>
           
           <div className="space-y-2 rounded-lg bg-muted p-4 text-sm">
