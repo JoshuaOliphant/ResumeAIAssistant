@@ -708,7 +708,11 @@ class SmartRequestMiddleware(BaseHTTPMiddleware):
         # Adjust based on request method
         if request.method == "GET":
             # GET requests are typically simpler
-            complexity = TaskComplexity(max(0, complexity.value - 1))
+            # Convert to complexity level one step lower if possible
+            complexity_values = list(TaskComplexity)
+            current_index = complexity_values.index(complexity)
+            if current_index > 0:  # If not already at the lowest complexity
+                complexity = complexity_values[current_index - 1]
         
         return complexity, priority
     
