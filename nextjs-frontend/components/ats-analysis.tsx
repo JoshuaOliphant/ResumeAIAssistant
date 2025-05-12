@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { ATSService, ATSAnalysisResult } from "@/lib/client"
+import { ATSService, ATSAnalysisResult, ApiError } from "@/lib/client"
 import { MatchScore } from "@/components/ats-match-score"
 import { KeywordMatch } from "@/components/ats-keyword-match"
 import { MissingKeywords } from "@/components/ats-missing-keywords"
@@ -138,11 +138,11 @@ export function ATSAnalysis({ resumeId, jobId, onAnalysisComplete }: ATSAnalysis
       }
     } catch (error) {
       console.error("Error analyzing resume:", error)
+      
       // Check for ApiError specifically (from client.ts)
-      if (error && typeof error === 'object' && 'status' in error && 'message' in error) {
-        const apiError = error as { status: number; message: string; data?: any };
-        setError(`Failed to analyze resume (${apiError.status}): ${apiError.message}`)
-        console.error("API Error details:", apiError.data);
+      if (error instanceof ApiError) {
+        setError(`Failed to analyze resume (${error.status}): ${error.message}`)
+        console.error("API Error details:", error.data);
       } else if (error instanceof Error) {
         // Regular Error object
         setError(`Failed to analyze resume: ${error.message || "Unknown error occurred"}`)

@@ -108,7 +108,14 @@ export class ApiError extends Error {
   public data: any;
 
   constructor(status: number, message: string, data?: any) {
-    super(message);
+    // Format the message to include data details if available
+    const formattedMessage = data?.detail 
+      ? data.detail 
+      : typeof message === 'string' 
+        ? message 
+        : 'An unknown error occurred';
+    
+    super(formattedMessage);
     this.status = status;
     this.data = data;
     this.name = 'ApiError';
@@ -451,9 +458,22 @@ export const ATSService = {
     });
     
     if (!response.ok) {
+      // Improved error handling
+      let errorMessage = 'An error occurred';
+      
+      // Try to extract a human-readable error message
+      if (data) {
+        if (typeof data.detail === 'string') {
+          errorMessage = data.detail;
+        } else if (data.detail && typeof data.detail === 'object') {
+          // For validation errors which might be nested
+          errorMessage = JSON.stringify(data.detail);
+        }
+      }
+      
       throw new ApiError(
         response.status,
-        data.detail || 'An error occurred',
+        errorMessage,
         data
       );
     }
