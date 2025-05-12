@@ -138,7 +138,17 @@ export function ATSAnalysis({ resumeId, jobId, onAnalysisComplete }: ATSAnalysis
       }
     } catch (error) {
       console.error("Error analyzing resume:", error)
-      setError("Failed to analyze resume. Please try again.")
+      // Check for ApiError specifically (from client.ts)
+      if (error && typeof error === 'object' && 'status' in error && 'message' in error) {
+        const apiError = error as { status: number; message: string; data?: any };
+        setError(`Failed to analyze resume (${apiError.status}): ${apiError.message}`)
+        console.error("API Error details:", apiError.data);
+      } else if (error instanceof Error) {
+        // Regular Error object
+        setError(`Failed to analyze resume: ${error.message || "Unknown error occurred"}`)
+      } else {
+        setError("Failed to analyze resume. Please try again.")
+      }
     } finally {
       setIsAnalyzing(false)
     }

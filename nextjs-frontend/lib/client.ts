@@ -421,9 +421,10 @@ export const ATSService = {
     options?: { headers?: Record<string, string> }
   ): Promise<ATSAnalysisResult> {
     console.log('ATSService.analyzeResume - input params:', { resumeId, jobDescriptionId });
+    // Fix: Create an ATSAnalysisRequest object exactly matching the expected backend schema
     const requestBody = JSON.stringify({
       resume_id: resumeId,
-      job_description_id: jobDescriptionId,
+      job_description_id: jobDescriptionId
     });
     console.log('ATSService.analyzeResume - request body:', requestBody);
     
