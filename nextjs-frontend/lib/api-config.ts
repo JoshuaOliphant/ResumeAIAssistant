@@ -1,18 +1,22 @@
 // API Configuration
 
+// The value hardcoded to 5001 since we've confirmed that's what the backend is using
+const BACKEND_PORT = 5001;
+
 // Backend API URL - point directly to the FastAPI backend
-// Use environment variables if available, otherwise fall back to localhost
-export const API_BASE_URL = 
-  (typeof window !== 'undefined' && window.location.hostname === 'localhost') 
-    ? 'http://localhost:5001/api/v1'
-    : '/api/v1'; // Use relative URL in production
+// Use fixed port value for reliable local development
+export const API_BASE_URL = `http://localhost:${BACKEND_PORT}/api/v1`;
 
 // For use within the client.ts file to make sure we don't double-prefix
-// Use an environment variable for the backend URL, default to the current host
-export const BACKEND_API_URL = 
-  (typeof window !== 'undefined' && window.location.hostname === 'localhost') 
-    ? 'http://localhost:5001'
-    : ''; // Empty string means use the current host in production
+// Use fixed port value for reliable local development
+export const BACKEND_API_URL = `http://localhost:${BACKEND_PORT}`;
 
 // API version prefix used in both client and backend
 export const API_VERSION = '/api/v1';
+
+// Log API configuration to debug connection issues
+console.info('API Configuration:', {
+  API_BASE_URL,
+  BACKEND_API_URL,
+  API_VERSION,
+});

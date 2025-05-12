@@ -109,11 +109,21 @@ export class ApiError extends Error {
 
   constructor(status: number, message: string, data?: any) {
     // Format the message to include data details if available
-    const formattedMessage = data?.detail 
-      ? data.detail 
-      : typeof message === 'string' 
-        ? message 
-        : 'An unknown error occurred';
+    let formattedMessage = 'An unknown error occurred';
+    
+    if (data?.detail) {
+      if (typeof data.detail === 'string') {
+        formattedMessage = data.detail;
+      } else if (typeof data.detail === 'object') {
+        try {
+          formattedMessage = JSON.stringify(data.detail);
+        } catch (e) {
+          formattedMessage = 'Validation error occurred';
+        }
+      }
+    } else if (typeof message === 'string') {
+      formattedMessage = message;
+    }
     
     super(formattedMessage);
     this.status = status;

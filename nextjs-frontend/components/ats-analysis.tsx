@@ -141,7 +141,24 @@ export function ATSAnalysis({ resumeId, jobId, onAnalysisComplete }: ATSAnalysis
       
       // Check for ApiError specifically (from client.ts)
       if (error instanceof ApiError) {
-        setError(`Failed to analyze resume (${error.status}): ${error.message}`)
+        let errorDetails = '';
+        if (error.data) {
+          try {
+            // Try to format error data for display
+            if (typeof error.data === 'object') {
+              const dataString = JSON.stringify(error.data, null, 2);
+              if (dataString !== '{}') {
+                errorDetails = `: ${dataString}`;
+              }
+            }
+          } catch (e) {
+            // Silent catch - we'll just use the basic message
+          }
+        }
+        
+        // Set the error message with appropriate details
+        setError(`Failed to analyze resume (${error.status}): ${error.message}${errorDetails}`)
+        
         console.error("API Error details:", error.data);
       } else if (error instanceof Error) {
         // Regular Error object

@@ -14,8 +14,13 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     SECRET_KEY: str = os.getenv("SECRET_KEY", secrets.token_urlsafe(32))
 
-    # CORS Configuration
-    BACKEND_CORS_ORIGINS: List[str] = ["*"]
+    # CORS Configuration - explicitly allow localhost:3000 (Next.js frontend)
+    BACKEND_CORS_ORIGINS: List[str] = [
+        "http://localhost:3000",  # Next.js frontend
+        "http://127.0.0.1:3000",  # Alternative localhost
+        "http://localhost:5001",  # Backend itself
+        "http://127.0.0.1:5001"   # Alternative for backend
+    ]
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> Union[List[str], str]:
