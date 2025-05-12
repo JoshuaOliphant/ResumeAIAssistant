@@ -439,15 +439,36 @@ export const ATSService = {
   ): Promise<ATSAnalysisResult> {
     try {
       console.log('ATSService.analyzeResume - input params:', { resumeId, jobDescriptionId });
-      // Fix: Create an ATSAnalysisRequest object exactly matching the expected backend schema
+      
+      // Due to smart_request decorator issues, use the analyze-content endpoint instead
+      // which accepts direct content input and doesn't have the same query parameter requirements
+      
+      // First, we need to fetch the resume and job description content
+      console.log('Fetching resume and job description content...');
+      
+      // Get the resume content
+      const resumeResponse = await fetchWithAuth(`/resumes/${resumeId}`);
+      if (!resumeResponse || !resumeResponse.current_version || !resumeResponse.current_version.content) {
+        throw new ApiError(404, 'Resume content not found', null);
+      }
+      const resumeContent = resumeResponse.current_version.content;
+      
+      // Get the job description content
+      const jobResponse = await fetchWithAuth(`/jobs/${jobDescriptionId}`);
+      if (!jobResponse || !jobResponse.description) {
+        throw new ApiError(404, 'Job description content not found', null);
+      }
+      const jobDescriptionContent = jobResponse.description;
+      
+      console.log('Successfully fetched content, calling analyze-content endpoint');
+      
+      // Now use the analyze-content endpoint which should not have the same issues
       const requestBody = JSON.stringify({
-        resume_id: resumeId,
-        job_description_id: jobDescriptionId
+        resume_content: resumeContent,
+        job_description_content: jobDescriptionContent,
       });
-      console.log('ATSService.analyzeResume - request body:', requestBody);
       
       // Bypass NextJS API routes and go directly to the backend
-      // to avoid path prefixing issues
       const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
       const headers = {
         'Content-Type': 'application/json',
@@ -455,8 +476,8 @@ export const ATSService = {
         ...(options?.headers || {})
       };
       
-      console.log(`Sending request to: ${BACKEND_API_URL}/api/v1/ats/analyze`);
-      const response = await fetch(`${BACKEND_API_URL}/api/v1/ats/analyze`, {
+      console.log(`Sending request to: ${BACKEND_API_URL}/api/v1/ats/analyze-content`);
+      const response = await fetch(`${BACKEND_API_URL}/api/v1/ats/analyze-content`, {
         method: 'POST',
         headers,
         body: requestBody,
@@ -498,6 +519,17 @@ export const ATSService = {
       // Verify we have valid data
       if (!data) {
         throw new ApiError(response.status, 'Response contained no data', null);
+      }
+      
+      // For the analyze-content endpoint, we need to format the response to match the expected ATSAnalysisResult structure
+      if (response.url.includes('/analyze-content')) {
+        // Add resume_id and job_description_id fields that would be included in normal analyze endpoint
+        return {
+          ...data,
+          resume_id: resumeId,
+          job_description_id: jobDescriptionId,
+          id: `analysis-${Date.now()}`  // Generate a temporary ID for the analysis
+        };
       }
       
       return data;
