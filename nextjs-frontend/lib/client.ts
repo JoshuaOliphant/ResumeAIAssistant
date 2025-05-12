@@ -427,58 +427,86 @@ export const ATSService = {
     jobDescriptionId: string,
     options?: { headers?: Record<string, string> }
   ): Promise<ATSAnalysisResult> {
-    console.log('ATSService.analyzeResume - input params:', { resumeId, jobDescriptionId });
-    // Fix: Create an ATSAnalysisRequest object exactly matching the expected backend schema
-    const requestBody = JSON.stringify({
-      resume_id: resumeId,
-      job_description_id: jobDescriptionId
-    });
-    console.log('ATSService.analyzeResume - request body:', requestBody);
-    
-    // Bypass NextJS API routes and go directly to the backend
-    // to avoid path prefixing issues
-    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-    const headers = {
-      'Content-Type': 'application/json',
-      ...(token && { Authorization: `Bearer ${token}` }),
-      ...(options?.headers || {})
-    };
-    
-    const response = await fetch(`${BACKEND_API_URL}/api/v1/ats/analyze`, {
-      method: 'POST',
-      headers,
-      body: requestBody,
-    });
-    
-    console.log(`Response status: ${response.status} ${response.statusText}`);
-    
-    const data = await response.json().catch((err) => {
-      console.error(`Error parsing JSON: ${err.message}`);
-      return {};
-    });
-    
-    if (!response.ok) {
-      // Improved error handling
-      let errorMessage = 'An error occurred';
+    try {
+      console.log('ATSService.analyzeResume - input params:', { resumeId, jobDescriptionId });
+      // Fix: Create an ATSAnalysisRequest object exactly matching the expected backend schema
+      const requestBody = JSON.stringify({
+        resume_id: resumeId,
+        job_description_id: jobDescriptionId
+      });
+      console.log('ATSService.analyzeResume - request body:', requestBody);
       
-      // Try to extract a human-readable error message
-      if (data) {
-        if (typeof data.detail === 'string') {
-          errorMessage = data.detail;
-        } else if (data.detail && typeof data.detail === 'object') {
-          // For validation errors which might be nested
-          errorMessage = JSON.stringify(data.detail);
-        }
+      // Bypass NextJS API routes and go directly to the backend
+      // to avoid path prefixing issues
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(options?.headers || {})
+      };
+      
+      console.log(`Sending request to: ${BACKEND_API_URL}/api/v1/ats/analyze`);
+      const response = await fetch(`${BACKEND_API_URL}/api/v1/ats/analyze`, {
+        method: 'POST',
+        headers,
+        body: requestBody,
+      });
+      
+      console.log(`Response status: ${response.status} ${response.statusText}`);
+      
+      // Important: Check if response is present before trying to parse JSON
+      if (!response) {
+        throw new ApiError(0, 'Network request failed: No response received', null);
       }
       
-      throw new ApiError(
-        response.status,
-        errorMessage,
-        data
-      );
+      const data = await response.json().catch((err) => {
+        console.error(`Error parsing JSON: ${err.message}`);
+        throw new ApiError(response.status, `Failed to parse response: ${err.message}`, err);
+      });
+      
+      if (!response.ok) {
+        // Improved error handling
+        let errorMessage = 'An error occurred';
+        
+        // Try to extract a human-readable error message
+        if (data) {
+          if (typeof data.detail === 'string') {
+            errorMessage = data.detail;
+          } else if (data.detail && typeof data.detail === 'object') {
+            // For validation errors which might be nested
+            errorMessage = JSON.stringify(data.detail);
+          }
+        }
+        
+        throw new ApiError(
+          response.status,
+          errorMessage,
+          data
+        );
+      }
+      
+      // Verify we have valid data
+      if (!data) {
+        throw new ApiError(response.status, 'Response contained no data', null);
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error in analyzeResume:', error);
+      
+      // If it's already an ApiError, just rethrow it
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      
+      // Convert any other errors to ApiError with a more helpful message
+      if (error instanceof Error) {
+        throw new ApiError(0, `Network or connection error: ${error.message}`, error);
+      }
+      
+      // Fallback for unknown errors
+      throw new ApiError(0, 'Unknown error during analysis request', error);
     }
-    
-    return data;
   },
 
   // Direct content analysis (without saving)
