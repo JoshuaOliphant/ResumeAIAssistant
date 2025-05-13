@@ -46,6 +46,13 @@ class Settings(BaseSettings):
     # Google Gemini API
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY")
 
+    # Claude Code settings
+    CLAUDE_CODE_CMD: str = os.getenv("CLAUDE_CODE_CMD", "claude")
+    CLAUDE_CODE_WORKING_DIR: Optional[str] = os.getenv("CLAUDE_CODE_WORKING_DIR")
+    CLAUDE_CODE_TIMEOUT: int = int(os.getenv("CLAUDE_CODE_TIMEOUT", "600"))  # 10 minutes
+    ENABLE_FALLBACK: bool = os.getenv("ENABLE_FALLBACK", "1") == "1"
+    FALLBACK_THRESHOLD: int = int(os.getenv("FALLBACK_THRESHOLD", "3"))  # Number of failures before fallback
+
     # PydanticAI Configuration
     # Default provider based on available API keys
     PYDANTICAI_PRIMARY_PROVIDER: str = os.getenv(
@@ -90,6 +97,9 @@ class Settings(BaseSettings):
 
     # File size limits
     MAX_UPLOAD_SIZE: int = 5 * 1024 * 1024  # 5MB
+
+    # WebSocket settings
+    WS_PING_INTERVAL: int = int(os.getenv("WS_PING_INTERVAL", "30"))  # seconds
 
     class Config:
         case_sensitive = True
