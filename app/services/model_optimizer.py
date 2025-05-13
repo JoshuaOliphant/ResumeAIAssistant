@@ -117,7 +117,7 @@ class CircuitBreaker:
             logfire.info("All circuit breakers reset")
 
 # Create circuit breaker instance with thread safety
-optimizer_circuit_breaker = CircuitBreaker()
+optimizer_circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_time_seconds=300)
 optimizer_circuit_breaker_lock = threading.Lock()
 
 # Cost tracking data store
@@ -649,10 +649,16 @@ def select_optimized_model(
                 do_log = False
     
     if do_log:
+        # More detailed logging of selected model
+        provider = model_config["model"].split(':')[0] if ':' in model_config["model"] else model_config["model"]
+        model_name = model_config["model"].split(':')[1] if ':' in model_config["model"] else model_config["model"]
+        
         logfire.info(
-            "Optimized model selected",
+            f"Selected model {provider}:{model_name} for {task_name} (complexity: {task_complexity.value})",
             task_name=task_name,
             model=model_config["model"],
+            provider=provider,
+            model_name=model_name,
             complexity=task_complexity.value,
             importance=task_importance.value,
             tier=model_tier.value,

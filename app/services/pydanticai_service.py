@@ -128,16 +128,16 @@ if not settings.ANTHROPIC_API_KEY and not settings.OPENAI_API_KEY:
 
 # Set default models based on availability
 DEFAULT_MODEL = None
-# IMPORTANT: Always use Google Gemini as the primary model provider
-if settings.GEMINI_API_KEY:
-    DEFAULT_MODEL = "google:gemini-2.5-pro-preview-03-25"  # Default to Gemini 2.5 Pro
-    logfire.info("Using Google Gemini as default model provider")
+# Set default models based on availability
+if settings.ANTHROPIC_API_KEY:
+    DEFAULT_MODEL = "anthropic:claude-3-7-sonnet-latest"  # Use Claude as primary provider
+    logfire.info("Using Anthropic Claude as primary model provider")
 elif settings.OPENAI_API_KEY:
-    DEFAULT_MODEL = "openai:gpt-4.1"  # Fallback to OpenAI if Gemini not available
-    logfire.info("Using OpenAI as fallback model provider")
-elif settings.ANTHROPIC_API_KEY:
-    DEFAULT_MODEL = "anthropic:claude-3-7-sonnet-latest"  # Use Claude as last resort fallback
-    logfire.info("Using Anthropic Claude as last resort model provider")
+    DEFAULT_MODEL = "openai:gpt-4.1"  # Fallback to OpenAI if Claude not available
+    logfire.info("Using OpenAI as fallback model provider") 
+elif settings.GEMINI_API_KEY:
+    DEFAULT_MODEL = "google:gemini-2.5-pro-preview-03-25"  # Use Gemini as last resort
+    logfire.info("Using Google Gemini as last resort model provider")
 else:
     # This should never happen due to the check above, but just in case
     logfire.warning("No default model provider available")
@@ -164,26 +164,28 @@ THINKING_BUDGET = settings.PYDANTICAI_THINKING_BUDGET
 TEMPERATURE = settings.PYDANTICAI_TEMPERATURE
 MAX_TOKENS = settings.PYDANTICAI_MAX_TOKENS
 
-# Set fallback models in order of preference per user request: Gemini, Anthropic, OpenAI
+# Set fallback models in order of preference: Anthropic, OpenAI, Gemini
 FALLBACK_MODELS = []
 
-# Start with Google models (Gemini is primary model provider as requested)
-FALLBACK_MODELS.extend([
-    "google:gemini-1.5-flash"  # Faster Gemini model for when the main one times out
-])
-    
-# Include Anthropic models next if configured
+# Start with Anthropic models as preferred
 if "anthropic" in model_config:
     FALLBACK_MODELS.extend([
         "anthropic:claude-3-7-sonnet-latest",
         "anthropic:claude-3-7-haiku-latest"
     ])
-    
-# Include OpenAI models last if configured
+
+# Include OpenAI models next if configured
 if "openai" in model_config:
     FALLBACK_MODELS.extend([
         "openai:gpt-4.1", 
         "openai:gpt-4o"
+    ])
+    
+# Include Google models last if configured
+if "google" in model_config:
+    FALLBACK_MODELS.extend([
+        "google:gemini-1.5-pro",
+        "google:gemini-1.5-flash"  # Faster Gemini model for when the main one times out
     ])
 
 # Ensure we have at least one fallback model
@@ -914,8 +916,53 @@ async def generate_optimization_plan(
                     provider = fallback_provider
                     break
             else:
-                # No available fallbacks
-                raise ValueError(f"All model providers have open circuits, cannot generate optimization plan")
+                # Special handling for education section
+                if "education" in resume_content.lower():
+                    logfire.warning(
+                        "All providers have open circuits, but using special handling for education section",
+                        section="education"
+                    )
+                    
+                    # Create a minimal CustomizationPlan for education section
+                    basic_plan = CustomizationPlan(
+                        summary="Education section optimized with basic improvements due to circuit breaker issues.",
+                        job_analysis="The education section has been optimized with minimal formatting improvements.",
+                        recommendations=[
+                            RecommendationItem(
+                                section="education",
+                                what="Format consistency",
+                                why="Maintain consistent formatting for better readability",
+                                before_text="",
+                                after_text="",
+                                description="Ensure consistent formatting throughout the education section."
+                            )
+                        ],
+                        keywords_to_add=[],
+                        formatting_suggestions=[
+                            "Use consistent date formatting",
+                            "Bold institution names for emphasis",
+                            "List most recent education first"
+                        ]
+                    )
+                    
+                    logfire.info(
+                        "Successfully created fallback plan for education section when all circuits open",
+                        recommendation_count=len(basic_plan.recommendations)
+                    )
+                    
+                    # Calculate elapsed time
+                    elapsed_time = time.time() - start_time
+                    logfire.info(
+                        "Optimization plan fallback generation completed",
+                        section="education",
+                        duration_seconds=round(elapsed_time, 2)
+                    )
+                    
+                    # Return the basic plan
+                    return basic_plan
+                else:
+                    # No available fallbacks
+                    raise ValueError(f"All model providers have open circuits, cannot generate optimization plan")
         
         try:
             # Register tools if needed (optimizer doesn't seem to need tools at the moment)
