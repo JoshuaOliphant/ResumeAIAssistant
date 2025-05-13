@@ -79,7 +79,7 @@ export function ProgressTracker({
   showNotifications = true,
   className
 }: ProgressTrackerProps) {
-  const { isAuthenticated, getAccessToken } = useAuth();
+  const { isAuthenticated } = useAuth();
   const [progress, setProgress] = useState<number>(0);
   const [status, setStatus] = useState<string>('initializing');
   const [message, setMessage] = useState<string>('Initializing...');
@@ -197,7 +197,8 @@ export function ProgressTracker({
       }
 
       try {
-        const token = await getAccessToken();
+        // Get the token from localStorage instead of using getAccessToken
+        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
         const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5000/api/v1'}/progress/ws/${taskId}?token=${token}`;
         console.log(`Connecting to WebSocket: ${wsUrl.replace(/token=.*/, 'token=***')}`);
         
@@ -290,7 +291,7 @@ export function ProgressTracker({
     };
 
     connectWebSocket();
-  }, [taskId, isAuthenticated, getAccessToken, connectionAttempts, onComplete, onError, sendNotification]);
+  }, [taskId, isAuthenticated, connectionAttempts, onComplete, onError, sendNotification]);
 
   // Fallback to client-side simulation if WebSocket fails
   useEffect(() => {
