@@ -11,64 +11,95 @@ import asyncio
 import logfire
 from datetime import datetime, timedelta
 
-# Circuit breaker implementation for model provider health
-class CircuitBreaker:
-    """
-    Implements a circuit breaker pattern to avoid making calls to failing model providers.
+# Import shared circuit breaker from model_optimizer to avoid duplicate implementations
+try:
+    from app.services.model_optimizer import (
+        optimizer_circuit_breaker,
+        optimizer_circuit_breaker_lock,
+        reset_circuit_breaker
+    )
+    SHARED_CIRCUIT_BREAKER = True
+except ImportError:
+    SHARED_CIRCUIT_BREAKER = False
+    # Fallback circuit breaker only if model_optimizer is not available
+    # This should be rare and only happens if there's a circular import
+    # or if model_optimizer is not yet implemented
     
-    This helps prevent waiting for timeouts when a service is down or degraded.
-    """
-    def __init__(self, failure_threshold=3, recovery_time_seconds=300):
-        self.failure_counts = {}  # provider -> failure count
-        self.circuit_open_until = {}  # provider -> datetime when circuit closes
-        self.failure_threshold = failure_threshold
-        self.recovery_time = timedelta(seconds=recovery_time_seconds)
-    
-    def record_failure(self, provider: str):
-        """Record a failure for a provider and potentially open the circuit"""
-        if provider not in self.failure_counts:
-            self.failure_counts[provider] = 0
+    # Circuit breaker implementation for model provider health
+    class CircuitBreaker:
+        """
+        Implements a circuit breaker pattern to avoid making calls to failing model providers.
         
-        self.failure_counts[provider] += 1
+        This helps prevent waiting for timeouts when a service is down or degraded.
+        """
+        def __init__(self, failure_threshold=3, recovery_time_seconds=300):
+            self.failure_counts = {}  # provider -> failure count
+            self.circuit_open_until = {}  # provider -> datetime when circuit closes
+            self.failure_threshold = failure_threshold
+            self.recovery_time = timedelta(seconds=recovery_time_seconds)
         
-        if self.failure_counts[provider] >= self.failure_threshold:
-            self.open_circuit(provider)
-            logfire.warning(
-                f"Circuit opened for provider {provider} due to repeated failures",
-                provider=provider,
-                failure_count=self.failure_counts[provider],
-                open_until=self.circuit_open_until.get(provider)
-            )
-    
-    def record_success(self, provider: str):
-        """Record a success for a provider and reset failure count"""
-        if provider in self.failure_counts:
-            self.failure_counts[provider] = 0
+        def record_failure(self, provider: str):
+            """Record a failure for a provider and potentially open the circuit"""
+            if provider not in self.failure_counts:
+                self.failure_counts[provider] = 0
+            
+            self.failure_counts[provider] += 1
+            
+            if self.failure_counts[provider] >= self.failure_threshold:
+                self.open_circuit(provider)
+                logfire.warning(
+                    f"Circuit opened for provider {provider} due to repeated failures",
+                    provider=provider,
+                    failure_count=self.failure_counts[provider],
+                    open_until=self.circuit_open_until.get(provider)
+                )
         
-        if provider in self.circuit_open_until:
-            del self.circuit_open_until[provider]
-    
-    def open_circuit(self, provider: str):
-        """Open the circuit for a provider for the recovery time"""
-        self.circuit_open_until[provider] = datetime.now() + self.recovery_time
-    
-    def is_circuit_open(self, provider: str) -> bool:
-        """Check if the circuit is open for a provider"""
-        if provider not in self.circuit_open_until:
-            return False
+        def record_success(self, provider: str):
+            """Record a success for a provider and reset failure count"""
+            if provider in self.failure_counts:
+                self.failure_counts[provider] = 0
+            
+            if provider in self.circuit_open_until:
+                del self.circuit_open_until[provider]
         
-        # Check if recovery time has elapsed
-        if datetime.now() > self.circuit_open_until[provider]:
-            # Allow one request through to test if service has recovered
-            del self.circuit_open_until[provider]
-            return False
+        def open_circuit(self, provider: str):
+            """Open the circuit for a provider for the recovery time"""
+            self.circuit_open_until[provider] = datetime.now() + self.recovery_time
         
-        return True
+        def is_circuit_open(self, provider: str) -> bool:
+            """Check if the circuit is open for a provider"""
+            if provider not in self.circuit_open_until:
+                return False
+            
+            # Check if recovery time has elapsed
+            if datetime.now() > self.circuit_open_until[provider]:
+                # Allow one request through to test if service has recovered
+                del self.circuit_open_until[provider]
+                return False
+            
+            return True
+        
+        def reset(self, provider: Optional[str] = None):
+            """Reset the circuit breaker for a specific provider or all providers"""
+            if provider:
+                if provider in self.failure_counts:
+                    del self.failure_counts[provider]
+                if provider in self.circuit_open_until:
+                    del self.circuit_open_until[provider]
+            else:
+                self.failure_counts = {}
+                self.circuit_open_until = {}
 
-# Create a global circuit breaker instance with thread safety
-import threading
-circuit_breaker = CircuitBreaker()
-circuit_breaker_lock = threading.Lock()
+    # Create a fallback circuit breaker instance with thread safety if needed
+    import threading
+    circuit_breaker = CircuitBreaker()
+    circuit_breaker_lock = threading.Lock()
+    logfire.warning("Using fallback circuit breaker - model_optimizer import failed")
+else:
+    # Use the shared instance from model_optimizer
+    circuit_breaker = optimizer_circuit_breaker
+    circuit_breaker_lock = optimizer_circuit_breaker_lock
+    logfire.info("Using shared circuit breaker from model_optimizer")
 
 # Import from PydanticAI directly - it's a core dependency
 from pydantic_ai import Agent

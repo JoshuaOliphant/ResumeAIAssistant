@@ -20,7 +20,9 @@ try:
     from app.services.model_optimizer import (
         get_cost_report,
         reset_cost_tracking,
-        BUDGET_LIMITS
+        BUDGET_LIMITS,
+        reset_circuit_breaker,
+        get_circuit_breaker_status
     )
     MODEL_OPTIMIZER_AVAILABLE = True
 except ImportError:
@@ -85,6 +87,25 @@ class CostReportData(BaseModel):
     date: Optional[str] = None
     budget_limits: Dict[str, float]
     budget_status: BudgetStatus
+
+class CircuitBreakerStatus(BaseModel):
+    """Circuit breaker status information."""
+    failure_counts: Dict[str, int]
+    circuit_open_until: Dict[str, str]
+    open_circuits: Dict[str, bool]
+    failure_threshold: int
+    recovery_time_seconds: float
+    timestamp: str
+
+class CircuitBreakerResetRequest(BaseModel):
+    """Request to reset a circuit breaker."""
+    provider: Optional[str] = None
+
+class CircuitBreakerResetResponse(BaseModel):
+    """Response for circuit breaker reset."""
+    status: str
+    message: str
+    provider: Optional[str] = None
 
 # Endpoint to get usage statistics
 @router.get("/usage", response_model=CostReportData)
@@ -187,6 +208,62 @@ async def reset_cost_tracking_data(
         "message": "Cost tracking data reset initiated",
         "timestamp": datetime.now().isoformat()
     }
+
+# New endpoint to get circuit breaker status
+@router.get("/circuit-breaker", response_model=CircuitBreakerStatus)
+async def get_circuit_breaker_stats(
+    current_user: User = Depends(get_current_active_superuser)
+) -> Dict[str, Any]:
+    """
+    Get current circuit breaker status for all model providers.
+    
+    Only accessible to superusers.
+    """
+    if not MODEL_OPTIMIZER_AVAILABLE:
+        raise HTTPException(
+            status_code=501,
+            detail="Model optimizer module is not available"
+        )
+    
+    try:
+        # Get circuit breaker status
+        status = get_circuit_breaker_status()
+        return status
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error retrieving circuit breaker status: {str(e)}"
+        )
+
+# New endpoint to reset circuit breaker
+@router.post("/reset-circuit-breaker", response_model=CircuitBreakerResetResponse)
+async def reset_circuit_breaker_endpoint(
+    request: CircuitBreakerResetRequest,
+    current_user: User = Depends(get_current_active_superuser)
+) -> Dict[str, Any]:
+    """
+    Reset the circuit breaker for a specific provider or all providers.
+    
+    Only accessible to superusers.
+    
+    Args:
+        provider: Optional provider name to reset. If not provided, all circuit breakers will be reset.
+    """
+    if not MODEL_OPTIMIZER_AVAILABLE:
+        raise HTTPException(
+            status_code=501,
+            detail="Model optimizer module is not available"
+        )
+    
+    try:
+        # Reset circuit breaker
+        result = reset_circuit_breaker(request.provider)
+        return result
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error resetting circuit breaker: {str(e)}"
+        )
 
 # Endpoint to get model usage for a specific task
 @router.get("/task/{task_name}", response_model=TaskUsageStats)
