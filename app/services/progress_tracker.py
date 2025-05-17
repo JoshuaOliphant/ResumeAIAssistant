@@ -73,7 +73,7 @@ class ProgressTracker:
         for stage, info in self.stage_statuses.items():
             weight = self.STAGE_WEIGHTS.get(stage, 0)
             total_weight += weight
-            stage_progress = info.get("progress", 0)
+            stage_progress = int(info.get("progress", 0))
             weighted_progress += stage_progress * weight
 
         if total_weight > 0:
