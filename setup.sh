@@ -69,10 +69,9 @@ check_requirements() {
         export PATH="$HOME/.cargo/bin:$PATH"
     fi
 
-    # Check for curl (needed for fallback SpaCy model download)
+    # Check for curl
     if ! command -v curl &> /dev/null; then
-        print_warning "curl is not installed. It's recommended for fallback SpaCy model downloads."
-        print_warning "You may need to install it manually if you encounter SpaCy model installation issues."
+        print_warning "curl is not installed. It may be needed for some operations."
     fi
 
     print_message "All requirements satisfied!"
@@ -98,24 +97,6 @@ setup_python_env() {
 
     print_message "Installing Python dependencies..."
     uv sync
-
-    print_message "Installing SpaCy language models..."
-    # Create a directory for downloads if it doesn't exist
-    mkdir -p .downloads
-    
-    # Try to install SpaCy model with spacy download command
-    print_message "Installing SpaCy model using 'spacy download'..."
-    if python -m spacy download en_core_web_sm; then
-        print_message "SpaCy model installed successfully."
-    else
-        print_warning "Failed to download SpaCy model using 'spacy download'."
-        print_message "This could be due to network connectivity issues."
-        print_message "You will need to install the SpaCy model manually after setup completes:"
-        echo "   source .venv/bin/activate"
-        echo "   python -m spacy download en_core_web_sm"
-        echo "   # OR"
-        echo "   python -m pip install en_core_web_sm==3.7.0"
-    fi
 
     print_message "Python setup complete!"
 }
@@ -152,10 +133,7 @@ ENVIRONMENT=development
 LOG_LEVEL=INFO
 LOGFIRE_ENABLED=false
 
-# SpaCy Configuration
-# If you have network issues downloading SpaCy models, you can specify
-# local model paths here:
-# SPACY_MODEL_PATH=/path/to/your/spacy/model/directory
+# Application Configuration
 EOF
         print_message ".env.local file created. Please update it with your actual API keys."
     fi
@@ -170,23 +148,9 @@ main() {
     setup_frontend
     create_env_file
 
-    print_message "Setup complete! Here's how to run the application:"
-    echo -e "  1. Start the backend server:\n     ${GREEN}source .venv/bin/activate && uv run uvicorn main:app --host 0.0.0.0 --port 5001 --reload${NC}"
-    echo -e "  2. Start the frontend (in another terminal):\n     ${GREEN}cd nextjs-frontend && npm run dev${NC}"
-    echo -e "  3. Open your browser to ${GREEN}http://localhost:3000${NC}"
-    echo -e "\nMake sure to update your ${YELLOW}.env.local${NC} file with your actual API keys!"
+    print_message "Setup complete!"
 
-    echo -e "\n${YELLOW}[NOTE]${NC} If you encounter issues with SpaCy models, you can try these commands:"
-    echo -e "  ${GREEN}source .venv/bin/activate${NC}"
-    echo -e "  ${GREEN}python -m spacy download en_core_web_sm${NC}"
-    echo -e "  ${GREEN}# Or as alternative:${NC}"
-    echo -e "  ${GREEN}python -m pip install en_core_web_sm==3.7.0${NC}"
-    
-    echo -e "\nIf you're consistently having network issues, try downloading from an alternative source:"
-    echo -e "  ${GREEN}mkdir -p .downloads${NC}"
-    echo -e "  ${GREEN}curl -L --retry 3 -o .downloads/en_core_web_sm-3.7.0-py3-none-any.whl \\"
-    echo -e "      https://huggingface.co/spacy/en_core_web_sm/resolve/main/en_core_web_sm-3.7.0/en_core_web_sm-3.7.0-py3-none-any.whl${NC}"
-    echo -e "  ${GREEN}source .venv/bin/activate && python -m pip install .downloads/en_core_web_sm-*.whl${NC}"
+
 }
 
 # Run the main setup function
