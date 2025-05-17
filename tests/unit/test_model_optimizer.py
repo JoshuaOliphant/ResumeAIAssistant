@@ -58,7 +58,7 @@ def test_classify_task():
     assert importance == TaskImportance.MEDIUM
 
 
-@patch('app.services.model_optimizer.get_model_config_for_task')
+@patch('app.services.model_selector.get_model_config_for_task')
 def test_select_optimized_model(mock_get_model_config):
     """Test optimized model selection based on task parameters."""
     # Mock the get_model_config_for_task function
