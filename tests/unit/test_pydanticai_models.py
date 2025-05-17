@@ -84,4 +84,10 @@ def test_evidence_item_and_progress_update():
 
     with pytest.raises(ValidationError):
         WebSocketProgressUpdate(stage="bad", percentage=10, overall_progress=5)
+        
+    with pytest.raises(ValidationError):
+        WebSocketProgressUpdate(stage=WorkflowStage.PLANNING, percentage=101, overall_progress=25)
+        
+    with pytest.raises(ValidationError):
+        WebSocketProgressUpdate(stage=WorkflowStage.PLANNING, percentage=40, overall_progress=101)
 
