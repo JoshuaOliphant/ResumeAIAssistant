@@ -15,14 +15,14 @@
 ### Core Components
 - **PydanticAI Architecture**: Model-agnostic AI system using the evaluator-optimizer pattern
 - **Multi-Model Support**: Integration with Anthropic Claude, Google Gemini, and OpenAI
-- **Parallel Processing**: Resume sections are processed concurrently for improved performance
+- **Holistic Processing**: End-to-end resume analysis and optimization
 - **Dynamic Thinking Budget**: Resource allocation system for AI processing
 
 ### Key Services
-- **Parallel Customization Service**: Processes resume sections in parallel
-- **Task Scheduler**: Manages concurrent AI model requests with prioritization
-- **Resume Segmenter**: Splits resumes into logical sections for parallel processing
-- **Results Aggregator**: Combines parallel processing results into unified output
+- **ResumeCustomizer**: End-to-end resume customization service
+- **EvidenceTracker**: Ensures truthfulness in resume customizations
+- **ProgressReporter**: Provides real-time updates via WebSockets
+- **Agent Factory**: Creates specialized AI agents for each customization stage
 
 ## Frontend Development (Next.js)
 - Location: `/nextjs-frontend` directory
@@ -111,8 +111,5 @@
 ## Project Planning
 - Project planning is documented in `planning_scratchpad.md`
 - Issues are organized into epics in GitHub
-- Critical issues can be worked on in parallel:
-  - Parallel Processing Architecture (backend)
-  - Improved Diff Visualization (frontend)
-  - Progress Tracking System (frontend/backend)
+- Critical issues are addressed sequentially to keep efforts focused
 - Each issue has clear sections for description, tasks, dependencies, and estimates

@@ -4,7 +4,7 @@
 
 This specification outlines a redesign of the resume customization service to improve reliability, performance, and user experience. The main goal is to break down the current monolithic architecture into a series of smaller, more focused steps that can handle API timeouts and failures gracefully.
 
-The redesign follows principles from the [Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents) article, including workflow decomposition, modular design, validation gates, and parallel processing.
+The redesign follows principles from the [Building Effective Agents](https://www.anthropic.com/engineering/building-effective-agents) article, including workflow decomposition, modular design, and validation gates.
 
 ## Current Issues
 
@@ -24,16 +24,16 @@ Job Description + Resume → [Single Large API Call] → Customized Resume
 Improved Flow: 
 Job Description + Resume → 
   1. Extract Key Requirements (small API call)
-  2. Analyze Resume Sections (parallel small API calls)
+  2. Analyze Resume Sections (sequential small API calls)
   3. Generate Improvement Plan (small API call)
-  4. Implement Changes Per Section (parallel small API calls)
+  4. Implement Changes Per Section (sequential small API calls)
   5. Validate & Refine Changes (small API call)
   → Customized Resume
 ```
 
 ## Work Breakdown Structure
 
-The following issues can be worked on by different developers or AI agents in parallel with minimal overlap.
+The following issues can be worked on individually by different developers or AI agents with minimal overlap.
 
 ---
 
@@ -43,7 +43,7 @@ The following issues can be worked on by different developers or AI agents in pa
 **Dependencies:** None
 
 **Description:**  
-Implement a framework for orchestrating small, focused AI tasks that can be executed in sequence or parallel, with proper error handling and recovery.
+Implement a framework for orchestrating small, focused AI tasks executed sequentially with proper error handling and recovery.
 
 **Tasks:**
 1. Create a MicroTask base class with common properties and methods
@@ -148,9 +148,9 @@ class TaskOrchestrator:
                 coros.append(self._execute_task_with_semaphore(task, **inputs))
                 pending_tasks.remove(name)
                 
-            # Start execution in parallel
+            # Execute tasks sequentially
             for coro in coros:
-                asyncio.create_task(coro)
+                await coro
                 
         # Wait for all tasks to complete
         all_completed = False
@@ -1594,7 +1594,7 @@ This redesign breaks down the resume customization process into smaller, more ma
 
 1. Better isolation of failures
 2. More detailed progress reporting
-3. Parallel processing of independent tasks
+3. Streamlined sequential processing of tasks
 4. Improved reliability with multiple fallback strategies
 
-Each component can be developed and tested independently, allowing for parallel development by multiple contributors.
+Each component can be developed and tested independently, allowing multiple contributors to work without conflicts.
