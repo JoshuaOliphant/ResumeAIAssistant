@@ -88,8 +88,9 @@ class Settings(BaseSettings):
     # File size limits
     MAX_UPLOAD_SIZE: int = 5 * 1024 * 1024  # 5MB
 
-    class Config:
-        case_sensitive = True
+    model_config = {
+        "case_sensitive": True
+    }
 
 
 # Initialize settings
@@ -185,5 +186,8 @@ def get_pydanticai_model_config() -> Dict[str, Any]:
             "No PydanticAI providers configured. Please set at least one of: "
             "ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY"
         )
+
+    # Include a global fallback chain for service use
+    config["fallback_chain"] = settings.PYDANTICAI_FALLBACK_MODELS
 
     return config

@@ -59,7 +59,11 @@ Implement the core PydanticAI integration for the ResumeAIAssistant application,
 3. Update app/core/config.py to properly configure PydanticAI:
    - Configure thinking capability for Claude 3.7 models (see lines 121-130 in spec.md)
    - Set appropriate temperature and token limits per spec.md guidance
+<<<<<<< HEAD
+   - Use only Claude 3.7 Sonnet as our model
+=======
    - Ensure fallback model configuration is in place
+>>>>>>> aa166a3a421c274b9b485edef4a1147bbd2c13b6
 
 4. Create app/services/thinking_budget.py based on pydanticai_notes/11_dependency_injection.md:
    - ThinkingBudget class to manage token allocation
@@ -438,7 +442,11 @@ Complete the PydanticAI integration with comprehensive documentation and final r
    - Fine-tune PydanticAI configuration
 
 5. Enhance error handling:
+<<<<<<< HEAD
+   - Implement robust error handling for Claude API calls
+=======
    - Implement circuit breakers for external services
+>>>>>>> aa166a3a421c274b9b485edef4a1147bbd2c13b6
    - Add graceful degradation paths for component failures
    - Improve error messages for better user experience
 

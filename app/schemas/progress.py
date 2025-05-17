@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class StageProgress(BaseModel):
@@ -22,7 +22,8 @@ class WebSocketProgressUpdate(BaseModel):
     elapsed_seconds: int
     estimated_remaining_seconds: Optional[int] = None
 
-    @validator("overall_progress", pre=True, always=True)
+    @field_validator("overall_progress", mode="before")
+    @classmethod
     def clamp_progress(cls, value: int) -> int:
         return max(0, min(100, value))
 
