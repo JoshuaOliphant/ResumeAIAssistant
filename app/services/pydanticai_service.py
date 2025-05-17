@@ -8,14 +8,12 @@ import asyncio
 import json
 import os
 import time
-from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import logfire
 from pydantic_ai import Agent, ModelRetry
 
 from app.services.evidence_tracker import EvidenceTracker
-
 
 # Import from PydanticAI directly - it's a core dependency
 
@@ -70,7 +68,9 @@ MAX_TOKENS = settings.PYDANTICAI_MAX_TOKENS
 FALLBACK_MODELS = []
 
 # Log the configuration
-logfire.info("No fallback models configured, using only anthropic:claude-3-7-sonnet-latest")
+logfire.info(
+    "No fallback models configured, using only anthropic:claude-3-7-sonnet-latest"
+)
 
 # Get the complete model provider configuration
 MODEL_CONFIG = get_pydanticai_model_config()
@@ -115,17 +115,18 @@ class PydanticAIService:
         # No fallback configuration is needed as we're only using Claude
         return agent
 
-    async def _run_with_retry(self, agent: Agent, message: str):
+    async def _run_with_retry(self, agent: Agent, message: str, max_attempts: int = 2):
         """Execute an agent with basic ModelRetry handling."""
         attempt = 0
-        while True:
+        while attempt < max_attempts:
             try:
                 return await agent.run(message)
             except ModelRetry as mr:
                 attempt += 1
                 logfire.warning("ModelRetry triggered", attempt=attempt, reason=str(mr))
-                if attempt >= 2:
+                if attempt >= max_attempts:
                     raise
+        raise Exception(f"Maximum retry attempts ({max_attempts}) exceeded")
 
     async def evaluate_resume(self, resume: str, job: str) -> ResumeEvaluation:
         """Run the evaluation stage."""
@@ -1304,10 +1305,7 @@ async def generate_cover_letter(
                     raise e
 
                 # We're not using fallback models, so just retry with the same model
-                logfire.info(
-                    "Retrying with Claude",
-                    attempt=retry_count
-                )
+                logfire.info("Retrying with Claude", attempt=retry_count)
 
                 # Wait briefly before retrying
                 await asyncio.sleep(1)
