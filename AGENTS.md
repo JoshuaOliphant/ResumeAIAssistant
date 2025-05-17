@@ -1,14 +1,12 @@
 # CLAUDE.md - Guidelines for ResumeAIAssistant
 
 ## Backend Development
-- Setup: `uv sync` (installs from pyproject.toml)
 - Run unit tests: `uv run pytest tests/unit`
 - This project uses `uv`, not `pip` for dependency management.
 - Add new dependencies with `uv add <dependency-name>`.
-- This project has a virtual environment that needs to be sourced.
+- This project has a virtual environment that should already be sourced, so no need to source it yourself.
 - After sourcing the virtual environment, `uv sync` can be used to sync the dependencies.
 - Use uv to start the application with `uv run uvicorn main:app --host 0.0.0.0 --port 5001 --reload`
-- Always source the virtual environment and use `uv sync` to install existing dependencies in pyproject.toml. If you need to install a new dependency, use `uv add`, never use pip.
 
 ## Project Architecture
 
