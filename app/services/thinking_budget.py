@@ -56,8 +56,13 @@ class ThinkingBudget:
 
     @staticmethod
     def _distribute(total: int) -> Dict[str, int]:
-        base = total // 4
-        return {stage: base for stage in ThinkingBudget.stages}
+        base = total // len(ThinkingBudget.stages)
+        remainder = total % len(ThinkingBudget.stages)
+        result = {stage: base for stage in ThinkingBudget.stages}
+        # Distribute remainder tokens to early stages
+        for i in range(remainder):
+            result[ThinkingBudget.stages[i]] += 1
+        return result
 
     def record(self, stage: str, tokens: int) -> None:
         if stage in self.usage:
