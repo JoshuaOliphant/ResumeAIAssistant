@@ -108,6 +108,12 @@ def calculate_thinking_budget(
     Returns:
         Tuple of (calculated_tokens, thinking_config_dict)
     """
+    from app.core.config import settings
+    
+    # If thinking is disabled, return 0 budget and empty config
+    if not settings.PYDANTICAI_ENABLE_THINKING:
+        return 0, {}
+    
     # Start with the base budget for the task complexity
     base_budget = DEFAULT_THINKING_BUDGETS[task_complexity]
     

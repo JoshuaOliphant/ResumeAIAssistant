@@ -63,9 +63,6 @@ uploads/
 
 attached_assets/
 
-# IDE rules
-.windsurfrules
-CLAUDE.md
 
 # Next.js
 .next/
@@ -93,3 +90,6 @@ yarn-error.log*
 **/public/workbox-*.js.map
 **/public/worker-*.js.map
 **/.claude/settings.local.json
+
+.qodo
+.ropeproject

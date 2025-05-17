@@ -73,6 +73,8 @@ class Settings(BaseSettings):
         "openai:gpt-4o",  # Older but still capable model
         "anthropic:claude-3-7-haiku-latest",  # Latest Claude 3.7 Haiku
     ]
+    # Enable/disable thinking capability
+    PYDANTICAI_ENABLE_THINKING: bool = os.getenv("PYDANTICAI_ENABLE_THINKING", "true").lower() in ["true", "1", "yes", "y", "t"]
     # Token budget for models with thinking capability
     PYDANTICAI_THINKING_BUDGET: int = os.getenv("PYDANTICAI_THINKING_BUDGET", 15000)
     # Temperature setting for agent outputs (0.0-1.0)

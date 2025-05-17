@@ -28,6 +28,14 @@ dependencies = [
     "psutil>=5.9.6",
 ]
 
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
+asyncio_mode = "strict"
+
 [tool.pyright]
 venvPath = "."
 venv = ".venv"

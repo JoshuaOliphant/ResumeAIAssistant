@@ -703,11 +703,14 @@ def get_model_config_for_task(
     fallbacks = get_fallback_chain(primary_model=model_name, task_name=task_name)
 
     # Get model provider
-    model_provider = model_config["provider"].value
+    if hasattr(model_config["provider"], 'value'):
+        model_provider = model_config["provider"].value
+    else:
+        model_provider = model_config["provider"]
 
-    # Generate thinking configuration if supported
+    # Generate thinking configuration if supported and enabled
     thinking_config = None
-    if model_config["supports_thinking"]:
+    if model_config["supports_thinking"] and settings.PYDANTICAI_ENABLE_THINKING:
         thinking_config = get_thinking_config_for_task(
             task_name=task_name,
             model_provider=model_provider,
