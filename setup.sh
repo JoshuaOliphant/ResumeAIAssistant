@@ -148,11 +148,7 @@ main() {
     setup_frontend
     create_env_file
 
-    print_message "Setup complete! Here's how to run the application:"
-    echo -e "  1. Start the backend server:\n     ${GREEN}source .venv/bin/activate && uv run uvicorn main:app --host 0.0.0.0 --port 5001 --reload${NC}"
-    echo -e "  2. Start the frontend (in another terminal):\n     ${GREEN}cd nextjs-frontend && npm run dev${NC}"
-    echo -e "  3. Open your browser to ${GREEN}http://localhost:3000${NC}"
-    echo -e "\nMake sure to update your ${YELLOW}.env.local${NC} file with your actual API keys!"
+    print_message "Setup complete!"
 
 
 }
