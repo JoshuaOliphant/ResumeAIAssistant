@@ -328,6 +328,7 @@ async def customization_progress_ws(
     """Provide real-time progress updates for a customization."""
     user = await get_user_from_token(websocket, db)
     if not user:
+        await websocket.close(code=1008)  # Policy violation
         return
 
     await websocket_manager.register(customization_id, websocket)
