@@ -70,6 +70,14 @@ def test_implementation_and_verification_results():
     )
     assert ver.issues == []
 
+    with pytest.raises(ValidationError):
+        VerificationResult(
+            is_truthful=True,
+            final_score=88,
+            improvement=101,
+            section_assessments={"Summary": "Improved"},
+        )
+
 
 def test_evidence_item_and_progress_update():
     evidence = EvidenceItem(claim="Led migration", evidence="Docs", verified=True)
