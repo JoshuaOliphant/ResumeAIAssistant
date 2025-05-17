@@ -18,6 +18,9 @@ from sqlalchemy.orm import Session
 from app.core.security import get_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.services.websocket_manager import WebSocketManager
+from app.services.progress_tracker import ProgressTracker
+from app.schemas.progress import WebSocketProgressUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -152,6 +155,7 @@ class ProgressConnectionManager:
 
 # Create a singleton instance
 connection_manager = ProgressConnectionManager()
+websocket_manager = WebSocketManager()
 
 
 async def get_user_from_token(websocket: WebSocket, db: Session):
@@ -310,3 +314,36 @@ async def create_progress_tracker(
     
     connection_manager.latest_updates[task_id] = progress_update
     return progress_update
+
+
+# ---------------------------------------------------------------------------
+# Simplified progress WebSocket for resume customization
+
+@router.websocket("/ws/progress/{customization_id}")
+async def customization_progress_ws(
+    websocket: WebSocket,
+    customization_id: str,
+    db: Session = Depends(get_db),
+):
+    """Provide real-time progress updates for a customization."""
+    user = await get_user_from_token(websocket, db)
+    if not user:
+        await websocket.close(code=1008)  # Policy violation
+        return
+
+    await websocket_manager.register(customization_id, websocket)
+
+    heartbeat_interval = 20
+    try:
+        while True:
+            try:
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=heartbeat_interval)
+                if data == "ping":
+                    await websocket.send_text("pong")
+            except asyncio.TimeoutError:
+                await websocket.send_text("ping")
+    except WebSocketDisconnect:
+        websocket_manager.remove(customization_id, websocket)
+    except Exception as exc:  # pragma: no cover - log unexpected errors
+        logger.error(f"WebSocket error: {exc}")
+        websocket_manager.remove(customization_id, websocket)
