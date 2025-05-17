@@ -214,10 +214,10 @@ class PydanticAIService:
         agent.fallback_config = self.fallback_models
         return agent
 
-    async def _run_with_retry(self, agent: Agent, message: str):
+    async def _run_with_retry(self, agent: Agent, message: str, max_attempts: int = 2):
         """Execute an agent with basic ModelRetry handling."""
         attempt = 0
-        while True:
+        while attempt < max_attempts:
             try:
                 return await agent.run(message)
             except ModelRetry as mr:
@@ -225,8 +225,9 @@ class PydanticAIService:
                 logfire.warning(
                     "ModelRetry triggered", attempt=attempt, reason=str(mr)
                 )
-                if attempt >= 2:
+                if attempt >= max_attempts:
                     raise
+        raise Exception(f"Maximum retry attempts ({max_attempts}) exceeded")
 
     async def evaluate_resume(self, resume: str, job: str) -> ResumeEvaluation:
         """Run the evaluation stage."""
