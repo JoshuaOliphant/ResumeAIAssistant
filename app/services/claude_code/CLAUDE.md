@@ -1,12 +1,14 @@
 # CLAUDE.md - Guidelines for ResumeAIAssistant
 
 ## Backend Development
+- Setup: `uv sync` (installs from pyproject.toml)
 - Run unit tests: `uv run pytest tests/unit`
 - This project uses `uv`, not `pip` for dependency management.
 - Add new dependencies with `uv add <dependency-name>`.
-- This project has a virtual environment that should already be sourced, so no need to source it yourself.
+- This project has a virtual environment that needs to be sourced.
 - After sourcing the virtual environment, `uv sync` can be used to sync the dependencies.
 - Use uv to start the application with `uv run uvicorn main:app --host 0.0.0.0 --port 5001 --reload`
+- Always source the virtual environment and use `uv sync` to install existing dependencies in pyproject.toml. If you need to install a new dependency, use `uv add`, never use pip.
 
 ## Project Architecture
 
@@ -105,10 +107,9 @@
 - Each endpoint should have at least one test case
 - Mock external services (Claude API) when testing
 - Use pprint() for debugging API responses
-- Integration tests require the application to be running to test against.
 
 ## Project Planning
 - Project planning is documented in `planning_scratchpad.md`
 - Issues are organized into epics in GitHub
-- Critical issues are addressed sequentially to keep efforts focused
+- Critical issues are prioritized sequentially to maintain focus
 - Each issue has clear sections for description, tasks, dependencies, and estimates

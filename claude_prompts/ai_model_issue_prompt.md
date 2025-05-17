@@ -47,7 +47,7 @@ ResumeAIAssistant is a resume customization and ATS optimization application wit
 - **Average Token Usage**: ~5,000-15,000 tokens per resume customization
 - **Cost Targets**: Maintain average cost < $0.10 per resume customization
 - **Optimization Strategy**: Use cheaper/smaller models for simpler tasks
-- **Parallel Processing**: Should reduce token usage through more focused prompts
+- **Streamlined Pipeline**: Sequential stages should reduce token usage through more focused prompts
 - **Token Tracking**: Monitor and log token usage for each request
 
 ### AI Performance Metrics

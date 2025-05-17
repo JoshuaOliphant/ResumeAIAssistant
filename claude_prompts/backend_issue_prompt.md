@@ -37,7 +37,7 @@ ResumeAIAssistant is a resume customization and ATS optimization application wit
 
 ### Performance Considerations
 - **Current Bottlenecks**: Resume customization process can take 30-60+ seconds
-- **Optimization Goals**: Reduce processing time by 50%+ through parallelization
+- **Optimization Goals**: Reduce processing time by 50%+ through a streamlined sequential pipeline
 - **Target Response Time**: Interactive API endpoints should respond in <100ms
 - **Benchmarking**: Use the existing test suite to measure performance improvements
 - **Caching Strategy**: Consider implementing appropriate caching mechanisms

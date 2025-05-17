@@ -5,7 +5,7 @@ A powerful application that analyzes resumes against job descriptions using ATS 
 ## Features
 
 - **ATS Analysis**: Analyze resumes against job descriptions to identify keyword matches and suggest improvements
-- **Resume Customization**: Automatically customize resumes based on job descriptions using parallel processing
+- **Resume Customization**: Automatically customize resumes based on job descriptions using a streamlined sequential pipeline
 - **Diff View**: Compare original and customized resumes with enhanced side-by-side visualization and section-level analysis
 - **Cover Letter Generation**: Generate tailored cover letters based on resume and job description
 - **Real-time Progress Updates**: Track long-running operations with WebSocket updates
@@ -80,14 +80,14 @@ Each test file is named according to its function (e.g., `test_ats.py`, `test_di
 ### Core Components
 - **PydanticAI Architecture**: Model-agnostic AI system using the evaluator-optimizer pattern
 - **Multi-Model Support**: Integration with Anthropic Claude, Google Gemini, and OpenAI
-- **Parallel Processing**: Resume sections are processed concurrently for improved performance
+- **Holistic Processing**: End-to-end resume analysis and optimization
 - **Dynamic Thinking Budget**: Resource allocation system for AI processing
 
 ### Key Services
-- **Parallel Customization Service**: Processes resume sections in parallel
-- **Task Scheduler**: Manages concurrent AI model requests with prioritization
-- **Resume Segmenter**: Splits resumes into logical sections for parallel processing
-- **Results Aggregator**: Combines parallel processing results into unified output
+- **ResumeCustomizer**: End-to-end resume customization service
+- **EvidenceTracker**: Ensures truthfulness in resume customizations
+- **ProgressReporter**: Provides real-time updates via WebSockets
+- **Agent Factory**: Creates specialized AI agents for each customization stage
 
 ## Project Structure
 
@@ -168,10 +168,7 @@ The repository contains specialized prompt templates for Claude Code instances i
 
 - Project planning is documented in `planning_scratchpad.md`
 - Issues are organized into epics in GitHub
-- Critical issues can be worked on in parallel:
-  - Parallel Processing Architecture (backend)
-  - Improved Diff Visualization (frontend)
-  - Progress Tracking System (frontend/backend)
+- Critical issues are tackled sequentially to simplify coordination
 
 ## Future Enhancements
 
