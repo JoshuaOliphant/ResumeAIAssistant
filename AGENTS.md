@@ -105,6 +105,7 @@
 - Each endpoint should have at least one test case
 - Mock external services (Claude API) when testing
 - Use pprint() for debugging API responses
+- Integration tests require the application to be running to test against.
 
 ## Project Planning
 - Project planning is documented in `planning_scratchpad.md`
