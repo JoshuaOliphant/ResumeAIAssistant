@@ -11,7 +11,7 @@ REQUEST_TIMEOUT = 10
 
 def test_health():
     """Test the health endpoint"""
-    print("\n⚙️ Testing API health...")
+    print("\n⚙ Testing health endpoint...")
     response = requests.get(f"{BASE_URL}/health", timeout=REQUEST_TIMEOUT)
     assert response.status_code == 200
     assert response.json()["message"] == "Resume Customization API is running"
