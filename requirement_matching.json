@@ -1,0 +1,74 @@
+{
+  "job_requirements": [
+    {
+      "requirement": "5+ years of software engineering experience",
+      "matched": true,
+      "source": "Original resume shows 2015-2024 experience (9 years)"
+    },
+    {
+      "requirement": "Strong technical skills across the stack",
+      "matched": true,
+      "source": "Original resume lists backend, cloud, database, testing skills"
+    },
+    {
+      "requirement": "Results-oriented with user-centric approach",
+      "matched": false,
+      "gap": "Limited evidence of user-centric approach in resume"
+    },
+    {
+      "requirement": "Experience with large language models",
+      "matched": true,
+      "source": "Original resume mentions OpenAI API, Anthropic API, ChatGPT, AI side projects"
+    },
+    {
+      "requirement": "Prompt engineering experience",
+      "matched": true,
+      "source": "Implied in AI side projects but limited detail"
+    },
+    {
+      "requirement": "Building lightweight product prototypes and demos",
+      "matched": true,
+      "source": "AI Chat website and PDF Benchmarker projects"
+    },
+    {
+      "requirement": "Experience with structured experiments",
+      "matched": false,
+      "gap": "No verified experience with structured experiment design"
+    },
+    {
+      "requirement": "Balancing divergent and convergent thinking",
+      "matched": false,
+      "gap": "Not explicitly mentioned in resume"
+    },
+    {
+      "requirement": "Comfort with ambiguity",
+      "matched": true, 
+      "source": "Implied from consulting background with multiple clients"
+    },
+    {
+      "requirement": "Designing user flows/UI/UX for AI applications",
+      "matched": true,
+      "source": "AI Chat website with htmx and Tailwind frontend"
+    },
+    {
+      "requirement": "Bachelor's degree in related field",
+      "matched": true,
+      "source": "BS in Computer Science from Seattle University"
+    },
+    {
+      "requirement": "Effective communication and collaboration",
+      "matched": true,
+      "source": "Led teams at Amazon and Kubernetes initiative at Nordstrom"
+    },
+    {
+      "requirement": "Conducting user research",
+      "matched": false,
+      "gap": "No verified experience with user research"
+    },
+    {
+      "requirement": "Concern for societal impacts and ethics of AI",
+      "matched": false,
+      "gap": "Not mentioned in resume"
+    }
+  ]
+}

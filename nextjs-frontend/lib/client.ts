@@ -764,6 +764,205 @@ export const CoverLetterService = {
   },
 };
 
+// Claude Code integration
+export interface ClaudeCodeCustomizeRequest {
+  resume_content: string;
+  job_description: string;
+  customization_level?: 'conservative' | 'balanced' | 'extensive';
+  user_id?: string;
+}
+
+export interface ClaudeCodeCustomizeResponse {
+  id: string;
+  customized_resume: string;
+  customization_summary: string;
+  original_resume: string;
+  job_description: string;
+  is_fallback: boolean;
+}
+
+export interface ClaudeCodeTaskStatusResponse {
+  task_id: string;
+  status: string;
+  progress: number;
+  message: string;
+  result?: any;
+  error?: string;
+  logs?: string[];
+}
+
+export const ClaudeCodeService = {
+  async customizeResume(
+    resumeId: string,
+    jobDescriptionId: string,
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced',
+    options?: { headers?: Record<string, string>, timeout?: number }
+  ): Promise<ResumeVersion> {
+    console.log('ClaudeCodeService.customizeResume - input params:', { 
+      resumeId, 
+      jobDescriptionId, 
+      customizationLevel,
+      timeout: options?.timeout
+    });
+    
+    // First, fetch the resume and job description content
+    console.log('Fetching resume and job description content...');
+    
+    // Get the resume content
+    const resumeResponse = await fetchWithAuth(`/resumes/${resumeId}`);
+    if (!resumeResponse || !resumeResponse.current_version || !resumeResponse.current_version.content) {
+      throw new ApiError(404, 'Resume content not found', null);
+    }
+    const resumeContent = resumeResponse.current_version.content;
+    
+    // Get the job description content
+    const jobResponse = await fetchWithAuth(`/jobs/${jobDescriptionId}`);
+    if (!jobResponse || !jobResponse.description) {
+      throw new ApiError(404, 'Job description content not found', null);
+    }
+    const jobDescriptionContent = jobResponse.description;
+    
+    console.log('Successfully fetched content, calling Claude Code endpoint');
+    
+    const requestBody = JSON.stringify({
+      resume_content: resumeContent,
+      job_description: jobDescriptionContent,
+      customization_level: customizationLevel
+    });
+    
+    // Bypass NextJS API routes and go directly to the backend
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      // Add custom timeout if provided
+      ...(options?.timeout && { 'X-Operation-Timeout': options.timeout.toString() }),
+      ...(options?.headers || {})
+    };
+    
+    // Use a custom timeout for the fetch itself
+    const controller = new AbortController();
+    const fetchTimeout = (options?.timeout || 900) * 1000 + 10000; // Add 10s buffer to the backend timeout
+    const timeoutId = setTimeout(() => controller.abort(), fetchTimeout);
+    
+    try {
+      const response = await fetch(`${BACKEND_API_URL}/api/v1/claude-code/customize-resume/`, {
+        method: 'POST',
+        headers,
+        body: requestBody,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      console.log(`Claude Code customize response status: ${response.status} ${response.statusText}`);
+      
+      const data = await response.json().catch((err) => {
+        console.error(`Error parsing Claude Code response JSON: ${err.message}`);
+        return {};
+      });
+      
+      if (!response.ok) {
+        throw new ApiError(
+          response.status,
+          data.detail || 'Failed to customize resume with Claude Code',
+          data
+        );
+      }
+      
+      return data;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error.name === 'AbortError') {
+        throw new ApiError(
+          408,
+          'Request timed out - Claude Code execution is taking too long',
+          { detail: 'The request to customize your resume timed out. Please try again or use a smaller resume/job description.' }
+        );
+      }
+      throw error;
+    }
+  },
+
+  // Direct content customization with Claude Code (without saving)
+  async customizeContent(
+    resumeContent: string,
+    jobDescriptionContent: string,
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced',
+    options?: { headers?: Record<string, string>, timeout?: number }
+  ): Promise<ClaudeCodeCustomizeResponse> {
+    console.log('ClaudeCodeService.customizeContent - customization level:', customizationLevel);
+    
+    // Prepare custom headers with timeout if provided
+    const customHeaders = {
+      ...(options?.headers || {}),
+      ...(options?.timeout && { 'X-Operation-Timeout': options.timeout.toString() })
+    };
+    
+    return fetchWithAuth('/claude-code/customize-resume/content', {
+      method: 'POST',
+      body: JSON.stringify({
+        resume_content: resumeContent,
+        job_description: jobDescriptionContent,
+        customization_level: customizationLevel
+      }),
+      headers: customHeaders
+    });
+  },
+  
+  // Get logs for a task
+  async getLogs(taskId: string): Promise<string[]> {
+    const response = await fetchWithAuth(`/claude-code/customize-resume/logs/${taskId}`);
+    return response.logs || [];
+  },
+  
+  // Get task status with logs
+  async getStatus(taskId: string, includeLogs: boolean = false): Promise<ClaudeCodeTaskStatusResponse> {
+    return fetchWithAuth(`/claude-code/customize-resume/status/${taskId}?include_logs=${includeLogs}`);
+  },
+  
+  // Stream logs in real-time
+  streamLogs(taskId: string, callback: (logs: string[]) => void): () => void {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    
+    // Create EventSource for SSE
+    const url = `${BACKEND_API_URL}/api/v1/claude-code/customize-resume/logs/${taskId}/stream`;
+    const eventSource = new EventSource(url, {
+      withCredentials: true,
+      ...(token && { headers: { Authorization: `Bearer ${token}` } })
+    });
+    
+    // Handle events
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.logs) {
+          callback(data.logs);
+        } else if (data.new_log) {
+          callback([data.new_log]);
+        }
+        
+        // If the task is completed or errored, close the connection
+        if (data.status === 'completed' || data.status === 'error') {
+          eventSource.close();
+        }
+      } catch (e) {
+        console.error('Error parsing streaming log data:', e);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('Error in log stream:', error);
+      eventSource.close();
+    };
+    
+    // Return a function to close the connection
+    return () => {
+      eventSource.close();
+    };
+  }
+};
+
 // Export
 export const ExportService = {
   async exportResumeToPdf(resumeId: string, versionId?: string): Promise<Blob> {

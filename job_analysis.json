@@ -1,0 +1,53 @@
+{
+  "required_skills": [
+    {"skill": "Software Engineering", "confidence": 1.0},
+    {"skill": "Rapid Prototyping", "confidence": 1.0},
+    {"skill": "Experiment Design", "confidence": 0.9},
+    {"skill": "Building Demos", "confidence": 0.9},
+    {"skill": "Prompt Engineering", "confidence": 0.9},
+    {"skill": "LLM Experience", "confidence": 0.9},
+    {"skill": "Technical Documentation", "confidence": 0.8},
+    {"skill": "Cross-functional Collaboration", "confidence": 0.8},
+    {"skill": "User-Centric Approach", "confidence": 0.8}
+  ],
+  "preferred_skills": [
+    {"skill": "Product Prototyping", "confidence": 0.9},
+    {"skill": "User Research", "confidence": 0.8},
+    {"skill": "UI/UX Design", "confidence": 0.7},
+    {"skill": "Usability Testing", "confidence": 0.7}
+  ],
+  "company_values": [
+    "Safety and security in AI development",
+    "Responsible AI development",
+    "Bridging research and product",
+    "Collaborative approach",
+    "Ethical considerations in AI",
+    "Society-focused impact"
+  ],
+  "industry_terminology": [
+    "Large language models (LLMs)",
+    "AI capabilities",
+    "AI security",
+    "Prompt engineering",
+    "Research to product pipeline",
+    "Minimal viable testing",
+    "Product prototyping",
+    "User-centered design"
+  ],
+  "technologies_mentioned": [
+    "Large language models",
+    "AI architectures",
+    "Prototype development tools"
+  ],
+  "key_responsibilities": [
+    "Design and execute rapid experiments",
+    "Build functional prototypes",
+    "Develop prompting strategies for LLMs",
+    "Generate documentation for product teams",
+    "Advocate for product and usability considerations",
+    "Balance creative exploration with rigorous evaluation"
+  ],
+  "years_experience_required": 5,
+  "role_type": "Software Engineer - Research/Product Bridge",
+  "education_requirements": "Bachelor's degree or equivalent experience"
+}

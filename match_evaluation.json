@@ -1,0 +1,77 @@
+{
+  "match_score": 67,
+  "skills_match": {
+    "score": 75,
+    "strong_matches": [
+      "Software Engineering (8+ years)",
+      "LLM Experience (OpenAI API, Anthropic API)",
+      "Rapid Prototyping (AI projects, command-line tools)",
+      "Cross-functional Collaboration"
+    ],
+    "weak_matches": [
+      "Prompt Engineering (inferred from AI projects)",
+      "Building Demos (AI Chat website, PDF Benchmarker)"
+    ],
+    "gaps": [
+      "Formal Experiment Design",
+      "Technical Documentation",
+      "User-Centric Approach",
+      "User Research",
+      "UI/UX Design",
+      "Usability Testing"
+    ]
+  },
+  "experience_match": {
+    "score": 70,
+    "strong_points": [
+      "Extensive software engineering background (8+ years)",
+      "Experience with diverse technologies",
+      "Leadership roles across projects",
+      "Consulting experience across multiple industries",
+      "Work with AI technologies and APIs"
+    ],
+    "improvement_areas": [
+      "Limited direct experience bridging research and product",
+      "No specific experience in rigorous experiment design",
+      "Minimal evidence of user research or usability testing",
+      "No clear experience in product-focused documentation"
+    ]
+  },
+  "project_match": {
+    "score": 80,
+    "relevant_projects": [
+      "AI Chat website (demonstrates LLM integration)",
+      "PDF Benchmarker (shows AI agent orchestration and command-line tool development)"
+    ]
+  },
+  "education_match": {
+    "score": 100,
+    "notes": "Bachelor's in Computer Science exceeds minimum requirements"
+  },
+  "enhancement_opportunities": [
+    {
+      "area": "Professional Summary",
+      "recommendation": "Add summary highlighting LLM experience and rapid prototyping abilities",
+      "priority": "High",
+      "evidence": "Existing AI projects and experience with AI APIs"
+    },
+    {
+      "area": "Skills Section",
+      "recommendation": "Reorganize to prioritize LLM experience, prompt engineering, and rapid prototyping",
+      "priority": "High",
+      "evidence": "Skills exist but not optimally organized for this role"
+    },
+    {
+      "area": "AI Projects",
+      "recommendation": "Expand descriptions to emphasize experimental approach and product thinking",
+      "priority": "Medium",
+      "evidence": "Projects exist but could be better framed for this role"
+    },
+    {
+      "area": "Work Experience",
+      "recommendation": "Reframe selected experiences to highlight rapid prototyping, cross-functional collaboration, and user-centric thinking",
+      "priority": "High",
+      "evidence": "Experiences exist but need reframing for this position"
+    }
+  ]
+}

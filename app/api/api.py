@@ -10,16 +10,14 @@ from fastapi.responses import JSONResponse
 from app.api.endpoints import (
     resumes, 
     jobs, 
-    ats, 
     customize, 
     cover_letter, 
     export, 
     auth, 
     requirements, 
-    enhance_customize, 
     progress,
-    websockets,  # New websockets endpoints
-    claude_code  # New Claude Code endpoints
+    websockets,  # WebSocket endpoints for progress tracking
+    claude_code  # Main Claude Code endpoints for resume customization
 )
 from app.core.config import settings
 from app.db.session import Base, engine
@@ -94,17 +92,15 @@ api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 api_router.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
-api_router.include_router(ats.router, prefix="/ats", tags=["ats"])
 api_router.include_router(customize.router, prefix="/customize", tags=["customize"])
-api_router.include_router(enhance_customize.router, prefix="/enhance-customize", tags=["enhanced-customize"])
 api_router.include_router(cover_letter.router, prefix="/cover-letter", tags=["cover-letter"])
 api_router.include_router(export.router, prefix="/export", tags=["export"])
 api_router.include_router(progress.router, prefix="/progress", tags=["progress"])
 api_router.include_router(requirements.router, prefix="/requirements", tags=["requirements"])
 
-# Include new endpoints
-api_router.include_router(websockets.router, tags=["websockets"])  # WebSocket endpoints
-api_router.include_router(claude_code.router, prefix="/claude-code", tags=["claude-code"])  # Claude Code endpoints
+# Include WebSocket and Claude Code endpoints
+api_router.include_router(websockets.router, tags=["websockets"])  # WebSocket endpoints for progress tracking
+api_router.include_router(claude_code.router, tags=["claude-code"])  # Primary resume customization
 
 # Add the API router to the FastAPI application
 app.include_router(api_router, prefix=settings.API_V1_STR)

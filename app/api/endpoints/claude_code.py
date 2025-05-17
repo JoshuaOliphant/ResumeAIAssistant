@@ -6,12 +6,16 @@ resumes based on job descriptions.
 """
 
 import os
+import uuid
+import json
 import tempfile
 import logging
-from typing import Dict, Any, Optional
-from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, Query
+from typing import Dict, Any, Optional, List
+from fastapi import APIRouter, Depends, File, Form, UploadFile, HTTPException, Query, Header
 from sqlalchemy.orm import Session
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+import asyncio
+import queue
 
 from app.db.session import get_db
 from app.models import Customization
@@ -104,21 +108,50 @@ def read_file(file_path: str) -> str:
 @router.post("/customize-resume/", response_model=CustomizedResumeResponse)
 async def customize_resume_sync(
     request: CustomizeResumeRequest,
+    x_operation_timeout: Optional[int] = Header(None, ge=60, le=1800),  # 1-30 min range
+    x_operation_id: Optional[str] = Header(None),  # Operation ID for tracking
     db: Session = Depends(get_db)
 ):
     """
     Customize a resume using Claude Code (synchronous version).
     
     This endpoint blocks until the customization is complete.
+    Uses a default timeout of 900 seconds (15 minutes).
     
     Args:
         request: Resume customization request
+        x_operation_timeout: Optional custom timeout in seconds (60-1800s, default: 900s)
         db: Database session
         
     Returns:
         Customized resume data
     """
     try:
+        # Import settings to get configured timeout values
+        from app.core.config import settings
+        
+        # Get timeout from header or use default from settings
+        # If no header specified, use default from settings
+        # If header specified, validate against max allowed timeout
+        if x_operation_timeout:
+            timeout_seconds = min(x_operation_timeout, settings.CLAUDE_CODE_MAX_TIMEOUT)
+            logger.info(f"Using custom timeout: {timeout_seconds} seconds")
+        else:
+            timeout_seconds = settings.CLAUDE_CODE_TIMEOUT  # Use default (15 min)
+            logger.info(f"Using default timeout: {timeout_seconds} seconds")
+            
+        # Check if we have an operation ID from the header parameter
+        if x_operation_id:
+            # Use the client-provided operation ID
+            task_id = x_operation_id
+            logger.info(f"Using client-provided operation ID: {task_id}")
+        else:
+            # Generate a new task ID for logging
+            task_id = str(uuid.uuid4())
+            logger.info(f"Generated new task ID: {task_id}")
+            
+        logger.info(f"Starting synchronous customization with task ID: {task_id}")
+        
         # Save uploaded resume to temporary file
         resume_path = save_temp_file(request.resume_content)
         
@@ -132,11 +165,20 @@ async def customize_resume_sync(
         # Initialize the Claude Code executor
         executor = get_claude_code_executor()
         
-        # Execute the customization
+        # Set up a progress tracker task for this operation
+        task = progress_tracker.get_task(task_id)
+        if not task:
+            # Create new task if it doesn't exist
+            task = progress_tracker.create_task()
+            task.task_id = task_id
+        
+        # Execute the customization with logs and timeout
         result = executor.customize_resume(
             resume_path=resume_path,
             job_description_path=job_description_path,
-            output_path=output_path
+            output_path=output_path,
+            task_id=task_id,
+            timeout=timeout_seconds
         )
         
         # Read the output files
@@ -160,6 +202,14 @@ async def customize_resume_sync(
         else:
             customization_id = None
         
+        # Mark task as completed
+        task.status = "completed"
+        task.result = {
+            "customized_resume": customized_resume,
+            "customization_summary": customization_summary,
+            "customization_id": customization_id
+        }
+        
         return {
             "customized_resume": customized_resume,
             "customization_summary": customization_summary,
@@ -168,6 +218,13 @@ async def customize_resume_sync(
     
     except ClaudeCodeExecutionError as e:
         logger.error(f"Claude Code customization error: {str(e)}")
+        # Log to console for real-time visibility
+        print(f"[ERROR] Claude Code customization failed: {str(e)}")
+        
+        # Check if this is a timeout error
+        if "timeout" in str(e).lower():
+            # Return a specific timeout error
+            raise HTTPException(status_code=408, detail=f"Claude Code execution timed out: {str(e)}")
         
         # Check if fallback is enabled
         if config.ENABLE_FALLBACK:
@@ -195,21 +252,45 @@ async def customize_resume_sync(
 @router.post("/customize-resume/async/", response_model=QueuedTaskResponse)
 async def customize_resume_async(
     request: CustomizeResumeRequest,
+    x_operation_timeout: Optional[int] = Header(None, ge=60, le=1800),  # 1-30 min range
+    x_operation_id: Optional[str] = Header(None),  # Operation ID for tracking
     db: Session = Depends(get_db)
 ):
     """
     Start an asynchronous resume customization task.
     
     This endpoint returns immediately with a task ID for tracking progress.
+    Uses a default timeout of 900 seconds (15 minutes).
     
     Args:
         request: Resume customization request
+        x_operation_timeout: Optional custom timeout in seconds (60-1800s, default: 900s)
         db: Database session
         
     Returns:
         Task ID for tracking progress
     """
     try:
+        # Import settings to get configured timeout values
+        from app.core.config import settings
+        
+        # Get timeout from header or use default from settings
+        if x_operation_timeout:
+            timeout_seconds = min(x_operation_timeout, settings.CLAUDE_CODE_MAX_TIMEOUT)
+            logger.info(f"Using custom timeout: {timeout_seconds} seconds")
+        else:
+            timeout_seconds = settings.CLAUDE_CODE_TIMEOUT  # Use default (15 min)
+            logger.info(f"Using default timeout: {timeout_seconds} seconds")
+            
+        # Use operation ID if provided
+        task_id = None
+        if x_operation_id:
+            task_id = x_operation_id
+            logger.info(f"Using client-provided operation ID: {task_id}")
+            
+        # Log request info
+        logger.info(f"Starting async customization with timeout: {timeout_seconds}s")
+        
         # Save uploaded resume to temporary file
         resume_path = save_temp_file(request.resume_content)
         
@@ -221,7 +302,15 @@ async def customize_resume_async(
         output_path = os.path.join(output_dir, "new_customized_resume.md")
         
         # Create a task for tracking
-        task = progress_tracker.create_task()
+        if task_id:
+            # Use existing task ID if provided
+            task = progress_tracker.get_task(task_id)
+            if not task:
+                task = progress_tracker.create_task()
+                task.task_id = task_id
+        else:
+            # Create a new task with a generated ID
+            task = progress_tracker.create_task()
         
         # Initialize the Claude Code executor
         executor = get_claude_code_executor()
@@ -232,7 +321,8 @@ async def customize_resume_async(
             resume_path=resume_path,
             job_description_path=job_description_path,
             output_path=output_path,
-            progress_callback=callback
+            progress_callback=callback,
+            timeout=timeout_seconds
         )
         
         # Store task info in the task object for later use
@@ -254,6 +344,7 @@ async def customize_resume_async(
 @router.get("/customize-resume/status/{task_id}", response_model=TaskStatusResponse)
 async def get_customize_status(
     task_id: str,
+    include_logs: bool = Query(False),
     db: Session = Depends(get_db)
 ):
     """
@@ -261,6 +352,7 @@ async def get_customize_status(
     
     Args:
         task_id: ID of the task to check
+        include_logs: Whether to include logs in the response
         db: Database session
         
     Returns:
@@ -272,6 +364,16 @@ async def get_customize_status(
     
     status_data = task.to_dict()
     
+    # If logs are requested, add them to the response
+    if include_logs:
+        # Import the log streamer to get logs
+        from app.services.claude_code.log_streamer import get_log_streamer
+        log_streamer = get_log_streamer()
+        logs = log_streamer.get_logs(task_id)
+        
+        # Add logs to the response
+        status_data["logs"] = logs
+    
     # If task is completed, include the results
     if task.status == "completed" and task.result:
         return status_data
@@ -281,12 +383,118 @@ async def get_customize_status(
         return status_data
     
     # Otherwise, just return the status
-    return {
+    response_data = {
         "task_id": status_data["task_id"],
         "status": status_data["status"],
         "progress": status_data["progress"],
         "message": status_data["message"]
     }
+    
+    # Include logs if requested
+    if include_logs and "logs" in status_data:
+        response_data["logs"] = status_data["logs"]
+    
+    return response_data
+
+@router.get("/customize-resume/logs/{task_id}")
+async def get_customize_logs(
+    task_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Get the execution logs for a customization task.
+    
+    Args:
+        task_id: ID of the task to get logs for
+        db: Database session
+        
+    Returns:
+        List of log entries for the task
+    """
+    # Check if the task exists
+    task = progress_tracker.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Import the log streamer
+    from app.services.claude_code.log_streamer import get_log_streamer
+    log_streamer = get_log_streamer()
+    
+    # Get logs for the task
+    logs = log_streamer.get_logs(task_id)
+    
+    # Return the logs
+    return {"task_id": task_id, "logs": logs}
+
+@router.get("/customize-resume/logs/{task_id}/stream")
+async def stream_customize_logs(
+    task_id: str,
+    db: Session = Depends(get_db)
+):
+    """
+    Stream logs for a customization task as they arrive.
+    
+    Args:
+        task_id: ID of the task to stream logs for
+        db: Database session
+        
+    Returns:
+        Streaming response with logs as they arrive
+    """
+    # Check if the task exists
+    task = progress_tracker.get_task(task_id)
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+    
+    # Import the log streamer
+    from app.services.claude_code.log_streamer import get_log_streamer
+    log_streamer = get_log_streamer()
+    
+    # Set up streaming response
+    async def stream_generator():
+        # Yield initial logs
+        logs = log_streamer.get_logs(task_id)
+        yield "data: " + json.dumps({"task_id": task_id, "logs": logs}) + "\n\n"
+        
+        # Create queue for new logs
+        q = log_streamer.create_log_stream(task_id)
+        
+        # Stream new logs as they arrive
+        while True:
+            # Check if task has completed or errored
+            if task.status in ["completed", "error"]:
+                # Yield final logs
+                logs = log_streamer.get_logs(task_id)
+                yield "data: " + json.dumps({"task_id": task_id, "logs": logs, "status": task.status}) + "\n\n"
+                # End stream
+                break
+            
+            try:
+                # Wait for a new log message
+                try:
+                    # Try to get a message with a short timeout
+                    message = await asyncio.get_event_loop().run_in_executor(
+                        None, lambda: q.get(timeout=1)
+                    )
+                except queue.Empty:
+                    # If no new message, send a heartbeat
+                    yield ": heartbeat\n\n"
+                    continue
+                
+                # Send the new message
+                if message:
+                    yield "data: " + json.dumps({"task_id": task_id, "new_log": message}) + "\n\n"
+            except Exception as e:
+                logger.error(f"Error streaming logs: {str(e)}")
+                yield "data: " + json.dumps({"error": str(e)}) + "\n\n"
+                break
+        
+    # Return streaming response
+    return StreamingResponse(
+        stream_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
+    )
 
 
 @router.get("/customize-resume/result/{task_id}", response_model=CustomizedResumeResponse)
@@ -364,6 +572,127 @@ async def get_customize_result(
             raise HTTPException(status_code=500, detail=f"Error retrieving result: {str(e)}")
     
     return task.result
+
+
+@router.post("/customize-resume/content", response_model=CustomizedResumeResponse)
+async def customize_content(
+    request: CustomizeResumeRequest,
+    x_operation_timeout: Optional[int] = Header(None, ge=60, le=1800),  # 1-30 min range
+    x_operation_id: Optional[str] = Header(None),  # Operation ID for tracking
+    db: Session = Depends(get_db)
+):
+    """
+    Customize a resume using Claude Code with direct content (no storage).
+    
+    This endpoint accepts resume and job description content directly,
+    without requiring them to be stored in the database first.
+    Uses a default timeout of 900 seconds (15 minutes).
+    
+    Args:
+        request: Resume customization request with content
+        x_operation_timeout: Optional custom timeout in seconds (60-1800s, default: 900s)
+        db: Database session
+        
+    Returns:
+        Customized resume data
+    """
+    try:
+        # Import settings to get configured timeout values
+        from app.core.config import settings
+        
+        # Get timeout from header or use default from settings
+        if x_operation_timeout:
+            timeout_seconds = min(x_operation_timeout, settings.CLAUDE_CODE_MAX_TIMEOUT)
+            logger.info(f"Using custom timeout: {timeout_seconds} seconds")
+        else:
+            timeout_seconds = settings.CLAUDE_CODE_TIMEOUT  # Use default (15 min)
+            logger.info(f"Using default timeout: {timeout_seconds} seconds")
+            
+        # Check if we have an operation ID from the header parameter
+        if x_operation_id:
+            # Use the client-provided operation ID
+            task_id = x_operation_id
+            logger.info(f"Using client-provided operation ID: {task_id}")
+        else:
+            # Generate a new task ID for logging
+            task_id = str(uuid.uuid4())
+            logger.info(f"Generated new task ID: {task_id}")
+            
+        logger.info(f"Starting content customization with task ID: {task_id}")
+        
+        # Save uploaded resume to temporary file
+        resume_path = save_temp_file(request.resume_content)
+        
+        # Save job description to temporary file
+        job_description_path = save_temp_file(request.job_description)
+        
+        # Create output directory
+        output_dir = create_temp_directory()
+        output_path = os.path.join(output_dir, "new_customized_resume.md")
+        
+        # Initialize the Claude Code executor
+        executor = get_claude_code_executor()
+        
+        # Set up a progress tracker task for this operation
+        task = progress_tracker.get_task(task_id)
+        if not task:
+            # Create new task if it doesn't exist
+            task = progress_tracker.create_task()
+            task.task_id = task_id
+        
+        # Execute the customization
+        result = executor.customize_resume(
+            resume_path=resume_path,
+            job_description_path=job_description_path,
+            output_path=output_path,
+            task_id=task_id,
+            timeout=timeout_seconds
+        )
+        
+        # Read the output files
+        customized_resume = read_file(output_path)
+        summary_path = os.path.join(output_dir, "customized_resume_output.md")
+        customization_summary = read_file(summary_path)
+        
+        # Return the results without storing in the database
+        return {
+            "customized_resume": customized_resume,
+            "customization_summary": customization_summary,
+            "customization_id": None,
+            "is_fallback": False
+        }
+    
+    except ClaudeCodeExecutionError as e:
+        logger.error(f"Claude Code customization error: {str(e)}")
+        # Log to console for real-time visibility
+        print(f"[ERROR] Claude Code content customization failed: {str(e)}")
+        
+        # Check if this is a timeout error
+        if "timeout" in str(e).lower():
+            # Return a specific timeout error
+            raise HTTPException(status_code=408, detail=f"Claude Code execution timed out: {str(e)}")
+            
+        # Check if fallback is enabled
+        if config.ENABLE_FALLBACK:
+            logger.info("Falling back to legacy customization service")
+            return await fallback_customize_resume(request, db)
+        
+        # Otherwise, raise the error
+        raise HTTPException(status_code=500, detail=f"Resume customization failed: {str(e)}")
+    
+    except Exception as e:
+        logger.error(f"Unexpected error in content customization: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Unexpected error: {str(e)}")
+    
+    finally:
+        # Clean up temporary files
+        try:
+            if 'resume_path' in locals():
+                os.unlink(resume_path)
+            if 'job_description_path' in locals():
+                os.unlink(job_description_path)
+        except Exception as e:
+            logger.warning(f"Error cleaning up temporary files: {str(e)}")
 
 
 async def fallback_customize_resume(

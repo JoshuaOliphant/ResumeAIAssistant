@@ -1,10 +1,11 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Progress } from './ui/progress';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from './ui/card';
 import { Badge } from './ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { ChevronRightIcon, CheckCircleIcon, ClockIcon, XCircleIcon, InfoIcon } from 'lucide-react';
+import { ChevronRightIcon, CheckCircleIcon, ClockIcon, XCircleIcon, InfoIcon, Terminal } from 'lucide-react';
 import { useAuth } from '../lib/auth';
+import { ClaudeCodeService } from '@/lib/client';
 
 type ProgressStage = {
   name: string;
@@ -35,6 +36,7 @@ type ProgressTrackerProps = {
   onError?: (error: Error) => void;
   showNotifications?: boolean;
   className?: string;
+  enableLogsTab?: boolean;
 };
 
 const DEFAULT_STAGES = [
@@ -77,7 +79,8 @@ export function ProgressTracker({
   onComplete,
   onError,
   showNotifications = true,
-  className
+  className,
+  enableLogsTab = true
 }: ProgressTrackerProps) {
   const { isAuthenticated } = useAuth();
   const [progress, setProgress] = useState<number>(0);
@@ -92,6 +95,10 @@ export function ProgressTracker({
   const [fallbackMode, setFallbackMode] = useState<boolean>(false);
   const [simulatedProgress, setSimulatedProgress] = useState<number>(0);
   const [activeTab, setActiveTab] = useState<string>('overview');
+  const [logs, setLogs] = useState<string[]>([]);
+  const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
+  const logContainerRef = useRef<HTMLDivElement>(null);
+  const logStreamCleanupRef = useRef<(() => void) | null>(null);
 
   // Initialize default stages
   useEffect(() => {
@@ -293,6 +300,49 @@ export function ProgressTracker({
     connectWebSocket();
   }, [taskId, isAuthenticated, connectionAttempts, onComplete, onError, sendNotification]);
 
+  // Load and stream logs for Claude Code tasks
+  useEffect(() => {
+    if (!enableLogsTab || !taskId) return;
+    
+    const loadLogs = async () => {
+      try {
+        setIsLoadingLogs(true);
+        const initialLogs = await ClaudeCodeService.getLogs(taskId);
+        setLogs(initialLogs);
+        setIsLoadingLogs(false);
+        
+        // Start streaming logs
+        const cleanup = ClaudeCodeService.streamLogs(taskId, (newLogs) => {
+          setLogs(prev => {
+            // Filter out duplicates
+            const allLogs = [...prev, ...newLogs];
+            const uniqueLogs = Array.from(new Set(allLogs));
+            return uniqueLogs;
+          });
+          
+          // Auto-scroll to bottom
+          if (logContainerRef.current) {
+            logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
+          }
+        });
+        
+        logStreamCleanupRef.current = cleanup;
+      } catch (error) {
+        console.error('Error loading logs:', error);
+        setIsLoadingLogs(false);
+      }
+    };
+    
+    loadLogs();
+    
+    // Cleanup function
+    return () => {
+      if (logStreamCleanupRef.current) {
+        logStreamCleanupRef.current();
+      }
+    };
+  }, [taskId, enableLogsTab]);
+  
   // Fallback to client-side simulation if WebSocket fails
   useEffect(() => {
     if (!fallbackMode || hasReceivedUpdate) return;
@@ -402,6 +452,12 @@ export function ProgressTracker({
           <TabsList className="mb-4">
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="details">Detailed Status</TabsTrigger>
+            {enableLogsTab && (
+              <TabsTrigger value="logs" className="flex items-center gap-1">
+                <Terminal className="h-4 w-4" />
+                Logs
+              </TabsTrigger>
+            )}
           </TabsList>
           
           <TabsContent value="overview">
@@ -491,6 +547,47 @@ export function ProgressTracker({
               ))}
             </div>
           </TabsContent>
+          
+          {enableLogsTab && (
+            <TabsContent value="logs">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-medium">Execution Logs</h3>
+                  <Badge variant="outline" className="font-mono text-xs">
+                    {logs.length} entries
+                  </Badge>
+                </div>
+                
+                <div 
+                  ref={logContainerRef}
+                  className="relative h-[300px] rounded border overflow-y-auto bg-black p-4 font-mono text-xs text-green-400"
+                >
+                  {isLoadingLogs ? (
+                    <div className="flex items-center justify-center h-full">
+                      <div className="animate-pulse text-white">Loading logs...</div>
+                    </div>
+                  ) : logs.length > 0 ? (
+                    <div className="space-y-1">
+                      {logs.map((log, index) => (
+                        <div key={index} className="whitespace-pre-wrap break-all">
+                          {log}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="flex items-center justify-center h-full text-gray-500">
+                      No logs available
+                    </div>
+                  )}
+                </div>
+                
+                <div className="text-xs text-muted-foreground">
+                  <p>Logs show detailed execution information for debugging purposes.</p>
+                  <p>New logs will appear automatically as they become available.</p>
+                </div>
+              </div>
+            </TabsContent>
+          )}
         </Tabs>
       </CardContent>
     </Card>

@@ -3,18 +3,21 @@ Pydantic schemas for API request and response validation.
 """
 
 from app.schemas.user import User, UserCreate, UserUpdate, UserInDB
-from app.schemas.resume import Resume, ResumeCreate, ResumeUpdate, ResumeInDB
-from app.schemas.job import Job, JobCreate, JobUpdate, JobInDB
+from app.schemas.resume import Resume, ResumeCreate, ResumeUpdate, ResumeDetail, ResumeVersion, ResumeDiffResponse, SectionDiffInfo
+from app.schemas.job import JobDescription, JobDescriptionCreate, JobDescriptionUpdate, JobDescriptionCreateFromUrl
 from app.schemas.customize import (
-    CustomizeResumeRequest, CustomizedResumeResponse, 
-    CustomizationFilter, CustomizationCreate
+    ResumeCustomizationRequest, ResumeCustomizationResponse, 
+    CustomizationPlan, CustomizationPlanRequest, CustomizationLevel, RecommendationItem
 )
 from app.schemas.ats import ATSAnalysisRequest, ATSAnalysisResponse
 from app.schemas.cover_letter import CoverLetterRequest, CoverLetterResponse
-from app.schemas.requirements import ExtractRequirementsRequest, ExtractRequirementsResponse
+from app.schemas.requirements import KeyRequirementsRequest, KeyRequirementsContentRequest, KeyRequirementsResponse, KeyRequirements, Requirement, RequirementCategory
 
 # New schemas for claude_code implementation
-from app.schemas.claude_code import QueuedTaskResponse, TaskStatusResponse
+from app.schemas.claude_code import (
+    CustomizeResumeRequest, CustomizedResumeResponse,
+    QueuedTaskResponse, TaskStatusResponse, ClaudeCodeError
+)
 
 __all__ = [
     # User schemas
@@ -27,19 +30,24 @@ __all__ = [
     "Resume", 
     "ResumeCreate", 
     "ResumeUpdate", 
-    "ResumeInDB",
+    "ResumeDetail",
+    "ResumeVersion",
+    "ResumeDiffResponse",
+    "SectionDiffInfo",
     
     # Job schemas
-    "Job", 
-    "JobCreate", 
-    "JobUpdate", 
-    "JobInDB",
+    "JobDescription", 
+    "JobDescriptionCreate", 
+    "JobDescriptionUpdate", 
+    "JobDescriptionCreateFromUrl",
     
     # Customization schemas
-    "CustomizeResumeRequest", 
-    "CustomizedResumeResponse",
-    "CustomizationFilter",
-    "CustomizationCreate",
+    "ResumeCustomizationRequest", 
+    "ResumeCustomizationResponse",
+    "CustomizationPlan",
+    "CustomizationPlanRequest",
+    "CustomizationLevel",
+    "RecommendationItem",
     
     # ATS schemas
     "ATSAnalysisRequest", 
@@ -50,10 +58,17 @@ __all__ = [
     "CoverLetterResponse",
     
     # Requirements schemas
-    "ExtractRequirementsRequest", 
-    "ExtractRequirementsResponse",
+    "KeyRequirementsRequest", 
+    "KeyRequirementsContentRequest", 
+    "KeyRequirementsResponse",
+    "KeyRequirements",
+    "Requirement",
+    "RequirementCategory",
     
     # Claude Code schemas
+    "CustomizeResumeRequest",
+    "CustomizedResumeResponse",
     "QueuedTaskResponse",
-    "TaskStatusResponse"
+    "TaskStatusResponse",
+    "ClaudeCodeError"
 ]

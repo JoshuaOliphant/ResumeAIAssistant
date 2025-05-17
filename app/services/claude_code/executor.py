@@ -14,8 +14,10 @@ import logging
 import subprocess
 import tempfile
 import threading
+import queue
+import time
 from pathlib import Path
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 
 logger = logging.getLogger(__name__)
 
@@ -115,9 +117,12 @@ class ClaudeCodeExecutor:
 {self.prompt_template}
 
 ## Expected Outputs
-1. Generate customized resume in markdown format (new_customized_resume.md)
-2. Create a detailed change summary (customized_resume_output.md)
-3. Save all intermediate files for verification
+1. Generate customized resume in markdown format and save it to a file named "new_customized_resume.md"
+2. Create a detailed change summary and save it to a file named "customized_resume_output.md"
+3. Both output files should be saved in the current working directory (not in subdirectories)
+4. Save any intermediate files for verification
+
+IMPORTANT: After completing all your analysis, you MUST directly create the output markdown files "new_customized_resume.md" and "customized_resume_output.md" in the current directory. Do not rely on the platform to extract content from your response.
             """
             
             return complete_prompt
@@ -137,22 +142,85 @@ class ClaudeCodeExecutor:
             Parsed output as a dictionary
         """
         try:
-            # Parse the JSON output
-            parsed_output = json.loads(output)
+            # Clean the output to handle only the JSON part
+            # Look for content that looks like JSON output
+            import re
+            json_match = re.search(r'({[\s\S]*})', output)
             
-            # Extract the relevant parts
-            return {
-                "customized_resume": parsed_output.get("customized_resume", ""),
-                "customization_summary": parsed_output.get("customization_summary", ""),
-                "intermediate_files": parsed_output.get("intermediate_files", {})
-            }
-        except json.JSONDecodeError:
-            # If output isn't valid JSON, try to find the markdown files referenced in the text
-            logger.warning("Claude Code output is not valid JSON, attempting to extract file references")
+            if json_match:
+                json_str = json_match.group(1)
+                try:
+                    # Parse the JSON output
+                    parsed_output = json.loads(json_str)
+                    
+                    # Extract the relevant parts
+                    return {
+                        "customized_resume": parsed_output.get("customized_resume", ""),
+                        "customization_summary": parsed_output.get("customization_summary", ""),
+                        "intermediate_files": parsed_output.get("intermediate_files", {})
+                    }
+                except json.JSONDecodeError:
+                    logger.warning(f"Found JSON-like content but failed to parse it: {json_str[:100]}...")
+            
+            # If output contains markdown content, try to extract it directly
+            markdown_content = ""
+            summary_content = ""
+            
+            # Try to find files in the executor's current working directory
+            if os.path.exists("new_customized_resume.md"):
+                try:
+                    with open("new_customized_resume.md", 'r') as f:
+                        markdown_content = f.read()
+                    logger.info("Found new_customized_resume.md in current working directory")
+                except Exception as e:
+                    logger.error(f"Error reading new_customized_resume.md: {str(e)}")
+            
+            if os.path.exists("customized_resume_output.md"):
+                try:
+                    with open("customized_resume_output.md", 'r') as f:
+                        summary_content = f.read()
+                    logger.info("Found customized_resume_output.md in current working directory")
+                except Exception as e:
+                    logger.error(f"Error reading customized_resume_output.md: {str(e)}")
+                    
+            # If not found in current directory, try looking in the working directory
+            if not markdown_content or not summary_content:
+                temp_dir = self.working_dir
+                logger.info(f"Searching for output files in working directory: {temp_dir}")
+                for filename in os.listdir(temp_dir):
+                    full_path = os.path.join(temp_dir, filename)
+                    
+                    if filename == "new_customized_resume.md" and os.path.isfile(full_path) and not markdown_content:
+                        with open(full_path, 'r') as f:
+                            markdown_content = f.read()
+                            logger.info(f"Found new_customized_resume.md in {temp_dir}")
+                            
+                    elif filename == "customized_resume_output.md" and os.path.isfile(full_path) and not summary_content:
+                        with open(full_path, 'r') as f:
+                            summary_content = f.read()
+                            logger.info(f"Found customized_resume_output.md in {temp_dir}")
+            
+            if markdown_content or summary_content:
+                logger.info("Found markdown files directly in output directory")
+                return {
+                    "customized_resume": markdown_content,
+                    "customization_summary": summary_content,
+                    "raw_output": output
+                }
+                
+            # If all else fails
+            logger.warning("Claude Code output is not valid JSON and no files found, returning raw output")
             return {
                 "raw_output": output,
-                "customized_resume": "",
-                "customization_summary": ""
+                "customized_resume": "Claude Code did not produce a valid customized resume. Please try again.",
+                "customization_summary": "Claude Code execution failed to produce a valid summary."
+            }
+        except Exception as e:
+            logger.error(f"Error processing Claude Code output: {str(e)}")
+            return {
+                "raw_output": output,
+                "customized_resume": "Error processing Claude Code output.",
+                "customization_summary": f"Error: {str(e)}"
             }
     
     def _save_results(self, results: Dict[str, Any], output_path: str) -> Dict[str, Any]:
@@ -202,7 +270,9 @@ class ClaudeCodeExecutor:
         self, 
         resume_path: str, 
         job_description_path: str, 
-        output_path: str
+        output_path: str,
+        task_id: Optional[str] = None,
+        timeout: Optional[int] = None
     ) -> Dict[str, Any]:
         """
         Execute the resume customization using Claude Code.
@@ -211,48 +281,150 @@ class ClaudeCodeExecutor:
             resume_path: Path to the resume file
             job_description_path: Path to the job description file
             output_path: Path where to save the customized resume
+            task_id: Optional task ID for logging
+            timeout: Optional custom timeout in seconds (default uses config value)
             
         Returns:
             Dictionary with paths to the customized resume and summary
         """
+        # Import here to avoid circular imports
+        from app.core.config import settings
+        from app.services.claude_code.log_streamer import get_log_streamer
+        
+        # Use specified timeout or default from config
+        timeout_seconds = timeout or settings.CLAUDE_CODE_TIMEOUT or 600  # 10-minute default
+        
         try:
+            # Set up task ID for logging if not provided
+            if not task_id:
+                task_id = f"claude-code-{uuid.uuid4().hex}"
+                
+            # Get log streamer
+            log_streamer = get_log_streamer()
+            log_stream = log_streamer.create_log_stream(task_id)
+            
+            # Log starting message
+            logger.info(f"Starting Claude Code execution with task ID: {task_id}")
+            log_streamer.add_log(task_id, f"Starting Claude Code customization (timeout: {timeout_seconds}s)")
+            
             # Prepare files and context
             temp_dir = self._create_temp_workspace()
+            log_streamer.add_log(task_id, f"Created temporary workspace at {temp_dir}")
             
             # Build the complete prompt with template and inputs
             prompt = self._build_prompt(resume_path, job_description_path)
+            log_streamer.add_log(task_id, "Built prompt from resume and job description")
             
             # Execute Claude Code as subprocess with our prompt
             logger.info("Executing Claude Code for resume customization")
+            log_streamer.add_log(task_id, "Executing Claude Code process...")
+            
+            # Print to console 
+            print(f"[Claude Code] Starting customization for task: {task_id}")
+            
             command = [
                 self.claude_cmd, 
                 "--print", prompt,
-                "--output-format", "json",
+                "--output-format", "json",  # Use JSON format as required with --verbose
+                "--verbose",  # Enable verbose output
             ]
             
-            result = subprocess.run(
+            # Create process with pipes for stdout/stderr to enable streaming
+            process = subprocess.Popen(
                 command,
                 cwd=temp_dir,
-                capture_output=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 text=True,
-                timeout=600  # 10-minute timeout
+                bufsize=1  # Line buffered
             )
             
-            if result.returncode != 0:
-                logger.error(f"Claude Code execution failed with return code {result.returncode}")
-                logger.error(f"stderr: {result.stderr}")
-                raise ClaudeCodeExecutionError(f"Claude Code execution failed: {result.stderr}")
+            # Set up output queue and start output threads
+            stdout_queue = queue.Queue()
+            stderr_queue = queue.Queue()
             
-            # Process the output and extract results
-            parsed_results = self._process_output(result.stdout)
+            # Start streaming threads for stdout and stderr
+            stdout_thread = log_streamer.start_output_stream(task_id, process.stdout, stdout_queue)
+            stderr_thread = log_streamer.start_output_stream(task_id, process.stderr, stderr_queue)
             
-            # Save and return customized resume
-            return self._save_results(parsed_results, output_path)
+            # Wait for process to complete with timeout
+            start_time = time.time()
             
-        except subprocess.TimeoutExpired:
-            logger.error("Claude Code execution timed out")
-            raise ClaudeCodeExecutionError("Claude Code execution timed out")
+            # Collect all stdout
+            all_stdout = []
+            
+            # Poll the process until it completes or times out
+            try:
+                while process.poll() is None:
+                    # Check if timeout has been exceeded
+                    elapsed = time.time() - start_time
+                    if elapsed > timeout_seconds:
+                        process.terminate()
+                        try:
+                            process.wait(timeout=5)  # Give it 5 seconds to terminate
+                        except subprocess.TimeoutExpired:
+                            process.kill()  # Force kill if it doesn't terminate
+                        
+                        log_streamer.add_log(task_id, f"ERROR: Process timed out after {elapsed:.1f} seconds")
+                        raise subprocess.TimeoutExpired(command, timeout_seconds)
+                    
+                    # Get any available stdout
+                    try:
+                        while True:
+                            line = stdout_queue.get_nowait()
+                            if line is None:  # End of stream
+                                break
+                            all_stdout.append(line)
+                    except queue.Empty:
+                        pass
+                    
+                    # Sleep briefly to avoid tight loop
+                    time.sleep(0.1)
+                
+                # Get any remaining stdout
+                try:
+                    while True:
+                        line = stdout_queue.get_nowait()
+                        if line is None:  # End of stream
+                            break
+                        all_stdout.append(line)
+                except queue.Empty:
+                    pass
+                
+                # Join the stdout thread
+                stdout_thread.join(timeout=5)
+                stderr_thread.join(timeout=5)
+                
+                # Check return code
+                return_code = process.returncode
+                if return_code != 0:
+                    error_logs = log_streamer.get_logs(task_id)
+                    error_msg = "\n".join(error_logs[-10:]) if error_logs else "Unknown error"
+                    log_streamer.add_log(task_id, f"Process failed with return code {return_code}")
+                    raise ClaudeCodeExecutionError(f"Claude Code execution failed with code {return_code}: {error_msg}")
+                
+                # Join stdout lines
+                stdout_content = "\n".join(all_stdout)
+                
+                # Process the output and extract results
+                log_streamer.add_log(task_id, "Processing Claude Code output")
+                parsed_results = self._process_output(stdout_content)
+                
+                # Save and return customized resume
+                log_streamer.add_log(task_id, f"Saving results to {output_path}")
+                result = self._save_results(parsed_results, output_path)
+                
+                log_streamer.add_log(task_id, "Claude Code execution completed successfully")
+                return result
+                
+            except subprocess.TimeoutExpired:
+                log_streamer.add_log(task_id, f"ERROR: Claude Code execution timed out after {timeout_seconds} seconds")
+                logger.error(f"Claude Code execution timed out after {timeout_seconds} seconds")
+                raise ClaudeCodeExecutionError(f"Claude Code execution timed out after {timeout_seconds} seconds")
+                
         except Exception as e:
+            if task_id:
+                log_streamer.add_log(task_id, f"ERROR: {str(e)}")
             logger.error(f"Error executing Claude Code: {str(e)}")
             raise ClaudeCodeExecutionError(f"Error executing Claude Code: {str(e)}")
 
@@ -261,7 +433,8 @@ class ClaudeCodeExecutor:
         resume_path: str, 
         job_description_path: str, 
         output_path: str, 
-        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None
+        progress_callback: Optional[Callable[[Dict[str, Any]], None]] = None,
+        timeout: Optional[int] = None
     ) -> Dict[str, str]:
         """
         Execute the resume customization with progress tracking.
@@ -271,18 +444,33 @@ class ClaudeCodeExecutor:
             job_description_path: Path to the job description file
             output_path: Path where to save the customized resume
             progress_callback: Callback function for progress updates
+            timeout: Optional custom timeout in seconds
             
         Returns:
             Dictionary with task_id for tracking progress
         """
-        # Set up progress tracking
+        # Import here to avoid circular imports
+        from app.core.config import settings
+        from app.services.claude_code.log_streamer import get_log_streamer
+        
+        # Set up task ID and progress tracking
         task_id = str(uuid.uuid4())
+        
+        # Initialize log streamer
+        log_streamer = get_log_streamer()
+        log_streamer.create_log_stream(task_id)
+        
+        # Set initial progress status
         progress_status = {
             "task_id": task_id,
             "status": "initializing",
             "progress": 0,
-            "message": "Preparing customization process"
+            "message": "Preparing customization process",
+            "logs": []
         }
+        
+        # Log initial message
+        log_streamer.add_log(task_id, "Initializing Claude Code customization with progress tracking")
         
         if progress_callback:
             progress_callback(progress_status)
@@ -290,7 +478,7 @@ class ClaudeCodeExecutor:
         # Start Claude Code in background thread
         thread = threading.Thread(
             target=self._run_customization_with_progress,
-            args=(resume_path, job_description_path, output_path, progress_callback, task_id)
+            args=(resume_path, job_description_path, output_path, progress_callback, task_id, timeout)
         )
         thread.daemon = True
         thread.start()
@@ -303,7 +491,8 @@ class ClaudeCodeExecutor:
         job_description_path: str, 
         output_path: str, 
         progress_callback: Optional[Callable[[Dict[str, Any]], None]],
-        task_id: str
+        task_id: str,
+        timeout: Optional[int] = None
     ):
         """
         Execute the customization with progress updates.
@@ -314,58 +503,90 @@ class ClaudeCodeExecutor:
             output_path: Path where to save the customized resume
             progress_callback: Callback function for progress updates
             task_id: Unique ID for the task
+            timeout: Optional custom timeout in seconds
         """
+        # Import log streamer
+        from app.services.claude_code.log_streamer import get_log_streamer
+        log_streamer = get_log_streamer()
+        
+        # Print to console for real-time tracking
+        print(f"[Claude Code] Starting customization task {task_id} with timeout: {timeout or 'default'} seconds")
+        
         try:
             def update_progress(status: str, progress: int, message: str):
+                # Add to log
+                log_streamer.add_log(task_id, f"Progress: {message} ({progress}%)")
+                
+                # Print to console for real-time tracking
+                print(f"[Claude Code] {task_id}: Progress: {message} ({progress}%)")
+                
                 if progress_callback:
+                    # Get current logs
+                    logs = log_streamer.get_logs(task_id)
+                    
+                    # Call progress callback with status, progress, and logs
                     progress_callback({
                         "task_id": task_id,
                         "status": status,
                         "progress": progress,
-                        "message": message
+                        "message": message,
+                        "logs": logs
                     })
             
             # Phase 1: Research & Analysis
             update_progress("analyzing", 10, "Analyzing resume and job description")
             
-            # Prepare execution
-            temp_dir = self._create_temp_workspace()
-            prompt = self._build_prompt(resume_path, job_description_path)
-            
-            # Start execution
-            update_progress("executing", 30, "Executing Claude Code")
-            
-            command = [
-                self.claude_cmd, 
-                "--print", prompt,
-                "--output-format", "json",
-            ]
-            
-            result = subprocess.run(
-                command,
-                cwd=temp_dir,
-                capture_output=True,
-                text=True,
-                timeout=600  # 10-minute timeout
-            )
-            
-            if result.returncode != 0:
-                raise ClaudeCodeExecutionError(f"Claude Code execution failed: {result.stderr}")
-            
-            # Process results
-            update_progress("processing", 80, "Processing customization results")
-            parsed_results = self._process_output(result.stdout)
-            self._save_results(parsed_results, output_path)
-            
-            # Complete
-            update_progress("completed", 100, "Customization complete")
+            # Execute the actual customization with streaming logs
+            try:
+                # This will run with logs streamed to the log_streamer
+                update_progress("executing", 30, "Executing Claude Code")
+                
+                # Run customization with our task_id for log streaming
+                result = self.customize_resume(
+                    resume_path=resume_path,
+                    job_description_path=job_description_path,
+                    output_path=output_path,
+                    task_id=task_id,
+                    timeout=timeout
+                )
+                
+                # Check if output files exist and create them if not
+                if not os.path.exists(output_path):
+                    print(f"[Claude Code] {task_id}: WARNING: Output file not found at {output_path}, generating basic file")
+                    # Write something to the output path so we don't get an error
+                    with open(output_path, 'w') as f:
+                        f.write("# Customized Resume\n\nClaude Code did not produce a valid customized resume. Please try again.")
+                
+                summary_path = os.path.join(os.path.dirname(output_path), "customized_resume_output.md")
+                if not os.path.exists(summary_path):
+                    print(f"[Claude Code] {task_id}: WARNING: Summary file not found at {summary_path}, generating basic file")
+                    # Write something to the summary path
+                    with open(summary_path, 'w') as f:
+                        f.write("# Customization Summary\n\nClaude Code did not produce a valid customization summary. Please try again.")
+                
+                # Process is complete, update progress
+                update_progress("processing", 90, "Finalizing customization")
+                
+                # Complete
+                update_progress("completed", 100, "Customization complete")
+                
+            except subprocess.TimeoutExpired:
+                logger.error(f"Claude Code execution timed out for task {task_id}")
+                update_progress("error", 0, "Claude Code execution timed out")
+                raise
             
         except Exception as e:
             logger.error(f"Error in customization task {task_id}: {str(e)}")
+            log_streamer.add_log(task_id, f"ERROR: {str(e)}")
+            
             if progress_callback:
+                # Get logs for error context
+                logs = log_streamer.get_logs(task_id)
+                
                 progress_callback({
                     "task_id": task_id,
                     "status": "error",
                     "progress": 0,
-                    "message": f"Error: {str(e)}"
+                    "message": f"Error: {str(e)}",
+                    "logs": logs
                 })

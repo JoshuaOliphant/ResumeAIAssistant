@@ -1,548 +1,464 @@
-# Claude Code Integration Plan for Resume Customization Service
+# Claude Code Integration Plan for ResumeAI Assistant
 
-## 1. Overview
+## Overview
 
-This document outlines a proof of concept (PoC) implementation for integrating Claude Code with the existing ResumeAIAssistant application. The goal is to leverage Claude Code's advanced capabilities to replace or augment the current AI implementation while maintaining compatibility with the existing tech stack.
+This document outlines a comprehensive plan to replace the existing AI model workflow in the ResumeAI Assistant application with Claude Code, leveraging its command-line capabilities to implement the advanced resume customization system defined in `new_prompt.md`.
 
-## 2. Core Design Principles
+## Current Challenges
 
-Based on feedback and application review, this plan focuses on:
+- Complex workflows with multiple LLMs are difficult to manage
+- PydanticAI implementation is not working effectively
+- Parallel processing logic is complicated
+- Truthfulness verification is challenging
 
-1. **Performance Optimization** - Addressing the slow resume customization process
-2. **Enhanced User Experience** - Improving progress indication and diff visualization
-3. **Cost Efficiency** - Using tiered models for different processing stages
-4. **Essential Features** - Focusing on core functionality (temporarily disabling cover letters)
-5. **Parallel Processing** - Leveraging Claude Code's ability to parallelize tasks
+## Proposed Solution Architecture
 
-## 3. Architectural Concept
+The solution will use Claude Code as a subprocess-driven agent that implements the evaluator-optimizer workflow pattern from `new_prompt.md` while leveraging Claude Code's command-line capabilities, thinking tools, and structured approach.
 
-The architecture integrates Claude Code as a separate backend service that follows the same evaluator-optimizer pattern currently used in the application, with enhancements for parallelization and feedback loops.
+### High-Level Architecture
 
 ```
-┌─────────────────┐      ┌────────────────────┐      ┌─────────────────────┐
-│                 │      │                    │      │                     │
-│  Next.js        │◄────►│  FastAPI Backend   │◄────►│  Claude Code        │
-│  Frontend       │      │  (Coordinator)     │      │  Service            │
-│                 │      │                    │      │                     │
-└─────────────────┘      └────────────────────┘      └─────────────────────┘
+┌─────────────────┐     ┌───────────────────┐     ┌───────────────────┐
+│  Web/API Layer  │────►│  Resume Manager   │────►│  Claude Code      │
+│  (FastAPI)      │     │  (Python Service) │     │  Agent Executor   │
+└─────────────────┘     └───────────────────┘     └───────────────────┘
+                                                         │
+                                                         ▼
+                                                ┌───────────────────┐
+                                                │  Output Processor │
+                                                │  & File Manager   │
+                                                └───────────────────┘
 ```
 
-### 3.1 Enhanced Evaluator-Optimizer Pattern
+## Implementation Details
 
-Drawing from the Anthropic engineering article on agent workflows, this implementation enhances the traditional evaluator-optimizer pattern:
+### 1. Claude Code Executor Service
 
-1. **Multi-Stage Evaluation** - Break resume analysis into parallel specialized evaluators
-2. **Continuous Feedback Loops** - Add verification components to critique optimization plans
-3. **Reflective Optimization** - Implement self-critique mechanisms for proposed changes
-4. **Parallel Processing** - Divide tasks across multiple Claude Code instances working simultaneously
-
-## 4. Claude Code Service Implementation
-
-### 4.1 Core Components
-
-1. **Claude Code Executor** - A service to securely execute Claude Code commands
-2. **Context Manager** - Handles file preparation and context management
-3. **Task Orchestrator** - Manages parallel processing and task dependencies
-4. **Progress Reporter** - Streams real-time progress updates to the frontend
-5. **Result Synthesizer** - Combines results from parallel processes
-
-### 4.2 CLAUDE.md Design
-
-The CLAUDE.md file will contain specialized knowledge tailored to resume customization:
-
-```markdown
-# Resume Customization Guidelines
-
-## Core Evaluator-Optimizer Pattern
-1. Evaluation: Assess how well the resume matches the job description
-2. Optimization Planning: Create a detailed customization plan
-3. Implementation: Apply the optimizations to the resume
-4. Verification: Verify changes maintain truthfulness and improve match
-
-## Resume Structure Guidelines
-- Key sections: Summary, Experience, Skills, Education
-- Format conventions and best practices
-- ATS compatibility requirements
-
-## Parallelization Strategy
-- Section-by-section parallel processing
-- Independent analyzer functions
-- Hierarchical synthesis of results
-
-## Domain Knowledge
-- Industry-specific terminology
-- Job role requirements mapping
-- ATS scanning patterns and priorities
-```
-
-## 5. Performance Optimization
-
-### 5.1 Parallel Processing Architecture
-
-A key innovation in this implementation is the parallel processing architecture:
-
-1. **Section-Based Parallelization**
-   - Divide resume into logical sections (summary, experience, skills, education)
-   - Process each section with dedicated Claude Code instances
-   - Use separate CLAUDE.md contexts optimized for each section
-
-2. **Tiered Model Approach**
-   - Use simpler models for initial analysis and formatting tasks
-   - Reserve more powerful models for complex reasoning tasks
-   - Intelligently allocate tokens based on section complexity
-
-3. **Progress Streaming**
-   - Implement WebSocket-based progress reporting
-   - Show section-by-section completion status
-   - Provide accurate time estimates based on remaining tasks
-
-### 5.2 Implementation Example
+Create a Python service that manages Claude Code executions as subprocesses:
 
 ```python
-# app/services/claude_code_parallel.py
-
-class ClaudeCodeParallelExecutor:
-    """Execute multiple Claude Code tasks in parallel."""
-    
-    async def parallelize_resume_customization(self, resume_content, job_description):
-        """
-        Process resume customization by dividing into parallel tasks.
+class ClaudeCodeExecutor:
+    def __init__(self, working_dir, prompt_template_path, claude_cmd="claude"):
+        self.working_dir = working_dir
+        self.prompt_template = self._load_prompt_template(prompt_template_path)
+        self.claude_cmd = claude_cmd
         
-        Returns:
-            Dict with section results and progress information
-        """
-        # Parse resume into sections
-        sections = self._extract_resume_sections(resume_content)
+    def _load_prompt_template(self, path):
+        with open(path, 'r') as f:
+            return f.read()
+            
+    def customize_resume(self, resume_path, job_description_path, output_path):
+        # Prepare files and context
+        temp_dir = self._create_temp_workspace()
         
-        # Create tasks for each section
-        tasks = []
-        for section_name, section_content in sections.items():
-            task = self.process_section(
-                section_name=section_name,
-                section_content=section_content,
-                job_description=job_description
-            )
-            tasks.append(task)
+        # Build the complete prompt with template and inputs
+        prompt = self._build_prompt(resume_path, job_description_path)
         
-        # Execute all tasks in parallel
-        section_results = await asyncio.gather(*tasks)
+        # Execute Claude Code as subprocess with our prompt
+        command = [
+            self.claude_cmd, 
+            "--print", prompt,
+            "--output-format", "json",
+        ]
         
-        # Synthesize results into cohesive resume
-        customized_resume = self._synthesize_resume(section_results)
-        
-        return {
-            "customized_resume": customized_resume,
-            "section_results": section_results,
-            "stats": self._calculate_diff_stats(resume_content, customized_resume)
-        }
-    
-    async def process_section(self, section_name, section_content, job_description):
-        """Process a specific resume section with appropriate Claude Code instance."""
-        # Select appropriate memory file for section type
-        memory_path = f"app/services/claude_memories/{section_name.lower()}.md"
-        
-        # Create section-specific context
-        context = {
-            "section_name": section_name,
-            "section_content": section_content,
-            "job_description": job_description
-        }
-        
-        # Execute Claude Code with specialized context
-        executor = ClaudeCodeExecutor(memory_path=memory_path)
-        return await executor.execute(
-            command=f"optimize_{section_name.lower()}_section", 
-            input_data=context
+        result = subprocess.run(
+            command,
+            cwd=temp_dir,
+            capture_output=True,
+            text=True
         )
+        
+        # Process the output and extract results
+        parsed_results = self._process_output(result.stdout)
+        
+        # Save and return customized resume
+        return self._save_results(parsed_results, output_path)
 ```
 
-## 6. Improved Diff Visualization
-
-### 6.1 Enhanced Visualization Components
-
-The current diff visualization is a pain point in the UI. The PoC will implement:
-
-1. **Interactive Side-by-Side Comparison**
-   - Clear highlighting of changes with color coding
-   - Ability to toggle between different visualization modes
-   - Section-by-section navigation
-
-2. **Change Summary Dashboard**
-   - Visual representation of changes by category (additions, reformatting, etc.)
-   - Keyword additions and optimization metrics
-   - Hover tooltips explaining rationale for changes
-
-### 6.2 Integration Example
-
-```typescript
-// nextjs-frontend/components/resume-diff-view.tsx
-
-import { useState } from 'react';
-import { DiffViewer, DiffMethod } from 'react-diff-viewer';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-
-interface ResumeDiffProps {
-  original: string;
-  modified: string;
-  sectionChanges: Record<string, any>;
-}
-
-export const EnhancedResumeDiff = ({ original, modified, sectionChanges }: ResumeDiffProps) => {
-  const [diffMethod, setDiffMethod] = useState<DiffMethod>('split');
-  
-  return (
-    <div className="resume-diff-container">
-      <div className="diff-controls mb-4">
-        <div className="flex justify-between items-center">
-          <h3 className="text-lg font-semibold">Resume Changes</h3>
-          <div className="view-mode-toggle">
-            <button 
-              onClick={() => setDiffMethod('split')}
-              className={`px-3 py-1 rounded-l-md ${diffMethod === 'split' ? 'bg-primary text-white' : 'bg-muted'}`}
-            >
-              Side by Side
-            </button>
-            <button 
-              onClick={() => setDiffMethod('unified')}
-              className={`px-3 py-1 rounded-r-md ${diffMethod === 'unified' ? 'bg-primary text-white' : 'bg-muted'}`}
-            >
-              Inline
-            </button>
-          </div>
-        </div>
-      </div>
-      
-      <Tabs defaultValue="full-resume">
-        <TabsList>
-          <TabsTrigger value="full-resume">Full Resume</TabsTrigger>
-          {Object.keys(sectionChanges).map(section => (
-            <TabsTrigger key={section} value={section}>
-              {section}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-        
-        <TabsContent value="full-resume">
-          <DiffViewer
-            oldValue={original}
-            newValue={modified}
-            splitView={diffMethod === 'split'}
-            disableWordDiff={false}
-            useDarkTheme={true}
-            showLineNumbers={true}
-          />
-        </TabsContent>
-        
-        {Object.entries(sectionChanges).map(([section, content]) => (
-          <TabsContent key={section} value={section}>
-            <DiffViewer
-              oldValue={content.original}
-              newValue={content.modified}
-              splitView={diffMethod === 'split'}
-              disableWordDiff={false}
-              useDarkTheme={true}
-              showLineNumbers={true}
-            />
-            <div className="change-rationale mt-4 p-4 bg-muted rounded-md">
-              <h4 className="font-medium mb-2">Change Rationale</h4>
-              <p>{content.rationale}</p>
-            </div>
-          </TabsContent>
-        ))}
-      </Tabs>
-    </div>
-  );
-};
-```
-
-## 7. Integration with Existing Backend
-
-### 7.1 Feature Flag Implementation
-
-To allow seamless switching between existing PydanticAI and Claude Code implementations:
+### 2. Prompt Building Module
 
 ```python
-# app/api/endpoints/customize.py
+def _build_prompt(self, resume_path, job_description_path):
+    # Load the resume and job description contents
+    with open(resume_path, 'r') as f:
+        resume_content = f.read()
+        
+    with open(job_description_path, 'r') as f:
+        job_description_content = f.read()
+    
+    # Create a structured prompt based on new_prompt.md
+    complete_prompt = f"""
+# Resume Customization Task
 
-@router.post("/customize-resume")
+## Input Files
+- Resume: {resume_content}
+- Job Description: {job_description_content}
+
+## Execution Instructions
+{self.prompt_template}
+
+## Expected Outputs
+1. Generate customized resume in markdown format (new_customized_resume.md)
+2. Create a detailed change summary (customized_resume_output.md)
+3. Save all intermediate files for verification
+    """
+    
+    return complete_prompt
+```
+
+### 3. Integration with FastAPI Backend
+
+Update the existing API endpoint to use the Claude Code executor:
+
+```python
+@router.post("/customize-resume/", response_model=schemas.CustomizedResumeResponse)
 async def customize_resume(
-    request: ResumeCustomizationRequest,
-    db: Session = Depends(get_db),
-    use_claude_code: bool = Query(False, description="Use Claude Code implementation")
-):
-    """
-    Customize a resume for a specific job.
-    
-    Allows switching between PydanticAI and Claude Code implementations.
-    """
-    # Get resume and job data
-    resume = db.query(Resume).filter(Resume.id == request.resume_id).first()
-    job = db.query(JobDescription).filter(JobDescription.id == request.job_id).first()
-    
-    if not resume or not job:
-        raise HTTPException(status_code=404, detail="Resume or job not found")
-    
-    # Select implementation based on feature flag
-    if use_claude_code:
-        service = ClaudeCodeCustomizationService(db)
-    else:
-        service = PydanticAIOptimizerService(db)
-    
-    # Execute customization
-    result = await service.customize_resume(
-        resume_id=resume.id,
-        job_id=job.id,
-        customization_level=request.customization_level
-    )
-    
-    return result
-```
-
-### 7.2 Progress Streaming Implementation
-
-```python
-# app/api/endpoints/customize.py
-
-@router.post("/customize-resume/stream")
-async def stream_customize_resume(
-    request: ResumeCustomizationRequest,
+    request: schemas.CustomizeResumeRequest,
     db: Session = Depends(get_db)
 ):
-    """Stream progress updates during resume customization."""
+    # Save uploaded resume to temporary file
+    resume_path = save_temp_file(request.resume_content)
     
-    # Create background task for processing
-    task_id = str(uuid.uuid4())
-    background_tasks.add_task(
-        process_customization_with_progress,
-        task_id=task_id,
-        resume_id=request.resume_id,
-        job_id=request.job_id,
-        customization_level=request.customization_level,
-        db=db
+    # Save job description to temporary file
+    job_description_path = save_temp_file(request.job_description)
+    
+    # Create output directory
+    output_dir = create_temp_directory()
+    
+    # Initialize the Claude Code executor
+    executor = ClaudeCodeExecutor(
+        working_dir=output_dir,
+        prompt_template_path="app/prompts/new_prompt.md"
     )
     
-    # Return task ID for client to connect to SSE endpoint
-    return {"task_id": task_id}
-
-
-@router.get("/customize-resume/progress/{task_id}")
-async def get_customization_progress(
-    task_id: str,
-    request: Request
-):
-    """SSE endpoint for streaming customization progress."""
-    async def event_generator():
-        try:
-            # Set up connection to Redis for progress updates
-            redis = aioredis.from_url(settings.REDIS_URL)
-            pubsub = redis.pubsub()
-            await pubsub.subscribe(f"progress:{task_id}")
-            
-            # Send initial event
-            yield "data: " + json.dumps({"status": "started", "progress": 0}) + "\n\n"
-            
-            # Stream progress events
-            async for message in pubsub.listen():
-                if message["type"] == "message":
-                    data = json.loads(message["data"])
-                    yield "data: " + json.dumps(data) + "\n\n"
-                    
-                    # If complete, break the loop
-                    if data.get("status") == "complete":
-                        break
-                        
-        except Exception as e:
-            yield "data: " + json.dumps({"status": "error", "message": str(e)}) + "\n\n"
-        finally:
-            # Clean up
-            await pubsub.unsubscribe(f"progress:{task_id}")
-            await redis.close()
+    # Execute the customization
+    result = executor.customize_resume(
+        resume_path=resume_path,
+        job_description_path=job_description_path,
+        output_path=f"{output_dir}/new_customized_resume.md"
+    )
     
-    return EventSourceResponse(event_generator())
+    # Read the output files
+    customized_resume = read_file(f"{output_dir}/new_customized_resume.md")
+    customization_summary = read_file(f"{output_dir}/customized_resume_output.md")
+    
+    # Store results in database
+    db_customization = models.Customization(
+        original_resume=request.resume_content,
+        job_description=request.job_description,
+        customized_resume=customized_resume,
+        customization_summary=customization_summary,
+        user_id=request.user_id
+    )
+    db.add(db_customization)
+    db.commit()
+    
+    return {
+        "customized_resume": customized_resume,
+        "customization_summary": customization_summary,
+        "customization_id": db_customization.id
+    }
 ```
 
-### 7.3 Frontend Integration
+### 4. Progress Tracking System
 
-```tsx
-// nextjs-frontend/pages/customize/result/page.tsx
-
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/router';
-import { Progress } from '@/components/ui/progress';
-import { EnhancedResumeDiff } from '@/components/resume-diff-view';
-import { CustomizationService } from '@/lib/client';
-
-export default function CustomizationResultPage() {
-  const router = useRouter();
-  const { resumeId, jobId, level, taskId } = router.query;
-  
-  const [progress, setProgress] = useState(0);
-  const [currentStep, setCurrentStep] = useState('');
-  const [result, setResult] = useState(null);
-  const [isComplete, setIsComplete] = useState(false);
-  
-  useEffect(() => {
-    if (!taskId) return;
-    
-    // Connect to SSE endpoint for progress updates
-    const eventSource = new EventSource(`/api/customize/progress/${taskId}`);
-    
-    eventSource.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      
-      setProgress(data.progress || 0);
-      setCurrentStep(data.current_step || '');
-      
-      if (data.status === 'complete') {
-        setResult(data.result);
-        setIsComplete(true);
-        eventSource.close();
-      }
-    };
-    
-    eventSource.onerror = () => {
-      console.error('EventSource failed');
-      eventSource.close();
-    };
-    
-    return () => {
-      eventSource.close();
-    };
-  }, [taskId]);
-  
-  return (
-    <div className="container mx-auto py-8">
-      <h1 className="text-2xl font-bold mb-6">Resume Customization</h1>
-      
-      {!isComplete ? (
-        <div className="customization-progress">
-          <Progress value={progress} className="w-full mb-4" />
-          <p className="text-center text-muted-foreground">
-            {currentStep || 'Processing your resume...'}
-          </p>
-          <p className="text-center text-sm mt-2">
-            Estimated time remaining: {Math.ceil((100 - progress) / 10)} minutes
-          </p>
-        </div>
-      ) : (
-        <div className="customization-result">
-          <div className="ats-score mb-8">
-            <h2 className="text-xl font-semibold mb-4">ATS Compatibility Improvement</h2>
-            <div className="flex justify-between items-center">
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">Before</p>
-                <p className="text-2xl font-bold">{result.before_score}%</p>
-              </div>
-              <div className="arrow">→</div>
-              <div className="text-center">
-                <p className="text-sm text-muted-foreground">After</p>
-                <p className="text-2xl font-bold text-green-500">
-                  {result.after_score}% (+{result.after_score - result.before_score}%)
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <div className="resume-changes">
-            <h2 className="text-xl font-semibold mb-4">Resume Changes</h2>
-            <EnhancedResumeDiff 
-              original={result.original_content}
-              modified={result.customized_content}
-              sectionChanges={result.section_changes}
-            />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
-## 8. Security and Isolation
-
-### 8.1 Docker Containerization
-
-The Claude Code service will run in an isolated container with controlled permissions:
-
-```dockerfile
-# Dockerfile.claude-code
-FROM python:3.9-slim
-
-WORKDIR /app
-
-# Install Claude CLI and dependencies
-RUN pip install anthropic claude-cli fastapi uvicorn redis
-
-# Copy only necessary files
-COPY ./app/services/claude_memories /app/memories
-COPY ./app/services/claude_code_service.py /app/
-COPY ./app/services/claude_code_executor.py /app/
-
-# Set up restricted user
-RUN useradd -m claudeuser
-USER claudeuser
-
-# Configure Claude CLI
-ENV CLAUDE_API_KEY=${CLAUDE_API_KEY}
-ENV CLAUDE_MEMORY_DIR=/app/memories
-
-# Run service
-CMD ["uvicorn", "claude_code_service:app", "--host", "0.0.0.0", "--port", "8000"]
-```
-
-### 8.2 Rate Limiting and Timeout Controls
+Since Claude Code execution may take time, implement a progress tracking system:
 
 ```python
-# app/services/claude_code_executor.py
+def customize_resume_with_progress(self, resume_path, job_description_path, output_path, progress_callback=None):
+    # Set up progress tracking
+    progress_status = {
+        "status": "initializing",
+        "progress": 0,
+        "message": "Preparing customization process"
+    }
+    
+    if progress_callback:
+        progress_callback(progress_status)
+    
+    # Start Claude Code in background thread
+    thread = threading.Thread(
+        target=self._run_customization,
+        args=(resume_path, job_description_path, output_path, progress_callback)
+    )
+    thread.start()
+    
+    return {"task_id": str(uuid.uuid4())}
 
-class ClaudeCodeExecutor:
-    """Secure executor for Claude Code commands."""
-    
-    def __init__(self, memory_path, max_execution_time=300):
-        self.memory_path = memory_path
-        self.max_execution_time = max_execution_time
-        self.rate_limiter = RateLimiter(max_calls=10, period=60)  # 10 calls per minute
-    
-    async def execute(self, command, input_data):
-        """Execute a Claude Code command with rate limiting and timeouts."""
-        # Check rate limit
-        await self.rate_limiter.acquire()
+def _run_customization(self, resume_path, job_description_path, output_path, progress_callback):
+    try:
+        # Phase 1: Research & Analysis
+        progress_update(progress_callback, "analyzing", 10, "Analyzing resume and job description")
+        # ... execute Phase 1 with Claude Code
         
-        try:
-            # Execute with timeout
-            return await asyncio.wait_for(
-                self._execute_claude_code(command, input_data),
-                timeout=self.max_execution_time
-            )
-        except asyncio.TimeoutError:
-            raise TimeoutError(f"Claude Code execution timed out after {self.max_execution_time} seconds")
-        except Exception as e:
-            raise RuntimeError(f"Claude Code execution failed: {str(e)}")
+        # Phase 2: Enhancement Planning
+        progress_update(progress_callback, "planning", 30, "Planning enhancements")
+        # ... execute Phase 2
+        
+        # Phase 3-5: Implementation, Verification, Finalization
+        progress_update(progress_callback, "implementing", 50, "Generating customized content")
+        # ... execute remaining phases
+        
+        # Complete
+        progress_update(progress_callback, "completed", 100, "Customization complete")
+    
+    except Exception as e:
+        progress_update(progress_callback, "error", 0, f"Error: {str(e)}")
+        raise
 ```
 
-## 9. Essential Features and Priorities
+### 5. CLAUDE.md Configuration
 
-Based on feedback, the immediate priorities for the PoC are:
+Create a `CLAUDE.md` file that defines specific guidelines for Claude Code when customizing resumes:
 
-1. **Performance Improvement** - Implementing parallel processing architecture
-2. **Progress Tracking** - Adding real-time progress updates
-3. **Enhanced Diff Visualization** - Improving the resume comparison interface
-4. **Feature Flags** - Creating toggles for optional features (like cover letters)
+```markdown
+# CLAUDE.md - Guidelines for Resume Customization
 
-Lower priority items to consider after successful PoC:
+## Workflow
+1. Always follow the evaluator-optimizer workflow from new_prompt.md
+2. Create JSON intermediate files for analysis and verification
+3. Document all changes with evidence sources
+4. Write final output to new_customized_resume.md and customized_resume_output.md
 
-1. Cover letter generation
-2. Advanced research capabilities using web search
-3. Additional export formats
-4. User feedback collection system
+## Verification Rules
+1. Never fabricate experiences, skills, or achievements
+2. Only reorganize and reframe existing content
+3. Track all changes with evidence from original resume
+4. Maintain strict truth tracking in evidence_tracker.json
 
-## 10. Next Steps
+## Output Format
+1. Customized resume must be valid Markdown
+2. Change summary must include match score and improvements
+3. All intermediate files should be searchable JSON
+```
 
-1. Create a separate GitHub repository for the Claude Code PoC
-2. Set up dockerized development environment with Claude Code CLI
-3. Develop initial CLAUDE.md for resume customization
-4. Implement basic parallel processing infrastructure
-5. Create progress streaming components
-6. Design and implement enhanced diff visualization
+### 6. Implementation of WebSocket Progress Updates
 
-This plan addresses the key issues identified in the feedback while focusing on essential features for a successful PoC implementation.
+To provide real-time progress updates to the frontend:
+
+```python
+@app.websocket("/ws/customize/{task_id}")
+async def websocket_customize_progress(websocket: WebSocket, task_id: str):
+    await websocket.accept()
+    
+    # Retrieve task from progress tracker
+    task = progress_tracker.get_task(task_id)
+    
+    if not task:
+        await websocket.send_json({"error": "Task not found"})
+        await websocket.close()
+        return
+    
+    # Subscribe to task progress updates
+    queue = asyncio.Queue()
+    task.add_subscriber(queue)
+    
+    try:
+        while True:
+            # Wait for progress updates
+            progress = await queue.get()
+            
+            # Send progress to client
+            await websocket.send_json(progress)
+            
+            # If task is complete or errored, close connection
+            if progress["status"] in ["completed", "error"]:
+                break
+                
+    except WebSocketDisconnect:
+        task.remove_subscriber(queue)
+```
+
+## Deployment Considerations
+
+### 1. Claude Code Installation
+
+Ensure Claude Code is installed on the server:
+
+```bash
+npm install -g @anthropic-ai/claude-code
+```
+
+### 2. Environment Configuration
+
+Set up the necessary environment variables:
+
+```bash
+# Authentication
+export ANTHROPIC_API_KEY="your_api_key_here"
+
+# Claude Code settings
+export CLAUDE_MODEL="claude-3-7-sonnet-20250219"
+export CLAUDE_MAX_TOKENS=200000
+
+# Application settings
+export CLAUDE_CODE_TIMEOUT=300  # 5-minute timeout
+```
+
+### 3. Error Handling and Fallbacks
+
+Implement robust error handling:
+
+```python
+try:
+    result = executor.customize_resume(
+        resume_path=resume_path,
+        job_description_path=job_description_path,
+        output_path=output_path
+    )
+except ClaudeCodeExecutionError as e:
+    # Log the error
+    logger.error(f"Claude Code execution failed: {str(e)}")
+    
+    # Fall back to previous implementation if needed
+    if config.ENABLE_FALLBACK:
+        logger.info("Falling back to previous implementation")
+        result = legacy_customizer.customize_resume(
+            resume_content=request.resume_content,
+            job_description=request.job_description
+        )
+    else:
+        raise HTTPException(status_code=500, detail="Resume customization failed")
+```
+
+## Migration Strategy
+
+### 1. Side-by-Side Implementation
+
+Initially implement Claude Code as an alternative path:
+
+```python
+@router.post("/customize-resume/", response_model=schemas.CustomizedResumeResponse)
+async def customize_resume(
+    request: schemas.CustomizeResumeRequest,
+    use_claude_code: bool = Query(False, description="Use Claude Code for customization"),
+    db: Session = Depends(get_db)
+):
+    if use_claude_code:
+        # New Claude Code path
+        return await customize_with_claude_code(request, db)
+    else:
+        # Existing implementation
+        return await customize_with_existing_implementation(request, db)
+```
+
+### 2. Phase-out Plan
+
+1. A/B test Claude Code with a subset of users (10%)
+2. Monitor performance, accuracy, and user satisfaction metrics
+3. Gradually increase Claude Code usage to 25%, 50%, 75%, 100%
+4. Remove the legacy implementation once Claude Code is proven stable
+
+## Performance Considerations
+
+### 1. Caching Strategy
+
+```python
+# Cache customized resumes for the same job description
+@cached(ttl=86400)  # 24-hour cache
+def get_cached_customization(resume_hash, job_description_hash):
+    """Check if we've already customized this resume for this job"""
+    cache_key = f"{resume_hash}:{job_description_hash}"
+    return customization_cache.get(cache_key)
+```
+
+### 2. Batch Processing
+
+For high-traffic scenarios, implement a queue system:
+
+```python
+# Add customization request to queue
+@router.post("/customize-resume/queue", response_model=schemas.QueuedTaskResponse)
+async def queue_customize_resume(request: schemas.CustomizeResumeRequest):
+    task_id = str(uuid.uuid4())
+    
+    # Add to background tasks queue
+    background_tasks.add_task(
+        process_customization_request,
+        task_id=task_id,
+        request=request
+    )
+    
+    return {"task_id": task_id, "status": "queued"}
+
+# Check status of queued task
+@router.get("/customize-resume/status/{task_id}", response_model=schemas.TaskStatusResponse)
+async def get_customize_status(task_id: str):
+    return task_manager.get_task_status(task_id)
+```
+
+## Security Considerations
+
+1. Use temporary directories with appropriate permissions
+2. Sanitize all inputs before passing to Claude Code
+3. Limit execution time and resource usage
+4. Implement rate limiting for API endpoints
+5. Set up monitoring and alerting for abnormal usage patterns
+
+## Testing Strategy
+
+1. Unit tests for the ClaudeCodeExecutor class
+2. Integration tests with sample resumes and job descriptions
+3. End-to-end tests of the entire workflow
+4. Performance benchmarks compared to current implementation
+5. A/B testing with real users
+
+## Next Steps
+
+1. ✅ Set up development environment with Claude Code
+2. ✅ Create prototype implementation of executor service
+3. ✅ Integrate with existing FastAPI backend:
+   - ✅ Created `ClaudeCodeService` in frontend client.ts
+   - ✅ Updated customize-resume.tsx component to use Claude Code
+   - ✅ Implemented backend endpoint for Claude Code with progress tracking
+   - ✅ Added fallback mechanism for resilience
+4. ✅ Implement progress tracking with WebSockets
+5. ✅ Update documentation:
+   - ✅ Documented new architecture in README.md
+   - ✅ Added Claude Code integration section with workflow details
+   - ✅ Updated prerequisites and installation instructions
+6. 🔄 Run preliminary testing with sample data
+7. Refine prompt template based on output quality
+8. Deploy for A/B testing with small user group
+9. Gather metrics and refine implementation
+10. Roll out to all users
+
+## Implementation Progress
+
+### Frontend Updates
+
+1. ✅ Created a new `ClaudeCodeService` in client.ts with:
+   - Methods for both ID-based and content-based customization
+   - Clear interface definitions for requests and responses
+   - Proper error handling and progress tracking
+
+2. ✅ Simplified the component workflow in customize-resume.tsx:
+   - Reduced stages from 'analysis' → 'plan' → 'implementation' → 'complete' to just 'preparation' → 'implementation' → 'complete'
+   - Removed all complex plan generation code
+   - Added customizationSummary state to display Claude Code's summary of changes
+
+3. ✅ Updated UI to reflect the Claude Code workflow:
+   - Modified progress steps to match the simplified stages
+   - Updated loading state messages to reference Claude Code
+   - Added a section to display the customization summary when available
+
+### Backend Updates
+
+1. ✅ Created `/claude-code/customize` endpoints:
+   - Implemented synchronous endpoint for resume customization
+   - Added asynchronous endpoint with progress tracking
+   - Integrated with WebSockets for real-time updates
+   - Set up cleanup process for completed tasks
+   
+2. ✅ Implemented `ClaudeCodeExecutor` service with:
+   - Subprocess execution of Claude Code CLI
+   - Prompt building from template and input files
+   - Output parsing and processing
+   - Temporary workspace management
+   
+3. ✅ Added error handling and fallback mechanism:
+   - Set up fallback to legacy customization service
+   - Added detailed error reporting and logging
+   - Implemented timeout handling for long-running processes
+
+By following this plan, we'll replace the complex PydanticAI implementation with a streamlined Claude Code approach that leverages the evaluator-optimizer workflow from `new_prompt.md` while maintaining all the functionality of the current system.

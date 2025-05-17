@@ -1,0 +1,135 @@
+{
+  "verified_skills": [
+    {"skill": "Java", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Spring Boot", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Python", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Django", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Flask", "source": "Original resume", "confidence": 1.0},
+    {"skill": "C#", "source": "Original resume", "confidence": 1.0},
+    {"skill": ".Net", "source": "Original resume", "confidence": 1.0},
+    {"skill": "REST", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Event-driven Architecture", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Kafka", "source": "Original resume", "confidence": 1.0},
+    {"skill": "AWS", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Lambda", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Docker", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Kubernetes", "source": "Original resume", "confidence": 1.0},
+    {"skill": "CI/CD", "source": "Original resume", "confidence": 1.0},
+    {"skill": "GitLab CI", "source": "Original resume", "confidence": 1.0},
+    {"skill": "TravisCI", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Infrastructure as Code (IaC)", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Terraform", "source": "Original resume", "confidence": 1.0},
+    {"skill": "AWS CDK", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Helm", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Microservices", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Testing (JUnit, Cucumber, etc.)", "source": "Original resume", "confidence": 1.0},
+    {"skill": "AI/ML Tools", "source": "Original resume", "confidence": 1.0},
+    {"skill": "GitHub Copilot", "source": "Original resume", "confidence": 1.0},
+    {"skill": "ChatGPT", "source": "Original resume", "confidence": 1.0},
+    {"skill": "OpenAI API", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Anthropic API", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Python SDKs for AI", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Monitoring (Datadog, Splunk, etc.)", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Command-Line Development", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Click Library (Python)", "source": "Original resume", "confidence": 1.0},
+    {"skill": "Prompt Engineering", "source": "Original resume (AI Side Projects)", "confidence": 0.8},
+    {"skill": "Rapid Prototyping", "source": "Original resume (AI Side Projects, Software Project Work)", "confidence": 0.8},
+    {"skill": "LLM Integration", "source": "Original resume (AI Side Projects, Anthropic API)", "confidence": 0.9}
+  ],
+  "verified_experiences": [
+    {
+      "company": "Nortal - Consultant for T-Mobile",
+      "position": "Senior Software Engineer (SDE4)",
+      "achievements": [
+        {"achievement": "Led Docker containerization of Java/Spring Boot microservices, improving application scalability and efficiency by decreasing image size by nearly 50% with Java 9 modules.", "source": "Original resume"},
+        {"achievement": "Created an automation command-line project with Python and the Click library, streamlining many processes including production releases and rollbacks.", "source": "Original resume"},
+        {"achievement": "Streamlined application deployments using GitLab CI/CD pipelines and Helm for Kubernetes services, automating reliable builds, tests, and packages, providing rapid developer feedback.", "source": "Original resume"},
+        {"achievement": "Researched and spearheaded Kafka cluster creation in Kubernetes with open-source Strimzi, enabling fast and asynchronous event-driven microservices, dramatically reducing costs compared to the Confluent Platform.", "source": "Original resume"}
+      ]
+    },
+    {
+      "company": "Nortal - Consultant for Motorola",
+      "position": "Senior Software Engineer (SDE3)",
+      "achievements": [
+        {"achievement": "Developed Azure DevOps CI/CD pipelines to automate the deployment of Dotnet services to FedRamp environments.", "source": "Original resume"},
+        {"achievement": "Focused on high-quality C#/.Net microservices development.", "source": "Original resume"}
+      ]
+    },
+    {
+      "company": "Nortal - Consultant for Amazon",
+      "position": "Senior Software Engineer (SDE3)",
+      "achievements": [
+        {"achievement": "Led a team to integrate AWS services (Lambda, Kinesis, DynamoDB, S3, Glue) into an ETL data pipeline, making the cleaned up and transformed code available to key downstream services.", "source": "Original resume"},
+        {"achievement": "Authored Java AWS Lambdas for data processing within Step Functions, ensuring reliable execution of each data processing step.", "source": "Original resume"},
+        {"achievement": "Used IaC (Infrastructure as Code) with the AWS CDK (Cloud Development Kit) in Typescript to create safe, repeatable infrastructure.", "source": "Original resume"}
+      ]
+    },
+    {
+      "company": "Nortal - Consultant for Brightloom (Startup)",
+      "position": "Senior Software Engineer (SDE3)",
+      "achievements": [
+        {"achievement": "Built backend microservices with Python and Django with a consistent structure, increasing developer productivity.", "source": "Original resume"},
+        {"achievement": "Built CI/CD pipelines with TravisCI to deploy Python services to Kubernetes with Helm, delivering reliable applications with a fast developer feedback loop.", "source": "Original resume"},
+        {"achievement": "Contributed to Terraform IaC (Infrastructure as Code), creating reliable and repeatable infrastructure.", "source": "Original resume"}
+      ]
+    },
+    {
+      "company": "Nortal - Consultant for Expedia",
+      "position": "Software Engineer 2",
+      "achievements": [
+        {"achievement": "Independently executed and designed a data pipeline, enabling Expedia to make data-driven decisions in downstream services.", "source": "Original resume"},
+        {"achievement": "Constructed Java microservices and updated an existing Lua service, key components of the data transformation pipeline.", "source": "Original resume"},
+        {"achievement": "Integrated Kafka for continuous data transformation and deployed solutions on AWS ECS, showcasing cloud expertise.", "source": "Original resume"}
+      ]
+    },
+    {
+      "company": "Nordstrom - Kubernetes Platform Team",
+      "position": "Software Engineer 2",
+      "achievements": [
+        {"achievement": "Led Kubernetes Customer Engineering Initiative, providing guidance on Kubernetes best practices and increasing the team's overall productivity.", "source": "Original resume"},
+        {"achievement": "Managed large-scale Kubernetes clusters (50+ nodes) for critical workloads.", "source": "Original resume"},
+        {"achievement": "Provided on-call support ensuring system stability and performance.", "source": "Original resume"},
+        {"achievement": "Contributed to automation in Python, bash, and make.", "source": "Original resume"},
+        {"achievement": "Participated in monthly disaster recovery exercises, ensuring smooth recovery from multiple levels of disasters.", "source": "Original resume"}
+      ]
+    },
+    {
+      "company": "Nordstrom - POS Modernization Team",
+      "position": "Software Engineer 1-2",
+      "achievements": [
+        {"achievement": "Played a key role in the Point-of-Sale system's transition from a monolith to a microservices architecture.", "source": "Original resume"},
+        {"achievement": "Became an Apache Kafka SME, deepening expertise in event-driven architecture.", "source": "Original resume"},
+        {"achievement": "Containerized services for deployment to Kubernetes.", "source": "Original resume"}
+      ]
+    }
+  ],
+  "verified_projects": [
+    {
+      "name": "AI Chat website",
+      "description": "Python and Flask on the backend, htmx and Tailwind on the frontend, uses the OpenAI Assistant API to power chat functionality.",
+      "technologies": ["Python", "Flask", "htmx", "Tailwind", "OpenAI Assistant API"],
+      "source": "Original resume"
+    },
+    {
+      "name": "PDF Benchmarker",
+      "description": "Part of the first cohort of DeepLearning.ai students to build open-source projects. Project is a PDF benchmarker to understand the best PDF scraping tools for RAG applications. Built a Python command-line application with Click that has a plugin system for adding new PDF scrapers. Used Microsoft Research's AutoGen library to create a team of AI agents to solve various parts of the task.",
+      "technologies": ["Python", "Click", "AutoGen", "PDF scraping", "RAG", "Command-line application", "Plugin system"],
+      "source": "Original resume"
+    }
+  ],
+  "job_requirements": [
+    {"requirement": "Software Engineering (5+ years)", "matched": true, "source": "Original resume (8+ years experience)"},
+    {"requirement": "Rapid Prototyping", "matched": true, "source": "Original resume (AI Side Projects, Command-line tools)"},
+    {"requirement": "Experiment Design", "matched": false, "source": "No direct evidence"},
+    {"requirement": "Building Demos", "matched": true, "source": "Original resume (AI Side Projects)"},
+    {"requirement": "Prompt Engineering", "matched": true, "source": "Original resume (AI Side Projects, LLM experience)"},
+    {"requirement": "LLM Experience", "matched": true, "source": "Original resume (OpenAI API, Anthropic API, ChatGPT)"},
+    {"requirement": "Technical Documentation", "matched": false, "source": "No direct evidence"},
+    {"requirement": "Cross-functional Collaboration", "matched": true, "source": "Original resume (Led teams, worked as consultant across multiple companies)"},
+    {"requirement": "User-Centric Approach", "matched": false, "source": "No direct evidence"},
+    {"requirement": "Product Prototyping", "matched": true, "source": "Original resume (AI Side Projects)"},
+    {"requirement": "User Research", "matched": false, "source": "No direct evidence"},
+    {"requirement": "UI/UX Design", "matched": false, "source": "No direct evidence"},
+    {"requirement": "Usability Testing", "matched": false, "source": "No direct evidence"}
+  ]
+}

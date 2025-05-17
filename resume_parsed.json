@@ -1,0 +1,158 @@
+{
+  "personal_info": {
+    "name": "Joshua Oliphant",
+    "phone": "360.333.0114",
+    "email": "joshua.oliphant@hey.com",
+    "linkedin": "https://linkedin.com/in/joshuaoliphant"
+  },
+  "verified_skills": [
+    {"skill": "Java", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Spring Boot", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Python", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Django", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Flask", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "C#", "confidence": 1.0, "source": "Original resume"},
+    {"skill": ".Net", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "REST", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Event-driven Architecture", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Kafka", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "AWS", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Lambda", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Docker", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Kubernetes", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "CI/CD", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "GitLab CI", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "TravisCI", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Infrastructure as Code (IaC)", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Terraform", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "AWS CDK", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Helm", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Microservices", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Testing (JUnit, Cucumber, etc.)", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "AI/ML Tools", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "GitHub Copilot", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "ChatGPT", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "OpenAI API", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Anthropic API", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Python SDKs for AI", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Monitoring (Datadog, Splunk, etc.)", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Command-Line Development", "confidence": 1.0, "source": "Original resume"},
+    {"skill": "Click Library (Python)", "confidence": 1.0, "source": "Original resume"}
+  ],
+  "verified_experiences": [
+    {
+      "company": "Nortal - Consultant for T-Mobile",
+      "position": "Senior Software Engineer (SDE4)",
+      "location": "Olympia, WA - Remote",
+      "dates": "January 2022 – April 2024",
+      "achievements": [
+        {"achievement": "Led Docker containerization of Java/Spring Boot microservices, improving application scalability and efficiency by decreasing image size by nearly 50% with Java 9 modules.", "source": "Original resume"},
+        {"achievement": "Created an automation command-line project with Python and the Click library, streamlining many processes including production releases and rollbacks.", "source": "Original resume"},
+        {"achievement": "Streamlined application deployments using GitLab CI/CD pipelines and Helm for Kubernetes services, automating reliable builds, tests, and packages, providing rapid developer feedback.", "source": "Original resume"},
+        {"achievement": "Researched and spearheaded Kafka cluster creation in Kubernetes with open-source Strimzi, enabling fast and asynchronous event-driven microservices, dramatically reducing costs compared to the Confluent Platform.", "source": "Original resume"}
+      ],
+      "tech_stack": ["Microservices", "Java 17", "Spring", "Python automation", "Kubernetes", "Postgres", "H2", "Docker", "JUnit", "Gatling", "Splunk", "Grafana", "Maven", "Jira", "Splunk", "Git", "Tilt", "Helm", "Kafka", "REST", "event-driven architecture"]
+    },
+    {
+      "company": "Nortal - Consultant for Motorola",
+      "position": "Senior Software Engineer (SDE3)",
+      "location": "Olympia, WA - Remote",
+      "dates": "February 2021 – December 2021",
+      "achievements": [
+        {"achievement": "Developed Azure DevOps CI/CD pipelines to automate the deployment of Dotnet services to FedRamp environments.", "source": "Original resume"},
+        {"achievement": "Focused on high-quality C#/.Net microservices development.", "source": "Original resume"}
+      ],
+      "tech_stack": ["C#", ".Net", "Azure", "Docker", "MSTest", "Git", "Jira", "REST"]
+    },
+    {
+      "company": "Nortal - Consultant for Amazon",
+      "position": "Senior Software Engineer (SDE3)",
+      "location": "Olympia, WA - Remote",
+      "dates": "September 2020 – January 2021",
+      "achievements": [
+        {"achievement": "Led a team to integrate AWS services (Lambda, Kinesis, DynamoDB, S3, Glue) into an ETL data pipeline, making the cleaned up and transformed code available to key downstream services.", "source": "Original resume"},
+        {"achievement": "Authored Java AWS Lambdas for data processing within Step Functions, ensuring reliable execution of each data processing step.", "source": "Original resume"},
+        {"achievement": "Used IaC (Infrastructure as Code) with the AWS CDK (Cloud Development Kit) in Typescript to create safe, repeatable infrastructure.", "source": "Original resume"}
+      ],
+      "tech_stack": ["Java", "AWS Lambdas", "Amazon Web Services (AWS)", "DynamoDB", "JUnit", "Cloudwatch", "Git", "Kinesis", "Glue", "Step Function", "Lambda", "IaC (CDK)", "ETL"]
+    },
+    {
+      "company": "Nortal - Consultant for Brightloom (Startup)",
+      "position": "Senior Software Engineer (SDE3)",
+      "location": "Olympia, WA - Onsite -> Remote",
+      "dates": "February 2020 – September 2020",
+      "achievements": [
+        {"achievement": "Built backend microservices with Python and Django with a consistent structure, increasing developer productivity.", "source": "Original resume"},
+        {"achievement": "Built CI/CD pipelines with TravisCI to deploy Python services to Kubernetes with Helm, delivering reliable applications with a fast developer feedback loop.", "source": "Original resume"},
+        {"achievement": "Contributed to Terraform IaC (Infrastructure as Code), creating reliable and repeatable infrastructure.", "source": "Original resume"}
+      ],
+      "tech_stack": ["Python", "Django", "Microservices", "REST", "Kubernetes", "Postgres", "sqlite", "Docker", "Datadog", "unittest", "Git", "Jira", "Helm", "IaC (Terraform)", "CI/CD", "TravisCI"]
+    },
+    {
+      "company": "Nortal - Consultant for Expedia",
+      "position": "Software Engineer 2",
+      "location": "Seattle, WA - Onsite",
+      "dates": "August 2019 – January 2020",
+      "achievements": [
+        {"achievement": "Independently executed and designed a data pipeline, enabling Expedia to make data-driven decisions in downstream services.", "source": "Original resume"},
+        {"achievement": "Constructed Java microservices and updated an existing Lua service, key components of the data transformation pipeline.", "source": "Original resume"},
+        {"achievement": "Integrated Kafka for continuous data transformation and deployed solutions on AWS ECS, showcasing cloud expertise.", "source": "Original resume"}
+      ],
+      "tech_stack": ["Java", "Spring", "Microservices", "event-driven", "Lua", "AWS", "Docker", "JUnit", "Datadog", "Git", "Kafka", "ECS", "CI/CD"]
+    },
+    {
+      "company": "Nordstrom - Kubernetes Platform Team",
+      "position": "Software Engineer 2",
+      "location": "Seattle, WA - (Onsite)",
+      "dates": "August 2018 – August 2019",
+      "achievements": [
+        {"achievement": "Led Kubernetes Customer Engineering Initiative, providing guidance on Kubernetes best practices and increasing the team's overall productivity.", "source": "Original resume"},
+        {"achievement": "Managed large-scale Kubernetes clusters (50+ nodes) for critical workloads.", "source": "Original resume"},
+        {"achievement": "Provided on-call support ensuring system stability and performance.", "source": "Original resume"},
+        {"achievement": "Contributed to automation in Python, bash, and make.", "source": "Original resume"},
+        {"achievement": "Participated in monthly disaster recovery exercises, ensuring smooth recovery from multiple levels of disasters.", "source": "Original resume"}
+      ],
+      "tech_stack": ["Golang", "Python", "bash", "makefiles", "AWS", "GCP", "Kubernetes", "Docker", "go test", "Prometheus", "Grafana", "Datadog", "Bazel", "Gitlab", "Gitlab CI", "Gitlab issue tracking", "Helm", "Prometheus", "Datadog", "S3"]
+    },
+    {
+      "company": "Nordstrom - POS Modernization Team",
+      "position": "Software Engineer 1-2",
+      "location": "Seattle, WA - (Onsite)",
+      "dates": "August 2015 – August 2018",
+      "achievements": [
+        {"achievement": "Played a key role in the Point-of-Sale system's transition from a monolith to a microservices architecture.", "source": "Original resume"},
+        {"achievement": "Became an Apache Kafka SME, deepening expertise in event-driven architecture.", "source": "Original resume"},
+        {"achievement": "Containerized services for deployment to Kubernetes.", "source": "Original resume"}
+      ],
+      "tech_stack": ["Java", "Spring", "AWS", "Kubernetes", "Docker", "JUnit", "Cucumber", "Datadog", "Splunk", "Maven", "Gitlab", "Jira", "Confluence", "Splunk", "Datadog", "Kafka"]
+    }
+  ],
+  "verified_projects": [
+    {
+      "name": "AI Chat website",
+      "description": "Python and Flask on the backend, htmx and Tailwind on the frontend, uses the OpenAI Assistant API to power chat functionality.",
+      "technologies": ["Python", "Flask", "htmx", "Tailwind", "OpenAI Assistant API"],
+      "source": "Original resume"
+    },
+    {
+      "name": "PDF Benchmarker",
+      "description": "Part of the first cohort of DeepLearning.ai students to build open-source projects. Project is a PDF benchmarker to understand the best PDF scraping tools for RAG applications. Built a Python command-line application with Click that has a plugin system for adding new PDF scrapers. Used Microsoft Research's AutoGen library to create a team of AI agents to solve various parts of the task.",
+      "technologies": ["Python", "Click", "AutoGen", "PDF scraping", "RAG", "Command-line application", "Plugin system"],
+      "source": "Original resume"
+    }
+  ],
+  "education": [
+    {
+      "institution": "Seattle University, Seattle WA",
+      "degree": "Bachelor of Science in Computer Science",
+      "dates": "September 2014 – June 2016",
+      "source": "Original resume"
+    },
+    {
+      "institution": "Seattle Central, Seattle WA",
+      "degree": "Associate's Degree",
+      "dates": "September 2012 – June 2014",
+      "source": "Original resume"
+    }
+  ]
+}
