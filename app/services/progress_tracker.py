@@ -100,6 +100,8 @@ class ProgressTracker:
         if self.overall_progress <= 0 or not self.start_time:
             return None
         elapsed = time.time() - self.start_time
-        estimated_total = elapsed / (self.overall_progress / 100)
-        remaining = estimated_total - elapsed
-        return min(int(remaining), 300)
+        if self.overall_progress > 0:  # Ensure non-zero denominator
+            estimated_total = elapsed / (self.overall_progress / 100)
+            remaining = estimated_total - elapsed
+            return min(int(remaining), 300)
+        return None
