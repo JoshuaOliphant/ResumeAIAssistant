@@ -40,8 +40,9 @@ class ResumeVersion(ResumeVersionBase):
     id: str
     resume_id: str
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class Resume(ResumeBase):
@@ -52,8 +53,9 @@ class Resume(ResumeBase):
     updated_at: datetime
     current_version: Optional[ResumeVersion]
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class ResumeDetail(Resume):
@@ -61,8 +63,9 @@ class ResumeDetail(Resume):
 
     versions: List[ResumeVersion]
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class SectionDiffInfo(BaseModel):

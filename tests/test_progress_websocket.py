@@ -1,5 +1,5 @@
 import asyncio
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from pydantic import ValidationError
@@ -50,19 +50,20 @@ def test_websocket_manager_register_send_remove():
     assert "abc" not in manager.active_connections
 
 
-def test_progress_tracker_flow():
-    manager = WebSocketManager()
-    manager.send_json = AsyncMock()
-    tracker = ProgressTracker("abc", manager)
+def test_progress_tracker_flow(mock_file_operations):
+    with patch('time.time', return_value=1000):  # Mock time.time to return a constant
+        manager = WebSocketManager()
+        manager.send_json = AsyncMock()
+        tracker = ProgressTracker("abc", manager)
 
-    asyncio.run(tracker.start())
-    manager.send_json.assert_awaited()
-    manager.send_json.reset_mock()
+        asyncio.run(tracker.start())
+        manager.send_json.assert_awaited()
+        manager.send_json.reset_mock()
 
-    asyncio.run(tracker.update_stage("evaluation", "in_progress", progress=50))
-    assert tracker.overall_progress == 10
-    manager.send_json.assert_awaited()
+        asyncio.run(tracker.update_stage("evaluation", "in_progress", progress=50))
+        assert tracker.overall_progress == 10
+        manager.send_json.assert_awaited()
 
-    asyncio.run(tracker.complete())
-    assert tracker.status == "completed"
-    assert tracker.overall_progress == 100
+        asyncio.run(tracker.complete())
+        assert tracker.status == "completed"
+        assert tracker.overall_progress == 100

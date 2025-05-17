@@ -88,8 +88,9 @@ class Settings(BaseSettings):
     # File size limits
     MAX_UPLOAD_SIZE: int = 5 * 1024 * 1024  # 5MB
 
-    class Config:
-        case_sensitive = True
+    model_config = {
+        "case_sensitive": True
+    }
 
 
 # Initialize settings
