@@ -547,7 +547,6 @@ def select_optimized_model(
     }
     
     # Get model configuration
-    from app.services.model_selector import get_model_config_for_task
     model_config = get_model_config_for_task(
         task_name=task_name,
         content=content,
