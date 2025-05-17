@@ -34,8 +34,45 @@ Usage examples:
 
 import logfire
 from enum import Enum
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, List
 import math
+
+
+# Simple class interface for managing a token budget across workflow stages
+class ThinkingBudget:
+    """Manage allocation of tokens for evaluator-optimizer workflows."""
+
+    stages: List[str] = [
+        "evaluation",
+        "optimization",
+        "implementation",
+        "validation",
+    ]
+
+    def __init__(self, total_tokens: int) -> None:
+        self.total_tokens = total_tokens
+        self.allocations = self._distribute(total_tokens)
+        self.usage: Dict[str, int] = {stage: 0 for stage in self.stages}
+
+    @staticmethod
+    def _distribute(total: int) -> Dict[str, int]:
+        base = total // 4
+        return {stage: base for stage in ThinkingBudget.stages}
+
+    def record(self, stage: str, tokens: int) -> None:
+        if stage in self.usage:
+            self.usage[stage] += tokens
+            logfire.info(
+                "Token usage recorded",
+                stage=stage,
+                tokens=tokens,
+                total_used=self.usage[stage],
+            )
+
+    def remaining(self, stage: str) -> int:
+        return max(self.allocations.get(stage, 0) - self.usage.get(stage, 0), 0)
+
+
 
 # Task complexity defines how much thinking a task requires
 class TaskComplexity(str, Enum):

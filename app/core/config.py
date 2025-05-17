@@ -186,4 +186,7 @@ def get_pydanticai_model_config() -> Dict[str, Any]:
             "ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY"
         )
 
+    # Include a global fallback chain for service use
+    config["fallback_chain"] = settings.PYDANTICAI_FALLBACK_MODELS
+
     return config

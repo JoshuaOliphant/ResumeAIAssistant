@@ -300,6 +300,10 @@ def get_available_models() -> Dict[str, Dict]:
     if settings.GEMINI_API_KEY:
         providers.append(ModelProvider.GOOGLE)
 
+    # If no API keys are set, expose all models for testing purposes
+    if not providers:
+        providers = [ModelProvider.ANTHROPIC]
+
     # Filter models to only those from available providers
     for model_name, config in MODEL_REGISTRY.items():
         if config["provider"] in providers:

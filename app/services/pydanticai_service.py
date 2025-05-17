@@ -9,6 +9,9 @@ import json
 from typing import Optional, Dict, Any, List
 import asyncio
 import logfire
+from pydantic_ai import Agent, ModelRetry
+from app.services.thinking_budget import ThinkingBudget
+from app.services.evidence_tracker import EvidenceTracker
 from datetime import datetime, timedelta
 
 # Circuit breaker implementation for model provider health
@@ -71,7 +74,6 @@ circuit_breaker = CircuitBreaker()
 circuit_breaker_lock = threading.Lock()
 
 # Import from PydanticAI directly - it's a core dependency
-from pydantic_ai import Agent
 
 logfire.info("PydanticAI imported successfully")
 
@@ -183,6 +185,93 @@ logfire.info(
     max_tokens=MAX_TOKENS,
     providers=list(MODEL_CONFIG.keys())
 )
+
+# Core service class implementing evaluator-optimizer workflow
+class PydanticAIService:
+    """High level interface for resume customization using PydanticAI."""
+
+    def __init__(self) -> None:
+        self.evaluator_model = EVALUATOR_MODEL
+        self.optimizer_model = OPTIMIZER_MODEL
+        self.fallback_models = FALLBACK_MODELS
+        self.temperature = TEMPERATURE
+        self.max_tokens = MAX_TOKENS
+        self.thinking_budget = THINKING_BUDGET
+
+    def _create_agent(
+        self, model: str, system_prompt: str, output_type
+    ) -> Agent:
+        """Create a configured agent with fallback and thinking config."""
+        thinking = {"budget_tokens": self.thinking_budget, "type": "enabled"}
+        agent = Agent(
+            model,
+            system_prompt=system_prompt,
+            output_type=output_type,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+            thinking_config=thinking,
+        )
+        agent.fallback_config = self.fallback_models
+        return agent
+
+    async def _run_with_retry(self, agent: Agent, message: str):
+        """Execute an agent with basic ModelRetry handling."""
+        attempt = 0
+        while True:
+            try:
+                return await agent.run(message)
+            except ModelRetry as mr:
+                attempt += 1
+                logfire.warning(
+                    "ModelRetry triggered", attempt=attempt, reason=str(mr)
+                )
+                if attempt >= 2:
+                    raise
+
+    async def evaluate_resume(self, resume: str, job: str) -> ResumeEvaluation:
+        """Run the evaluation stage."""
+        prompts = _get_prompts()
+        prompt = prompts["EVALUATOR_PROMPT"].replace(
+            "{customization_level_instructions}", ""
+        )
+        agent = self._create_agent(
+            self.evaluator_model, prompt, ResumeEvaluation
+        )
+        async with logfire.span("evaluate_resume"):
+            return await self._run_with_retry(
+                agent,
+                f"Resume:\n{resume}\n\nJob:\n{job}"
+            )
+
+    async def customize_resume(
+        self, resume: str, job: str
+    ) -> CustomizationPlan:
+        """High level helper running evaluation then optimization."""
+        evaluation = await self.evaluate_resume(resume, job)
+        plan = await self.generate_plan(resume, job, evaluation)
+        return plan
+
+    def validate_evidence(self, original: str, updated: str) -> List[str]:
+        """Check that updated resume remains truthful."""
+        tracker = EvidenceTracker(original)
+        return tracker.verify(updated)
+
+    async def generate_plan(
+        self, resume: str, job: str, evaluation: ResumeEvaluation
+    ) -> CustomizationPlan:
+        """Run the optimizer stage."""
+        prompts = _get_prompts()
+        prompt = prompts["OPTIMIZER_PROMPT"].replace(
+            "{customization_level_instructions}", ""
+        )
+        agent = self._create_agent(
+            self.optimizer_model, prompt, CustomizationPlan
+        )
+        async with logfire.span("generate_plan"):
+            msg = (
+                f"Resume:\n{resume}\n\nJob:\n{job}\n\nEvaluation:\n{evaluation.json()}"
+            )
+            return await self._run_with_retry(agent, msg)
 
 # Import prompts
 # Import only when needed to avoid circular imports
