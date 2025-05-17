@@ -25,6 +25,8 @@ dependencies = [
     "logfire[fastapi,httpx,sqlalchemy,system-metrics]>=3.14.0",
     "pydantic-ai[logfire]>=0.1.3",
     "psutil>=5.9.6",
+    "pytest>=8.3.5",
+    "pytest-mock>=3.14.0",
 ]
 
 [tool.pytest.ini_options]
