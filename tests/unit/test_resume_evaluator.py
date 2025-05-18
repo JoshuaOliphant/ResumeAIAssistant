@@ -26,7 +26,11 @@ async def test_evaluate_resume_runs_agent_and_returns_analysis():
         agent_instance = MagicMock()
         agent_instance.run = AsyncMock(return_value=ResumeAnalysis(**sample_data))
         MockAgent.return_value = agent_instance
-        MockTracker.return_value = MagicMock()
+        
+        # Create a mock for EvidenceTracker with async methods
+        tracker_instance = MagicMock()
+        tracker_instance.extract_facts = AsyncMock()
+        MockTracker.return_value = tracker_instance
 
         evaluator = svc.ResumeEvaluator()
         result = await evaluator.evaluate_resume("RES", "JOB")
