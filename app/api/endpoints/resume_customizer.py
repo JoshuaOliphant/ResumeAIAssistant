@@ -57,10 +57,10 @@ from fastapi import Body
 
 @router.post("/customize/resume")
 async def customize_resume(
+    background_tasks: BackgroundTasks,
     resume_content: str = Body(..., min_length=10, max_length=50000),
     job_description: str = Body(..., min_length=10, max_length=10000),
     template_id: str = Body(..., min_length=1, max_length=100),
-    background_tasks: BackgroundTasks,
 ) -> dict:
     """Initiate resume customization process."""
     customization_id = uuid.uuid4().hex
