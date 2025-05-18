@@ -2,23 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
-import dynamic from 'next/dynamic'
-
-// Dynamically import client-side components with SSR disabled
-const ClientAuthProviders = dynamic(
-  () => import('@/components/client-auth-providers'),
-  { ssr: false }
-)
-
-const Header = dynamic(
-  () => import('@/components/header'),
-  { ssr: false }
-)
-
-const Footer = dynamic(
-  () => import('@/components/footer'),
-  { ssr: false }
-)
+import ClientLayout from '@/components/client-layout'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -86,15 +70,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <ClientAuthProviders>
-            <div className="flex min-h-screen flex-col bg-background text-foreground">
-              <Header />
-              <main className="flex-1 container mx-auto px-4 py-8">
-                {children}
-              </main>
-              <Footer />
-            </div>
-          </ClientAuthProviders>
+          <ClientLayout>
+            {children}
+          </ClientLayout>
         </ThemeProvider>
       </body>
     </html>
