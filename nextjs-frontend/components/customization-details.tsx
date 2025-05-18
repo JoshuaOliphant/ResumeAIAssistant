@@ -13,12 +13,17 @@ export function CustomizationDetails({ result }: CustomizationDetailsProps) {
 
   const download = async (url?: string) => {
     if (!url) return
-    const blob = await ExportService.downloadFromUrl(url)
-    const a = document.createElement('a')
-    a.href = URL.createObjectURL(blob)
-    a.download = url.split('/').pop() || 'file'
-    a.click()
-    URL.revokeObjectURL(a.href)
+    try {
+      const blob = await ExportService.downloadFromUrl(url)
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = url.split('/').pop() || 'file'
+      a.click()
+      URL.revokeObjectURL(a.href)
+    } catch (error) {
+      console.error('Download failed:', error)
+      // Optionally add user feedback here
+    }
   }
 
   return (
