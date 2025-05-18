@@ -24,8 +24,8 @@ async def test_plan_customization_runs_agent_and_returns_plan():
         "change_explanations": {"Experience": "Metrics show impact"},
     }
 
-    with patch("app.services.claude_code.resume_planner.Agent") as MockAgent:
-        import app.services.claude_code.resume_planner as svc
+    with patch("app.services.resume_customizer.resume_planner.Agent") as MockAgent:
+        import app.services.resume_customizer.resume_planner as svc
 
         agent_instance = MagicMock()
         agent_instance.run = AsyncMock(return_value=CustomizationPlan(**plan_data))
