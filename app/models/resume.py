@@ -1,5 +1,6 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Text, Boolean
+from sqlalchemy import Column, Integer, String, ForeignKey, Text, Boolean, DateTime
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.session import Base
 
@@ -10,6 +11,8 @@ class Resume(Base):
     id = Column(String, primary_key=True, index=True)
     title = Column(String, nullable=False)
     user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
     # Relationships
     versions = relationship("ResumeVersion", back_populates="resume", cascade="all, delete-orphan")
@@ -18,7 +21,7 @@ class Resume(Base):
     
     # This attribute is not stored in the database but will be populated
     # when a Resume object is returned in an API response
-    # current_version = None
+    current_version = None
 
 
 class ResumeVersion(Base):
@@ -28,9 +31,20 @@ class ResumeVersion(Base):
     resume_id = Column(String, ForeignKey("resumes.id", ondelete="CASCADE"), nullable=False)
     content = Column(Text, nullable=False)
     version_number = Column(Integer, nullable=False)
-    is_customized = Column(Integer, default=0, nullable=False)  # 0 = not customized, 1 = customized
+    _is_customized = Column("is_customized", Integer, default=0, nullable=False)  # 0 = not customized, 1 = customized
     job_description_id = Column(String, ForeignKey("job_descriptions.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
     resume = relationship("Resume", back_populates="versions")
     job_description = relationship("JobDescription", back_populates="resume_versions")
+    
+    @property
+    def is_customized(self) -> bool:
+        """Convert integer column to boolean for Pydantic schema."""
+        return bool(self._is_customized)
+    
+    @is_customized.setter
+    def is_customized(self, value: bool) -> None:
+        """Convert boolean to integer for database storage."""
+        self._is_customized = 1 if value else 0
