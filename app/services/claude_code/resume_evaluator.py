@@ -24,6 +24,8 @@ class ResumeEvaluator:
         """
         # Initialize evidence tracker to capture baseline resume facts
         self.evidence_tracker = EvidenceTracker(resume)
+        # Extract and track baseline facts from resume
+        await self.evidence_tracker.extract_facts()
 
         try:
             agent = Agent(
