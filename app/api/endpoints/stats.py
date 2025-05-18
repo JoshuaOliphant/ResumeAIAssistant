@@ -8,7 +8,7 @@ This module provides endpoints for accessing:
 """
 
 from typing import Dict, Any, List, Optional
-from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query, Response
+from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from pydantic import BaseModel
 from datetime import datetime
 
@@ -26,18 +26,6 @@ try:
 except ImportError:
     MODEL_OPTIMIZER_AVAILABLE = False
 
-# Import smart request handler functions
-try:
-    from app.services.smart_request_handler import (
-        get_request_statistics,
-        get_request_status,
-        request_tracker,
-        RequestPriority,
-        RequestStatus
-    )
-    SMART_REQUEST_AVAILABLE = True
-except ImportError:
-    SMART_REQUEST_AVAILABLE = False
 
 # Define router
 router = APIRouter()
@@ -266,134 +254,6 @@ async def get_model_usage(
     
     return model_stats
 
-# Smart request handling endpoints
-class RequestStats(BaseModel):
-    """Statistics for API request monitoring."""
-    total_requests: int
-    completed_requests: int
-    failed_requests: int
-    active_requests: int
-    success_rate: float
-    endpoints: Optional[Dict[str, Any]] = None
-    response_times: Optional[Dict[str, float]] = None
-
-class EndpointStats(BaseModel):
-    """Statistics for a specific endpoint."""
-    endpoint: str
-    total_requests: int
-    completed_requests: int
-    failed_requests: int
-    active_requests: int
-    avg_duration: float
-    failure_count: int
-    success_rate: float
-
-class RequestDetails(BaseModel):
-    """Detailed information about a specific request."""
-    endpoint: str
-    start_time: float
-    status: str
-    priority: int
-    complexity: str
-    timeout: int
-    end_time: Optional[float] = None
-    duration: Optional[float] = None
-    error: Optional[str] = None
-
-@router.get("/requests", response_model=RequestStats)
-async def get_requests_statistics(
-    endpoint: Optional[str] = None,
-    current_user: User = Depends(get_current_active_superuser)
-) -> Dict[str, Any]:
-    """
-    Get statistics about API requests processing.
-    
-    Only accessible to superusers.
-    
-    Args:
-        endpoint: Optional endpoint to filter statistics for
-    """
-    if not SMART_REQUEST_AVAILABLE:
-        raise HTTPException(
-            status_code=501,
-            detail="Smart request handler module is not available"
-        )
-    
-    try:
-        if endpoint:
-            # Get statistics for specific endpoint
-            return request_tracker.get_endpoint_statistics(endpoint)
-        else:
-            # Get overall statistics
-            return await get_request_statistics()
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error retrieving request statistics: {str(e)}"
-        )
-
-@router.get("/request/{request_id}", response_model=RequestDetails)
-async def get_request_details(
-    request_id: str,
-    current_user: User = Depends(get_current_active_superuser)
-) -> Dict[str, Any]:
-    """
-    Get status and details of a specific request.
-    
-    Only accessible to superusers.
-    
-    Args:
-        request_id: ID of the request to check
-    """
-    if not SMART_REQUEST_AVAILABLE:
-        raise HTTPException(
-            status_code=501,
-            detail="Smart request handler module is not available"
-        )
-    
-    try:
-        return await get_request_status(request_id)
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error retrieving request status: {str(e)}"
-        )
-
-@router.post("/cleanup-requests", status_code=204)
-async def cleanup_old_requests(
-    max_age_hours: int = 24,
-    current_user: User = Depends(get_current_active_superuser)
-) -> Response:
-    """
-    Clean up old request tracking data.
-    
-    Only accessible to superusers.
-    
-    Args:
-        max_age_hours: Maximum age in hours for requests to keep
-    """
-    if not SMART_REQUEST_AVAILABLE:
-        raise HTTPException(
-            status_code=501,
-            detail="Smart request handler module is not available"
-        )
-    
-    try:
-        # Clean up old requests
-        cleared = request_tracker.clear_old_requests(max_age_hours)
-        
-        return Response(
-            content=f"Cleared {cleared} old requests",
-            status_code=204
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=500,
-            detail=f"Error cleaning up old requests: {str(e)}"
-        )
-
 @router.get("/health", response_model=Dict[str, Any])
 async def get_health_metrics() -> Dict[str, Any]:
     """
@@ -410,27 +270,14 @@ async def get_health_metrics() -> Dict[str, Any]:
         memory = psutil.virtual_memory()
         disk = psutil.disk_usage('/')
         
-        # Get request metrics if available
-        request_stats = {}
-        if SMART_REQUEST_AVAILABLE:
-            try:
-                stats = await get_request_statistics()
-                request_stats = {
-                    "active": stats.get("active_requests", 0),
-                    "success_rate": stats.get("success_rate", 100)
-                }
-            except Exception:
-                request_stats = {"status": "unavailable"}
-        
         return {
             "status": "healthy",
             "timestamp": time.time(),
             "system": {
                 "cpu_percent": cpu_percent,
                 "memory_percent": memory.percent,
-                "disk_percent": disk.percent
+                "disk_percent": disk.percent,
             },
-            "requests": request_stats
         }
     except Exception as e:
         return {

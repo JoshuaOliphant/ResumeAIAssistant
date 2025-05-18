@@ -20,21 +20,14 @@ from app.schemas.customize import (
 )
 from app.services.ats_service import analyze_resume_for_ats
 from app.services.pydanticai_optimizer import get_pydanticai_optimizer_service
-from app.services.smart_request_handler import (
-    RequestPriority,
-    TaskComplexity,
-    smart_request,
-)
 
 router = APIRouter()
 
 
 @router.post("/analyze", response_model=ATSAnalysisResponse)
-@smart_request(complexity=TaskComplexity.MODERATE, priority=RequestPriority.HIGH)
 async def analyze_resume(
     analysis_request: ATSAnalysisRequest,
     db: Session = Depends(get_db),
-    request_id: str = None,  # Added for smart request handling
 ):
     """
     Analyze a resume against a job description for ATS compatibility.
@@ -69,8 +62,7 @@ async def analyze_resume(
 
     # Log request with detailed information for monitoring
     logfire.info(
-        "Starting ATS analysis with smart request handling",
-        request_id=request_id,
+        "Starting ATS analysis",
         resume_id=analysis_request.resume_id,
         job_id=analysis_request.job_description_id,
         user_id=resume.user_id,
@@ -93,13 +85,11 @@ async def analyze_resume(
         section_scores=analysis_result.get("section_scores", []),
         confidence=analysis_result.get("confidence", "medium"),
         keyword_density=analysis_result.get("keyword_density", 0.0),
-        request_id=request_id,  # Include request ID in response for tracking
     )
 
     # Log completion for monitoring
     logfire.info(
         "ATS analysis completed successfully",
-        request_id=request_id,
         resume_id=analysis_request.resume_id,
         job_id=analysis_request.job_description_id,
         match_score=analysis_result["match_score"],
