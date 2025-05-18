@@ -14,6 +14,7 @@ class Resume(Base):
     # Relationships
     versions = relationship("ResumeVersion", back_populates="resume", cascade="all, delete-orphan")
     user = relationship("User", back_populates="resumes")
+    customization_plans = relationship("CustomizationPlan", back_populates="resume")
     
     # This attribute is not stored in the database but will be populated
     # when a Resume object is returned in an API response

@@ -18,5 +18,5 @@ class CustomizationPlan(Base):
     progress = Column(Integer, default=0)  # 0-100 percent complete
     
     # Relationships
-    resume = relationship("Resume", backref="customization_plans")
+    resume = relationship("Resume", back_populates="customization_plans")
     job_description = relationship("JobDescription", back_populates="customization_plans")

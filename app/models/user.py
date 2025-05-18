@@ -18,5 +18,6 @@ class User(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
-    # Relationships - will be populated by Resume model to avoid circular imports
-    resumes = []
+    # Relationships
+    resumes = relationship("Resume", back_populates="user")
+    job_descriptions = relationship("JobDescription", back_populates="user")
