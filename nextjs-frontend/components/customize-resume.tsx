@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { ATSService, CustomizationService, JobService, ResumeService, ResumeVersion } from "@/lib/client"
+import { CustomizationService, TemplateService, JobService, ResumeService, Template, CustomizationResponse, CustomizationResult } from "@/lib/client"
 import { API_BASE_URL } from "@/lib/api-config"
 import { Loader2, FileCheck, RefreshCw, AlertCircle, Check, ChevronRight, Sparkles, Brain } from "lucide-react"
 import { Label } from "@/components/ui/label"
@@ -16,12 +16,12 @@ import { addNotification } from "./notification-badge"
 export interface CustomizeResumeProps {
   resumeId: string
   jobId: string
-  onSuccess?: (customizedVersion: ResumeVersion) => void
+  onSuccess?: () => void
   onError?: (error: Error) => void
 }
 
 // Define customization stages
-type CustomizationStage = 'analysis' | 'plan' | 'implementation' | 'complete';
+type CustomizationStage = 'evaluation' | 'planning' | 'implementation' | 'verification' | 'complete';
 
 // Define customization level type
 type CustomizationLevel = 'conservative' | 'balanced' | 'extensive';
@@ -54,14 +54,18 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [stage, setStage] = useState<CustomizationStage>('analysis')
+  const [stage, setStage] = useState<CustomizationStage>('evaluation')
   const [customizationLevel, setCustomizationLevel] = useState<CustomizationLevel>('balanced')
-  const [customizedVersion, setCustomizedVersion] = useState<ResumeVersion | null>(null)
   const [customizationPlan, setCustomizationPlan] = useState<CustomizationPlan | null>(null)
+  const [customizationResult, setCustomizationResult] = useState<CustomizationResult | null>(null)
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
+  const [customizationId, setCustomizationId] = useState<string | null>(null)
+  const [overallProgress, setOverallProgress] = useState<number>(0)
+  const [statusMessage, setStatusMessage] = useState<string>('')
+  const [currentStage, setCurrentStage] = useState<CustomizationStage>('evaluation')
   const [resume, setResume] = useState<string | null>(null)
   const [jobDescription, setJobDescription] = useState<string | null>(null)
-  const [operationId, setOperationId] = useState<string | null>(null)
-  const [useRealTimeProgress, setUseRealTimeProgress] = useState(true)
 
   // Load resume and job description
   useEffect(() => {
@@ -84,246 +88,76 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
     }
   }, [resumeId, jobId]);
 
-  // Initialize operation ID for progress tracking
-  const initializeOperation = async () => {
-    try {
-      // Make a POST request to create a new progress tracker
-      const response = await fetch(`${API_BASE_URL}/progress/create`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
-      
-      if (!response.ok) {
-        console.error('Failed to initialize progress tracking, falling back to client-side simulation');
-        setUseRealTimeProgress(false);
-        return null;
-      }
-      
-      const data = await response.json();
-      console.log('Progress tracking initialized with ID:', data.task_id);
-      return data.task_id;
-    } catch (error) {
-      console.error('Error initializing progress tracking:', error);
-      setUseRealTimeProgress(false);
-      return null;
-    }
-  };
-
-  // Function to analyze resume and create a customization plan
-  const analyzeResume = async () => {
-    if (!resume || !jobDescription) {
-      setError("Resume and job description data is missing");
-      return;
-    }
-    
-    try {
-      // Initialize progress tracking
-      const taskId = await initializeOperation();
-      setOperationId(taskId);
-      
-      setLoading(true);
-      setStage('analysis');
-      setError(null);
-      
-      // Use the proper ATS analysis endpoint
-      console.log("Analyzing resume and job description...");
-      
+  // Fetch available templates
+  useEffect(() => {
+    const fetchTemplates = async () => {
       try {
-        // Step 1: Basic keyword analysis using ATSService with operation ID header
-        console.log("Step 1: Performing basic keyword analysis...");
-        console.log(`Analyzing resume ID: ${resumeId}, job ID: ${jobId}, operation ID: ${taskId}`);
-        
-        const analysisResult = await ATSService.analyzeResume(
-          resumeId, 
-          jobId, 
-          taskId ? { headers: { 'X-Operation-ID': taskId } } : undefined
-        );
-        
-        console.log("Basic analysis result:", analysisResult);
-        
-        // Step 2: Move to the plan stage with AI-enhanced analysis
-        setStage('plan');
-        
-        // Step 3: Use enhanced AI analysis to create a better customization plan
-        console.log("Step 2: Generating AI-enhanced customization plan...");
-        try {
-          // Try to use the AI-enhanced customization plan generator
-          const enhancedPlan = await CustomizationService.generateCustomizationPlan(
-            resumeId,
-            jobId,
-            customizationLevel,
-            analysisResult,
-            taskId ? { headers: { 'X-Operation-ID': taskId } } : undefined
-          );
-          
-          console.log("Enhanced plan generated:", enhancedPlan);
-          
-          // Set the enhanced customization plan
-          setCustomizationPlan(enhancedPlan);
-        } catch (enhancedPlanError) {
-          console.error("Error generating enhanced plan:", enhancedPlanError);
-          console.log("Falling back to basic plan generation...");
-          
-          // Extract keywords and format them properly for display as fallback
-          const keywordsToAdd = Array.isArray(analysisResult.missing_keywords_rich) 
-            ? analysisResult.missing_keywords_rich.map(item => {
-                if (typeof item === 'object' && item !== null) {
-                  // Type assertion to KeywordMatch
-                  const keywordItem = item as unknown as KeywordMatch;
-                  return typeof keywordItem.keyword === 'string' ? keywordItem.keyword : String(keywordItem.keyword || '');
-                }
-                return String(item || '');
-              })
-            : (Array.isArray(analysisResult.missing_keywords) 
-                ? analysisResult.missing_keywords.map(item => {
-                    if (typeof item === 'object' && item !== null) {
-                      // Type assertion to KeywordMatch
-                      const keywordItem = item as unknown as KeywordMatch;
-                      if (typeof keywordItem.keyword === 'string') {
-                        return keywordItem.keyword;
-                      }
-                      // Otherwise stringify but remove curly braces
-                      const str = JSON.stringify(item);
-                      return str.replace(/[{}]/g, '').replace(/"/g, '');
-                    }
-                    return String(item || '');
-                  })
-                : []);
-          
-          // Create a basic customization plan from the analysis result as fallback
-          const fallbackPlan = {
-            summary: `Your resume has a ${analysisResult.match_score || 0}% match with the job description. We've identified opportunities to improve this match.`,
-            job_analysis: `The job requires skills related to: ${Array.isArray(keywordsToAdd) && keywordsToAdd.length > 0 ? keywordsToAdd.slice(0, 5).map(kw => typeof kw === 'string' ? kw : String(kw || '')).join(', ') : 'relevant skills'}`,
-            keywords_to_add: keywordsToAdd,
-            formatting_suggestions: Array.isArray(analysisResult.improvements) 
-              ? analysisResult.improvements
-                  .filter(imp => 
-                    typeof imp === 'object' && imp !== null &&
-                    typeof imp.category === 'string' && typeof imp.suggestion === 'string' &&
-                    (imp.category.includes("Format") || 
-                    imp.category.includes("Structure") || 
-                    imp.suggestion.includes("format"))
-                  )
-                  .map(imp => imp.suggestion)
-              : [
-                  "Add more specific technical skills mentioned in the job description",
-                  "Quantify your achievements with metrics",
-                  "Use more powerful action verbs to describe your accomplishments"
-                ],
-            recommendations: Array.isArray(analysisResult.improvements)
-              ? analysisResult.improvements
-                  .filter(imp => typeof imp === 'object' && imp !== null)
-                  .map(imp => ({
-                    section: typeof imp.category === 'string' ? imp.category : 'General',
-                    what: typeof imp.priority === 'number' 
-                      ? (imp.priority === 1 ? "Critical" : imp.priority === 2 ? "Important" : "Helpful")
-                      : "Helpful",
-                    why: typeof imp.suggestion === 'string' ? imp.suggestion : 'Improvement suggestion',
-                    before_text: "Original content will be improved",
-                    after_text: "Customized with job-specific details",
-                    description: typeof imp.suggestion === 'string' ? imp.suggestion : 'Improvement suggestion'
-                  }))
-              : []
-          };
-          
-          // Set fallback customization plan
-          setCustomizationPlan(fallbackPlan);
+        const data = await TemplateService.getTemplates();
+        setTemplates(data);
+        if (data.length > 0) {
+          setSelectedTemplate(data[0].id);
         }
-        
-        // Keep loading state true until user confirms plan
-        // The loading indicator will be replaced by the ProgressTracker
-      } catch (analysisError) {
-        // If initial analysis fails, log the error and proceed directly to implementation
-        console.error("Error during analysis stage:", analysisError);
-        console.log("Proceeding directly to implementation stage...");
-        
-        // Skip the plan stage
-        setStage('implementation');
-        implementCustomization();
+      } catch (err) {
+        console.error('Error loading templates:', err);
       }
+    };
+    fetchTemplates();
+  }, []);
+
+  const startCustomizationProcess = async () => {
+    if (!resumeId || !jobId || !selectedTemplate) return;
+    try {
+      setLoading(true);
+      setStage('evaluation');
+      const resp: CustomizationResponse = await CustomizationService.startCustomization(
+        resumeId,
+        jobId,
+        selectedTemplate
+      );
+      setCustomizationId(resp.customization_id);
+
+      const token = localStorage.getItem('auth_token') || '';
+      const ws = CustomizationService.createProgressWebSocket(resp.customization_id, token);
+
+      ws.onmessage = async (event) => {
+        const data = JSON.parse(event.data);
+        setCurrentStage(data.stage);
+        setStatusMessage(data.message);
+        setOverallProgress(data.overall_progress);
+        if (data.stage === 'verification' && data.percentage === 100) {
+          ws.close();
+          try {
+            const result: CustomizationResult = await CustomizationService.getCustomizationResult(resp.customization_id);
+            setCustomizationResult(result);
+            if (result.plan) {
+              setCustomizationPlan(result.plan as CustomizationPlan);
+            }
+          } catch (e) {
+            console.error('Error fetching result:', e);
+          }
+          setStage('complete');
+          setLoading(false);
+        }
+      };
+
+      ws.onerror = () => {
+        setError('WebSocket error');
+        setLoading(false);
+      };
     } catch (err) {
-      console.error("Error analyzing resume:", err);
-      setError(err instanceof Error ? err.message : "Failed to analyze resume");
+      console.error('Error starting customization:', err);
+      setError(err instanceof Error ? err.message : 'Failed to start customization');
       setLoading(false);
     }
   };
 
-  // Function to implement customization plan
-  const implementCustomization = async () => {
-    if (!resumeId || !jobId) {
-      setError("Resume ID and Job ID are required");
-      return;
-    }
-    
-    try {
-      // Make sure we have an operation ID for tracking
-      if (!operationId) {
-        const taskId = await initializeOperation();
-        setOperationId(taskId);
-      }
-      
-      setLoading(true);
-      setStage('implementation');
-      setError(null);
-      
-      // Add the level-specific prompt additions
-      const levelPrompt = getCustomizationLevelPrompt(customizationLevel);
-      console.log("Using customization level:", customizationLevel, levelPrompt);
-      
-      // Call the API to customize resume
-      console.log("Starting resume customization:", resumeId, jobId, "with level:", customizationLevel);
-      console.log("Using customization plan:", customizationPlan);
-      
-      // Pass the customization level and plan to the API with the operation ID header
-      const result = await CustomizationService.customizeResume(
-        resumeId,
-        jobId,
-        customizationLevel,
-        customizationPlan,
-        operationId ? { headers: { 'X-Operation-ID': operationId } } : undefined
-      );
-      console.log("Customization result:", result);
-      
-      // Store the result
-      setCustomizedVersion(result);
-      setStage('complete');
-      
-      // Add notification
-      addNotification({
-        title: "Resume Customization Complete",
-        message: "Your resume has been successfully customized for this job."
-      });
-      
-      // Call onSuccess callback if provided
-      if (onSuccess) {
-        onSuccess(result);
-      }
-    } catch (err) {
-      console.error("Error customizing resume:", err);
-      setError(err instanceof Error ? err.message : "Failed to customize resume");
-      
-      // Add error notification
-      addNotification({
-        title: "Customization Error",
-        message: err instanceof Error ? err.message : "Failed to customize resume"
-      });
-      
-      // Call onError callback if provided
-      if (onError && err instanceof Error) {
-        onError(err);
-      }
-    }
-  };
 
   // Start customization process when component mounts and data is loaded
   useEffect(() => {
-    if (resumeId && jobId && resume && jobDescription && !customizationPlan && !customizedVersion && !loading && !error) {
-      analyzeResume();
+    if (resumeId && jobId && resume && jobDescription && !customizationId && !loading && !error) {
+      startCustomizationProcess();
     }
-  }, [resumeId, jobId, resume, jobDescription, customizationPlan, customizedVersion, loading, error]);
+  }, [resumeId, jobId, resume, jobDescription, customizationId, loading, error]);
 
   // Format time in MM:SS format
   const formatTime = (seconds: number): string => {
@@ -334,86 +168,33 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
 
   // Handle retry
   const handleRetry = () => {
-    setCustomizationPlan(null);
     setCustomizedVersion(null);
-    setStage('analysis');
-    analyzeResume();
+    setCustomizationPlan(null);
+    setCustomizationId(null);
+    setOverallProgress(0);
+    setStatusMessage('');
+    setStage('evaluation');
+    startCustomizationProcess();
   };
 
   // Handle view results (direct to customization result page)
   const handleViewResults = () => {
-    if (customizedVersion) {
-      router.push(`/customize/result?resumeId=${resumeId}&jobId=${jobId}&versionId=${customizedVersion.id}`);
+    if (customizationId) {
+      router.push(`/customize/result?customizationId=${customizationId}`);
     }
   };
   
   // Render stage-specific content
   const renderStageContent = () => {
     if (loading) {
-      // Use real-time progress tracker if available
-      if (operationId && useRealTimeProgress) {
-        return (
-          <ProgressTracker 
-            taskId={operationId}
-            title="Resume Customization Progress"
-            description="Track the progress of your resume customization"
-            onComplete={(result) => {
-              // When the progress tracker signals completion, we can update the UI
-              if (stage === 'implementation' && customizedVersion) {
-                setStage('complete');
-              }
-            }}
-            onError={(error) => {
-              if (!customizedVersion) {
-                setError(error.message);
-              }
-            }}
-            showNotifications={true}
-          />
-        );
-      }
-      
-      // Fallback to static progress display if real-time tracking isn't available
       return (
         <div className="space-y-4">
           <div className="flex items-center space-x-2">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <span className="text-lg font-medium">
-              {stage === 'analysis' && "Analyzing your resume and job match..."}
-              {stage === 'plan' && "Creating customization plan..."}
-              {stage === 'implementation' && "Implementing customizations..."}
-            </span>
+            <span className="text-lg font-medium">{statusMessage}</span>
           </div>
-          
-          <div className="space-y-2 rounded-lg bg-muted p-4 text-sm">
-            <p className="font-medium">What&apos;s happening:</p>
-            <ul className="space-y-1 list-disc list-inside text-muted-foreground">
-              {stage === 'analysis' && (
-                <>
-                  <li>Analyzing your resume content</li>
-                  <li>Identifying key skills and experiences</li>
-                  <li>Extracting job requirements</li>
-                  <li>Determining keyword matches</li>
-                </>
-              )}
-              {stage === 'plan' && (
-                <>
-                  <li>Creating customization strategy</li>
-                  <li>Identifying optimal improvements</li>
-                  <li>Preparing section-by-section plan</li>
-                  <li>Determining key keywords to add</li>
-                </>
-              )}
-              {stage === 'implementation' && (
-                <>
-                  <li>Applying customization to resume</li>
-                  <li>Optimizing content for ATS compatibility</li>
-                  <li>Enhancing relevant sections</li>
-                  <li>Maintaining authentic representation</li>
-                  <li>Finalizing improvements</li>
-                </>
-              )}
-            </ul>
+          <div className="w-full h-2 bg-muted rounded">
+            <div className="h-2 bg-primary rounded" style={{ width: `${overallProgress}%` }}></div>
           </div>
         </div>
       );
@@ -437,7 +218,7 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       );
     }
     
-    if (customizationPlan && stage === 'plan') {
+    if (customizationPlan && stage === 'planning') {
       return (
         <div className="space-y-6">
           <div className="space-y-4 rounded-lg border p-4">
@@ -553,8 +334,8 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
                 Start Over
               </Button>
               
-              <Button 
-                onClick={implementCustomization}
+              <Button
+                onClick={startCustomizationProcess}
                 disabled={loading}
               >
                 <Sparkles className="mr-2 h-4 w-4" />
@@ -566,7 +347,7 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       );
     }
     
-    if (customizedVersion && stage === 'complete') {
+    if (stage === 'complete') {
       return (
         <div className="flex flex-col items-center justify-center py-8 space-y-4">
           <FileCheck className="h-12 w-12 text-primary" />
@@ -599,15 +380,19 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
     return (
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center w-full">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${stage === 'analysis' || stage === 'plan' || stage === 'implementation' || stage === 'complete' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['evaluation','planning','implementation','verification','complete'].indexOf(stage) >= 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}> 
             <Brain className="h-4 w-4" />
           </div>
-          <div className={`h-1 flex-1 ${stage === 'plan' || stage === 'implementation' || stage === 'complete' ? 'bg-primary' : 'bg-muted'}`}></div>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${stage === 'plan' || stage === 'implementation' || stage === 'complete' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+          <div className={`h-1 flex-1 ${['planning','implementation','verification','complete'].indexOf(stage) >= 0 ? 'bg-primary' : 'bg-muted'}`}></div>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['planning','implementation','verification','complete'].indexOf(stage) >= 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}> 
             <Sparkles className="h-4 w-4" />
           </div>
-          <div className={`h-1 flex-1 ${stage === 'implementation' || stage === 'complete' ? 'bg-primary' : 'bg-muted'}`}></div>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${stage === 'complete' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+          <div className={`h-1 flex-1 ${['implementation','verification','complete'].indexOf(stage) >= 0 ? 'bg-primary' : 'bg-muted'}`}></div>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['implementation','verification','complete'].indexOf(stage) >= 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+            <FileCheck className="h-4 w-4" />
+          </div>
+          <div className={`h-1 flex-1 ${['verification','complete'].indexOf(stage) >= 0 ? 'bg-primary' : 'bg-muted'}`}></div>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['verification','complete'].indexOf(stage) >= 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}> 
             <Check className="h-4 w-4" />
           </div>
         </div>
@@ -625,7 +410,7 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
         {renderProgressSteps()}
         {renderStageContent()}
       </CardContent>
-      {customizedVersion && (
+      {stage === 'complete' && customizationId && (
         <CardFooter className="flex justify-center">
           <Button onClick={handleViewResults} className="w-full sm:w-auto">
             View Customized Resume

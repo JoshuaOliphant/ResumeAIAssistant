@@ -16,6 +16,7 @@ import ReactDiffViewer, { DiffMethod } from 'react-diff-viewer-continued'
 export interface ResumeDiffViewProps {
   resumeDiff: ResumeDiff;
   jobTitle?: string;
+  plan?: { change_explanations?: Record<string, string> } | null;
 }
 
 // Utility function to create HTML diff content
@@ -98,7 +99,7 @@ function escapeHtml(text: string): string {
     .replace(/'/g, "&#039;");
 }
 
-export function ResumeDiffView({ resumeDiff, jobTitle }: ResumeDiffViewProps) {
+export function ResumeDiffView({ resumeDiff, jobTitle, plan }: ResumeDiffViewProps) {
   const [showChanges, setShowChanges] = useState(true);
   const [activeTab, setActiveTab] = useState<'diff' | 'original' | 'customized'>('diff');
   const [visibleSections, setVisibleSections] = useState<Record<string, boolean>>({});
@@ -225,7 +226,7 @@ export function ResumeDiffView({ resumeDiff, jobTitle }: ResumeDiffViewProps) {
     console.log("renderSectionAnalysisContent received:", sectionData);
     
     // Sample section explanations (in a real app, these would come from the backend)
-    const sectionExplanations: Record<string, string> = {
+    const sectionExplanations: Record<string, string> = plan?.change_explanations || {
       "Skills": "Enhanced skills section to add industry-specific keywords and highlight technical expertise.",
       "Experience": "Improved job descriptions with more targeted achievements and metrics.",
       "Summary": "Tailored professional summary to better match the job requirements.",
@@ -600,26 +601,6 @@ export function ResumeDiffView({ resumeDiff, jobTitle }: ResumeDiffViewProps) {
                             </pre>
                           )}
                         </div>
-                        
-                        {activeTab === 'diff' && (
-                          <div className="flex items-center gap-4 px-4 py-2 border-t text-xs text-muted-foreground">
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-block w-3 h-3 rounded-sm ${
-                                isDarkMode ? 'bg-[#044B53] border border-[#055d67]' : 
-                                'bg-[#e6ffec] border border-[#abf2bc]'
-                              }`}></span>
-                              <span>Added content</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <span className={`inline-block w-3 h-3 rounded-sm ${
-                                isDarkMode ? 'bg-[#632F34] border border-[#7d383f]' : 
-                                'bg-[#ffebe9] border border-[#ffc0bd]'
-                              }`}></span>
-                              <span>Removed content</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
                     ) : (
                       <div className="p-4 bg-muted rounded-md">
                         <p className="text-muted-foreground">
