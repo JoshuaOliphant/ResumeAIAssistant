@@ -26,10 +26,31 @@ from app.services.resume_customizer.executor import ResumeCustomizer
 
 router = APIRouter()
 
-# Simple in-memory storage for demo purposes
-CUSTOMIZATION_RESULTS: Dict[str, dict] = {}
-CUSTOMIZATION_STATUS: Dict[str, dict] = {}
+from collections import OrderedDict
+from datetime import datetime, timedelta
+
+# Size-limited in-memory storage with automatic cleanup
+MAX_STORED_RESULTS = 1000
+RESULT_EXPIRY_HOURS = 24
+CUSTOMIZATION_RESULTS: OrderedDict[str, dict] = OrderedDict()
+CUSTOMIZATION_STATUS: OrderedDict[str, dict] = OrderedDict()
 WEBSOCKETS = WebSocketManager()
+
+def cleanup_old_results():
+    """Remove expired results and limit total stored items."""
+    expiry_time = datetime.utcnow() - timedelta(hours=RESULT_EXPIRY_HOURS)
+    # Remove expired items
+    for storage in [CUSTOMIZATION_RESULTS, CUSTOMIZATION_STATUS]:
+        expired_keys = [
+            k for k, v in list(storage.items())
+            if "created_at" in v and datetime.fromisoformat(v["created_at"]) < expiry_time
+        ]
+        for k in expired_keys:
+            storage.pop(k, None)
+        
+        # Enforce size limit
+        while len(storage) > MAX_STORED_RESULTS:
+            storage.popitem(last=False)  # Remove oldest item
 
 
 @router.post("/customize/resume")
