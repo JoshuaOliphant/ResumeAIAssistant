@@ -270,7 +270,8 @@ class TemplateProcessor:
                 continue
             if line.isupper() or line.endswith(":"):
                 current_section = line.lower().replace(":", "").strip()
-                sections[current_section] = []
+                if current_section not in sections:
+                    sections[current_section] = []
             else:
                 sections[current_section].append(line)
 
