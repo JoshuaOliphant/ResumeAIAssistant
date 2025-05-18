@@ -28,7 +28,7 @@ class DiffGenerator:
             return analyze_section_changes(original_text, customized_text)
         except Exception as exc:  # pragma: no cover - unexpected
             logfire.error("Section diff analysis failed", error=str(exc), exc_info=True)
-            raise
+            return {}
 
     def html_diff_view(self, original_text: str, customized_text: str) -> str:
         """Generate a full HTML diff document with highlights."""
