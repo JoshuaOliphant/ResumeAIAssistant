@@ -8,6 +8,7 @@ from app.services.resume_customizer.resume_planner import ResumePlanner
 from app.services.resume_customizer.resume_implementer import ResumeImplementer
 from app.services.resume_customizer.resume_verifier import ResumeVerifier
 from app.services.diff_service import DiffGenerator
+from app.services.metrics import track_latency, metrics_collector
 from app.schemas.pydanticai_models import (
     ResumeAnalysis,
     CustomizationPlan,
@@ -19,6 +20,7 @@ class ResumeCustomizer:
     """End-to-end resume customization using resume optimizer services."""
 
     def __init__(self) -> None:
+        """Initialize the underlying services and logging configuration."""
         logfire.configure(service_name="resume-customizer")
         logfire.instrument_pydantic_ai()
         self.progress_callback: Callable[[str, int, str], Awaitable[None]] | None = None
@@ -89,26 +91,47 @@ class ResumeCustomizer:
                 }
 
     async def _update_progress(self, stage: str, percentage: int, message: str) -> None:
+        """Send a progress update via the configured callback."""
         if self.progress_callback:
             await self.progress_callback(stage, percentage, message)
 
     async def _evaluate_resume(self, resume: str, job: str) -> ResumeAnalysis:
-        return await self.evaluator.evaluate_resume(resume, job)
+        """Run the evaluation stage using :class:`ResumeEvaluator`."""
+        with track_latency("evaluation"):
+            result = await self.evaluator.evaluate_resume(resume, job)
+        metrics_collector.increment("evaluations")
+        return result
 
     async def _create_plan(
         self, resume: str, job: str, analysis: ResumeAnalysis
     ) -> CustomizationPlan:
-        return await self.planner.plan_customization(resume, job, analysis)
+        """Generate an optimization plan based on the evaluation results."""
+        with track_latency("planning"):
+            result = await self.planner.plan_customization(resume, job, analysis)
+        metrics_collector.increment("plans")
+        return result
 
     async def _implement_changes(
         self, resume: str, job: str, plan: CustomizationPlan, template_id: str
     ) -> str:
-        return await self.implementer.implement_changes(resume, job, plan, template_id)
+        """Apply the customization plan using :class:`ResumeImplementer`."""
+        with track_latency("implementation"):
+            result = await self.implementer.implement_changes(resume, job, plan, template_id)
+        metrics_collector.increment("implementations")
+        return result
 
     async def _verify_customization(
         self, original: str, customized: str, job: str
     ) -> VerificationResult:
-        return await self.verifier.verify_customization(original, customized, job)
+        """Validate that the customized resume remains truthful."""
+        with track_latency("verification"):
+            result = await self.verifier.verify_customization(original, customized, job)
+        metrics_collector.increment("verifications")
+        return result
 
     def _generate_diff(self, original: str, customized: str) -> str:
-        return self.diff_service.html_diff_view(original, customized)
+        """Generate an HTML diff comparing the original and customized resumes."""
+        with track_latency("diff_generation"):
+            result = self.diff_service.html_diff_view(original, customized)
+        metrics_collector.increment("diffs")
+        return result
