@@ -25,9 +25,9 @@ class MetricsCollector:
 
     def summary(self) -> dict:
         """Return collected metrics as a dictionary."""
-        avg_latencies = {
-            k: (sum(v) / len(v)) if v else 0 for k, v in self.latencies.items()
-        }
+        avg_latencies = {}
+        for k, v in self.latencies.items():
+            avg_latencies[k] = sum(v) / len(v) if v else 0
         return {"counters": dict(self.counters), "avg_latencies": avg_latencies}
 
 
