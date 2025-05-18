@@ -80,4 +80,10 @@ class ResumeVerifier:
             return result
         except Exception as exc:  # noqa: D401
             logfire.error(f"Verification failed: {str(exc)}", exc_info=True)
-            raise
+            return VerificationResult(
+                is_truthful=False,
+                issues=[f"Verification failed: {str(exc)}"],
+                final_score=0,
+                improvement=0,
+                section_assessments={}
+            )
