@@ -89,6 +89,11 @@ Each test file is named according to its function (e.g., `test_ats.py`, `test_di
 - **ProgressReporter**: Provides real-time updates via WebSockets
 - **Agent Factory**: Creates specialized AI agents for each customization stage
 
+### TODO: Cleanup Deprecated Code
+- Remove deprecated endpoints in `app/api/endpoints/customize.py` and `app/api/endpoints/enhance_customize.py` that return deprecation notices
+- Remove the deprecated Next.js API route in `nextjs-frontend/app/api/customize/plan/route.ts`
+- These endpoints were part of the old architecture and have been replaced by the four-stage workflow with WebSocket progress reporting
+
 ### Using ``ResumeCustomizer``
 
 The ``ResumeCustomizer`` orchestrates evaluation, planning, implementation, and

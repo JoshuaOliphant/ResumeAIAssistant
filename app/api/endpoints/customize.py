@@ -15,7 +15,6 @@ from app.models.job import JobDescription
 from app.models.resume import Resume, ResumeVersion
 from app.schemas.customize import (
     CustomizationPlan,
-    CustomizationPlanRequest,
     ResumeCustomizationRequest,
     ResumeCustomizationResponse,
 )
@@ -135,101 +134,33 @@ async def customize_resume_endpoint(
     return response
 
 
-@router.post("/plan", response_model=CustomizationPlan)
-async def generate_customization_plan(
-    plan_request: CustomizationPlanRequest, db: Session = Depends(get_db)
-):
+# TODO: Remove this deprecated endpoint entirely in the next major version
+@router.post("/plan", response_model=dict)
+async def generate_customization_plan(request: dict, db: Session = Depends(get_db)):
     """
-    Generate a detailed resume customization plan using the evaluator-optimizer pattern
-    with parallel processing architecture.
-
-    This endpoint implements a multi-stage AI workflow:
-    1. Basic analysis (existing ATS analyzer)
-    2. Parallel evaluation (AI models analyzing resume sections concurrently)
-    3. Parallel optimization (AI models generating section-specific plans concurrently)
-    4. Results aggregation (combining section analyses into unified plan)
-
-    - **resume_id**: ID of the resume to analyze
-    - **job_description_id**: ID of the job description to analyze against
-    - **customization_strength**: Strength of customization (1=conservative, 2=balanced, 3=extensive)
-    - **ats_analysis**: Optional results from prior ATS analysis
-
-    Returns a detailed customization plan with specific recommendations.
+    [DEPRECATED] This endpoint is no longer in use.
+    
+    The application now uses the PydanticAI-based four-stage workflow with WebSocket 
+    progress reporting for resume customization.
+    
+    This endpoint is kept for backward compatibility but returns a deprecation notice.
     """
-    start_time = time.time()
-    logfire.info(
-        "Generating customization plan with parallel architecture",
-        resume_id=plan_request.resume_id,
-        job_id=plan_request.job_description_id,
-        customization_level=plan_request.customization_strength.name,
-    )
-
-    try:
-        # Use the parallel customization service for improved performance
-        parallel_service = get_parallel_customization_service(db)
-
-        # Generate the plan using parallel architecture
-        plan = await parallel_service.generate_customization_plan(plan_request)
-
-        # Calculate and log the total processing time
-        total_duration = time.time() - start_time
-        logfire.info(
-            "Customization plan generated successfully with parallel architecture",
-            resume_id=plan_request.resume_id,
-            job_id=plan_request.job_description_id,
-            recommendation_count=len(plan.recommendations),
-            total_duration_seconds=round(total_duration, 2),
-        )
-
-        return plan
-
-    except ValueError as e:
-        # Handle errors for missing resources
-        error_message = str(e)
-        logfire.error(
-            "Error generating customization plan",
-            error=error_message,
-            resume_id=plan_request.resume_id,
-            job_id=plan_request.job_description_id,
-        )
-
-        if "not found" in error_message.lower():
-            raise HTTPException(status_code=404, detail=error_message)
-        else:
-            raise HTTPException(status_code=400, detail=error_message)
-
-    except Exception as e:
-        # Handle unexpected errors
-        logfire.error(
-            "Unexpected error generating customization plan",
-            error=str(e),
-            error_type=type(e).__name__,
-            traceback=traceback.format_exception(type(e), e, e.__traceback__),
-            resume_id=plan_request.resume_id,
-            job_id=plan_request.job_description_id,
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"An error occurred while generating the customization plan: {str(e)}",
-        )
+    logfire.info("Deprecated /plan endpoint accessed")
+    
+    return {
+        "detail": "This endpoint is deprecated. The application now uses the WebSocket-based four-stage workflow for resume customization."
+    }
 
 
-@router.post("/parallel", response_model=CustomizationPlan)
-async def generate_customization_plan_parallel(
-    plan_request: CustomizationPlanRequest, db: Session = Depends(get_db)
-):
+# TODO: Remove this deprecated endpoint entirely in the next major version
+@router.post("/parallel", response_model=dict)
+async def generate_customization_plan_parallel(request: dict, db: Session = Depends(get_db)):
     """
-    Generate a detailed resume customization plan using the parallel processing architecture.
-    This is an alternative endpoint that explicitly uses the parallel architecture.
-
-    This endpoint is identical to /plan but is provided separately for A/B testing and comparison.
-
-    - **resume_id**: ID of the resume to analyze
-    - **job_description_id**: ID of the job description to analyze against
-    - **customization_strength**: Strength of customization (1=conservative, 2=balanced, 3=extensive)
-    - **ats_analysis**: Optional results from prior ATS analysis
-
-    Returns a detailed customization plan with specific recommendations.
+    [DEPRECATED] This endpoint is no longer in use.
+    
+    The application now uses the PydanticAI-based four-stage workflow with WebSocket 
+    progress reporting for resume customization.
+    
+    This endpoint is kept for backward compatibility but returns a deprecation notice.
     """
-    # Simply call the main implementation
-    return await generate_customization_plan(plan_request, db)
+    return await generate_customization_plan(request, db)
