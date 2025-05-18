@@ -91,6 +91,31 @@ export type ResumeDiff = {
   is_diff_view: boolean;
 };
 
+export type Template = {
+  id: string;
+  name: string;
+  description: string;
+  preview_url: string;
+};
+
+export type CustomizationResponse = {
+  customization_id: string;
+  status: string;
+  message: string;
+};
+
+export type CustomizationResult = {
+  customization_id: string;
+  status: string;
+  original_resume_url: string;
+  customized_resume_url?: string;
+  diff_url?: string;
+  analysis?: ATSAnalysisResult;
+  plan?: any;
+  verification?: any;
+  error_message?: string;
+};
+
 // Authentication types
 export type LoginCredentials = {
   username: string;
@@ -509,6 +534,12 @@ export const ATSService = {
   },
 };
 
+export const TemplateService = {
+  async getTemplates(): Promise<Template[]> {
+    return fetchWithAuth('/templates/');
+  },
+};
+
 // Customization
 export const CustomizationService = {
   async customizeResume(
@@ -636,6 +667,31 @@ export const CustomizationService = {
     }
     
     return data;
+  },
+
+  async startCustomization(
+    resumeId: string,
+    jobDescriptionId: string,
+    templateId: string
+  ): Promise<CustomizationResponse> {
+    return fetchWithAuth('/customize/', {
+      method: 'POST',
+      body: JSON.stringify({
+        resume_id: resumeId,
+        job_description_id: jobDescriptionId,
+        template_id: templateId,
+      }),
+    });
+  },
+
+  async getCustomizationResult(customizationId: string): Promise<CustomizationResult> {
+    return fetchWithAuth(`/customize/${customizationId}`);
+  },
+
+  createProgressWebSocket(customizationId: string, token: string): WebSocket {
+    const base = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5001/api/v1';
+    const ws = new WebSocket(`${base}/ws/customize/${customizationId}?token=${token}`);
+    return ws;
   },
 };
 
@@ -772,6 +828,21 @@ export const ExportService = {
         error.detail || 'Export failed',
         error
       );
+    }
+
+    return response.blob();
+  },
+
+  async downloadFromUrl(url: string): Promise<Blob> {
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null}`,
+      },
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({}));
+      throw new ApiError(response.status, error.detail || 'Download failed', error);
     }
 
     return response.blob();
