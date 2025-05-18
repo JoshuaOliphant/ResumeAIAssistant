@@ -53,11 +53,13 @@ def cleanup_old_results():
             storage.popitem(last=False)  # Remove oldest item
 
 
+from fastapi import Body
+
 @router.post("/customize/resume")
 async def customize_resume(
-    resume_content: str,
-    job_description: str,
-    template_id: str,
+    resume_content: str = Body(..., min_length=10, max_length=50000),
+    job_description: str = Body(..., min_length=10, max_length=10000),
+    template_id: str = Body(..., min_length=1, max_length=100),
     background_tasks: BackgroundTasks,
 ) -> dict:
     """Initiate resume customization process."""
