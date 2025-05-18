@@ -223,3 +223,57 @@ async def convert_markdown_to_docx(markdown_content: str) -> bytes:
     docx_buffer.seek(0)
     
     return docx_buffer.getvalue()
+
+import os
+try:
+    from docxtpl import DocxTemplate
+except Exception:  # pragma: no cover - optional dependency
+    DocxTemplate = None  # type: ignore
+
+
+class TemplateProcessor:
+    """Handles docx template processing for resume customization."""
+
+    def __init__(self, templates_dir: str = "resume_templates") -> None:
+        self.templates_dir = templates_dir
+
+    async def get_template(self, template_id: str) -> str:
+        """Get a template by its ID."""
+        template_path = os.path.join(self.templates_dir, f"{template_id}.docx")
+        if not os.path.exists(template_path):
+            raise ValueError(f"Template {template_id} not found")
+        return template_path
+
+    async def apply_template(self, template_id: str, context_data: dict) -> io.BytesIO:
+        """Apply customized content to a template."""
+        template_path = await self.get_template(template_id)
+        if DocxTemplate is None:
+            raise ImportError("docxtpl package is required for template processing")
+
+        doc = DocxTemplate(template_path)
+        doc.render(context_data)
+
+        output = io.BytesIO()
+        doc.save(output)
+        output.seek(0)
+        return output
+
+    async def parse_resume_to_context(self, resume_content: str, structure: dict | None = None) -> dict:
+        """Parse resume content into context data for templates."""
+        sections: dict[str, list[str]] = {}
+        current_section = "header"
+        sections[current_section] = []
+
+        for line in resume_content.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            if line.isupper() or line.endswith(":"):
+                current_section = line.lower().replace(":", "").strip()
+                if current_section not in sections:
+                    sections[current_section] = []
+            else:
+                sections[current_section].append(line)
+
+        context = {sec: "\n".join(lines) for sec, lines in sections.items()}
+        return context
