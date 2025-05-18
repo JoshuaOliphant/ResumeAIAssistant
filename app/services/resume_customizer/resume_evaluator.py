@@ -46,6 +46,10 @@ class ResumeEvaluator:
                     raise ModelRetry("Identify at least 3 strengths")
                 if len(result.weaknesses) < 2:
                     raise ModelRetry("Identify at least 2 areas for improvement")
+                if not result.section_analysis:
+                    raise ModelRetry(
+                        "Provide analysis for at least one resume section"
+                    )
                 return result
 
             prompt = f"""

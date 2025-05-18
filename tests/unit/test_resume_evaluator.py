@@ -18,10 +18,12 @@ async def test_evaluate_resume_runs_agent_and_returns_analysis():
     }
 
     with (
-        patch("app.services.claude_code.resume_evaluator.Agent") as MockAgent,
-        patch("app.services.claude_code.resume_evaluator.EvidenceTracker") as MockTracker,
+        patch("app.services.resume_customizer.resume_evaluator.Agent") as MockAgent,
+        patch(
+            "app.services.resume_customizer.resume_evaluator.EvidenceTracker"
+        ) as MockTracker,
     ):
-        import app.services.claude_code.resume_evaluator as svc
+        import app.services.resume_customizer.resume_evaluator as svc
 
         agent_instance = MagicMock()
         agent_instance.run = AsyncMock(return_value=ResumeAnalysis(**sample_data))

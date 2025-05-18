@@ -15,10 +15,10 @@ async def test_verify_customization_runs_agent_and_checks_truthfulness():
         section_assessments={"Summary": "Good"},
     )
 
-    with patch("app.services.claude_code.resume_verifier.Agent") as MockAgent, patch(
-        "app.services.claude_code.resume_verifier.EvidenceTracker"
+    with patch("app.services.resume_customizer.resume_verifier.Agent") as MockAgent, patch(
+        "app.services.resume_customizer.resume_verifier.EvidenceTracker"
     ) as MockTracker:
-        import app.services.claude_code.resume_verifier as svc
+        import app.services.resume_customizer.resume_verifier as svc
 
         agent_instance = MagicMock()
         agent_instance.run = AsyncMock(return_value=data)
