@@ -89,6 +89,23 @@ Each test file is named according to its function (e.g., `test_ats.py`, `test_di
 - **ProgressReporter**: Provides real-time updates via WebSockets
 - **Agent Factory**: Creates specialized AI agents for each customization stage
 
+### Using ``ResumeCustomizer``
+
+The ``ResumeCustomizer`` orchestrates evaluation, planning, implementation, and
+verification. A minimal usage example:
+
+```python
+from app.services.resume_customizer.executor import ResumeCustomizer
+
+customizer = ResumeCustomizer()
+result = await customizer.customize_resume(
+    resume_content=my_resume,
+    job_description=my_job_desc,
+    template_id="modern",
+)
+print(result["customized_resume"])
+```
+
 ## Project Structure
 
 ```
@@ -152,6 +169,25 @@ You can view logs and metrics in the Logfire dashboard to:
 - Analyze performance bottlenecks
 - Monitor LLM API usage and costs
 - Set up alerts for critical issues
+
+## Environment Variables
+
+The following environment variables configure deployment as described in
+`spec.md`:
+
+| Variable | Purpose |
+| --- | --- |
+| `ANTHROPIC_API_KEY` | Access token for Claude models |
+| `TIGRIS_API_KEY` | Object storage key for file uploads |
+| `ENVIRONMENT` | `production` or `development` to control logging |
+| `SECRET_KEY` | JWT signing secret |
+| `PORT` | Backend listening port |
+
+### Deployment Notes
+
+- Allocate **at least 2GB RAM** for AI processing.
+- Configure LiteFS for distributed SQLite when deploying to fly.io.
+- Set reasonable request timeouts for long-running jobs.
 
 ## Development Workflow
 
