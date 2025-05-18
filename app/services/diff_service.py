@@ -8,6 +8,36 @@ import json
 import re
 from typing import Dict, List, Tuple, Union, Optional
 
+import logfire
+
+
+class DiffGenerator:
+    """Utility class for generating visual diffs between resume versions."""
+
+    def line_diff(self, original_text: str, customized_text: str) -> str:
+        """Return an inline HTML diff for the two texts."""
+        try:
+            return generate_resume_diff(original_text, customized_text)
+        except Exception as exc:  # pragma: no cover - unexpected
+            logfire.error("Line diff generation failed", error=str(exc), exc_info=True)
+            raise
+
+    def section_diff(self, original_text: str, customized_text: str) -> Dict[str, Dict[str, Union[str, float, Dict, int]]]:
+        """Analyze section level changes between the two texts."""
+        try:
+            return analyze_section_changes(original_text, customized_text)
+        except Exception as exc:  # pragma: no cover - unexpected
+            logfire.error("Section diff analysis failed", error=str(exc), exc_info=True)
+            raise
+
+    def html_diff_view(self, original_text: str, customized_text: str) -> str:
+        """Generate a full HTML diff document with highlights."""
+        try:
+            return generate_diff_html_document(original_text, customized_text)
+        except Exception as exc:  # pragma: no cover - unexpected
+            logfire.error("HTML diff generation failed", error=str(exc), exc_info=True)
+            raise
+
 def generate_resume_diff(original_text: str, customized_text: str) -> str:
     """
     Generate a diff between original and customized resume texts.
