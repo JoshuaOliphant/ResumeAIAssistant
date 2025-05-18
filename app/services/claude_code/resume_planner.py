@@ -86,6 +86,9 @@ Focus on substantive improvements that meaningfully increase the match score.
 IMPORTANT: All changes must maintain truthfulness - do not suggest fabricating experience or skills.
 """
             return await agent.run(prompt)
-        except Exception as exc:  # noqa: D401
+        except (ValueError, ModelRetry) as exc:  # Expected validation errors
             logfire.error(f"Planning failed: {str(exc)}", exc_info=True)
             raise RuntimeError(f"Resume planning failed: {str(exc)}") from exc
+        except Exception as exc:  # Unexpected errors
+            logfire.critical(f"Unexpected error in resume planning: {str(exc)}", exc_info=True)
+            raise RuntimeError(f"Resume planning failed unexpectedly: {str(exc)}") from exc
