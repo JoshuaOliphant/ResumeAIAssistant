@@ -59,7 +59,7 @@ async def test_customize_resume_success(sample_resume, sample_job_description):
 @pytest.mark.asyncio
 async def test_customize_resume_error(sample_resume, sample_job_description):
     customizer = ResumeCustomizer()
-    customizer.set_progress_callback(lambda *args: asyncio.sleep(0))
+    customizer.set_progress_callback(lambda *args: None)  # Use a simple no-op function
 
     with (
         patch.object(customizer.evaluator, "evaluate_resume", AsyncMock(return_value=ResumeAnalysis(match_score=80, key_matches=[], missing_skills=[], strengths=["s1", "s2", "s3"], weaknesses=["w1", "w2"], section_analysis={"experience": "ok"}))),
