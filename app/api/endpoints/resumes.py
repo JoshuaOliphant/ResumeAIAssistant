@@ -34,32 +34,41 @@ def create_resume(
     - **title**: Title of the resume
     - **content**: Content of the resume in Markdown format
     """
-    # Create the resume object
+    # Create the resume object with timestamps
+    from datetime import datetime
+    from sqlalchemy.sql import func
+    
+    now = datetime.utcnow()
+    
     db_resume = Resume(
         id=str(uuid.uuid4()),
         title=resume.title,
         user_id=current_user.id if current_user else None,
+        created_at=now,
+        updated_at=now,
     )
     db.add(db_resume)
     db.flush()
 
-    # Create the initial version
+    # Create the initial version with timestamp
     db_version = ResumeVersion(
         id=str(uuid.uuid4()),
         resume_id=db_resume.id,
         content=resume.content,
         version_number=1,
         is_customized=0,
+        created_at=now,
     )
     db.add(db_version)
     db.commit()
+    db.refresh(db_resume)
+    db.refresh(db_version)
 
     # Return the resume with its current version
-    result = db.query(Resume).filter(Resume.id == db_resume.id).first()
     # Add current_version attribute for response
-    setattr(result, "current_version", db_version)
+    setattr(db_resume, "current_version", db_version)
 
-    return result
+    return db_resume
 
 
 @router.get("/", response_model=List[ResumeSchema])
@@ -93,12 +102,24 @@ def get_resumes(
 
     # For each resume, get its latest version
     for resume in resumes:
+        # Ensure timestamps are set
+        from datetime import datetime
+        
+        if resume.created_at is None:
+            resume.created_at = datetime.utcnow()
+        if resume.updated_at is None:
+            resume.updated_at = datetime.utcnow()
+        
         latest_version = (
             db.query(ResumeVersion)
             .filter(ResumeVersion.resume_id == resume.id)
             .order_by(ResumeVersion.version_number.desc())
             .first()
         )
+        
+        # Ensure version timestamp is set
+        if latest_version and latest_version.created_at is None:
+            latest_version.created_at = datetime.utcnow()
 
         # Set the current_version attribute
         setattr(resume, "current_version", latest_version)
@@ -124,6 +145,16 @@ def get_resume(
         raise HTTPException(
             status_code=403, detail="Not authorized to access this resume"
         )
+        
+    # Ensure timestamps are set
+    from datetime import datetime
+    
+    if resume.created_at is None:
+        resume.created_at = datetime.utcnow()
+        db.commit()
+    if resume.updated_at is None:
+        resume.updated_at = datetime.utcnow()
+        db.commit()
 
     # Get all versions
     versions = (
@@ -132,6 +163,12 @@ def get_resume(
         .order_by(ResumeVersion.version_number.desc())
         .all()
     )
+    
+    # Set created_at for all versions if needed
+    for version in versions:
+        if version.created_at is None:
+            version.created_at = datetime.utcnow()
+            db.commit()
 
     # Set the versions attribute
     setattr(resume, "versions", versions)
