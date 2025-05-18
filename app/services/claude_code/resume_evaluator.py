@@ -69,4 +69,4 @@ class ResumeEvaluator:
             return await agent.run(prompt)
         except Exception as exc:  # noqa: D401
             logfire.error(f"Evaluation failed: {str(exc)}", exc_info=True)
-            raise
+            raise RuntimeError(f"Resume evaluation failed: {str(exc)}") from exc
