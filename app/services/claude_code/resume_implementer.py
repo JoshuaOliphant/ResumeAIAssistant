@@ -24,6 +24,7 @@ class ResumeImplementer:
     ) -> str:
         """Apply the customization plan to the resume."""
         self.evidence_tracker = EvidenceTracker(resume)
+        self.modifications = {}
         try:
             agent = Agent(
                 model=self.model,
