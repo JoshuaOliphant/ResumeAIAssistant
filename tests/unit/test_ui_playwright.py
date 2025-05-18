@@ -12,6 +12,8 @@ def test_index_page_renders():
     with sync_playwright() as p:
         browser = p.chromium.launch()
         page = browser.new_page()
-        page.goto(f"file://{index_path}")
-        assert "Resume Customization App" in page.content()
-        browser.close()
+        try:
+            page.goto(f"file://{index_path}")
+            assert "Resume Customization App" in page.content()
+        finally:
+            browser.close()
