@@ -56,7 +56,7 @@ class ResumePlanner:
                     )
                 if len(result.section_changes) < 2:
                     raise ModelRetry("Plan must include changes for at least 2 sections")
-                if len(result.keywords_to_add) < len(analysis.missing_skills) / 2:
+                if len(result.keywords_to_add) < max(1, len(analysis.missing_skills) // 2):
                     raise ModelRetry("Plan should incorporate more missing keywords")
                 return result
 
