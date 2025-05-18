@@ -16,7 +16,7 @@ async def test_implement_changes_runs_agent_and_tracks_modifications():
         change_explanations={"summary": "Add results"},
     )
 
-    import app.services.claude_code.resume_implementer as svc
+    import app.services.resume_customizer.resume_implementer as svc
     with (
         patch.object(svc, "Agent") as MockAgent,
         patch.object(svc, "EvidenceTracker") as MockTracker,
@@ -50,7 +50,7 @@ async def test_implement_changes_runs_agent_and_tracks_modifications():
 
 @pytest.mark.asyncio
 async def test_track_modifications_handles_new_sections():
-    import app.services.claude_code.resume_implementer as svc
+    import app.services.resume_customizer.resume_implementer as svc
     with patch.object(svc, "TemplateProcessor") as MockProcessor:
 
         processor_instance = MagicMock()
