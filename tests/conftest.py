@@ -21,6 +21,7 @@ def configure_logfire():
     original_error = logfire.error
     original_warning = logfire.warning
     original_debug = logfire.debug
+    original_span = logfire.span
     
     # Patch all logfire methods to no-ops for tests
     def noop_log(*args, **kwargs):
@@ -30,6 +31,17 @@ def configure_logfire():
     logfire.error = noop_log
     logfire.warning = noop_log
     logfire.debug = noop_log
+    class DummySpan:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def noop_span(*args, **kwargs):
+        return DummySpan()
+
+    logfire.span = noop_span
     
     yield
     
@@ -38,6 +50,7 @@ def configure_logfire():
     logfire.error = original_error
     logfire.warning = original_warning
     logfire.debug = original_debug
+    logfire.span = original_span
 
 
 # Add a fixture to suppress pydantic deprecation warnings
@@ -56,7 +69,18 @@ def mock_file_operations():
     """Patch file operations for cost tracking."""
     with patch("app.services.model_optimizer._save_cost_report") as mock_save, \
          patch("app.services.model_optimizer._maybe_save_cost_report") as mock_maybe_save:
-        # Make these do nothing to avoid file system operations during tests
         mock_save.return_value = None
         mock_maybe_save.return_value = None
         yield
+
+
+@pytest.fixture
+def sample_resume() -> str:
+    """Provide a small sample resume for tests."""
+    return "EXPERIENCE\nWorked at Example Corp\nSKILLS\nPython, SQL"
+
+
+@pytest.fixture
+def sample_job_description() -> str:
+    """Provide a simple job description for tests."""
+    return "Looking for a Python engineer with SQL experience"
