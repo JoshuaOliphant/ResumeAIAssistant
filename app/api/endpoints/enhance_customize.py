@@ -2,8 +2,6 @@
 Enhanced API endpoints for resume customization with advanced parallel processing.
 """
 
-import time
-import traceback
 import uuid
 from typing import Dict, Any
 
@@ -26,24 +24,6 @@ from app.services.prompts import MAX_FEEDBACK_ITERATIONS
 from app.services.pydanticai_optimizer import get_pydanticai_optimizer_service
 
 router = APIRouter()
-
-
-# TODO: Remove this deprecated endpoint entirely in the next major version
-@router.post("/plan", response_model=dict)
-async def generate_enhanced_customization_plan(request: dict, db: Session = Depends(get_db)):
-    """
-    [DEPRECATED] This endpoint is no longer in use.
-    
-    The application now uses the PydanticAI-based four-stage workflow with WebSocket 
-    progress reporting for resume customization.
-    
-    This endpoint is kept for backward compatibility but returns a deprecation notice.
-    """
-    logfire.info("Deprecated /enhance_customize/plan endpoint accessed")
-    
-    return {
-        "detail": "This endpoint is deprecated. The application now uses the WebSocket-based four-stage workflow for resume customization."
-    }
 
 
 @router.post("/", response_model=ResumeCustomizationResponse)
@@ -166,55 +146,3 @@ async def customize_resume_enhanced(
     )
 
     return response
-
-
-@router.post("/performance-comparison", response_model=Dict[str, Any])
-async def compare_customization_performance(
-    plan_request: CustomizationPlanRequest, db: Session = Depends(get_db)
-):
-    """
-    Compare the performance of the original and enhanced parallel processing architectures.
-    
-    This endpoint is for performance testing and benchmarking purposes. It runs both
-    the original and enhanced customization plan generation processes and returns
-    timing information for comparison.
-    
-    Returns timing data for both implementations.
-    """
-    from app.services.parallel_customization_service import get_parallel_customization_service
-    
-    results = {}
-    
-    # Run the original implementation
-    start_time = time.time()
-    original_service = get_parallel_customization_service(db)
-    original_plan = await original_service.generate_customization_plan(plan_request)
-    original_duration = time.time() - start_time
-    
-    # Run the enhanced implementation
-    start_time = time.time()
-    enhanced_service = get_enhanced_customization_service(db)
-    enhanced_plan = await enhanced_service.generate_customization_plan(plan_request)
-    enhanced_duration = time.time() - start_time
-    
-    # Calculate improvement
-    improvement_percentage = ((original_duration - enhanced_duration) / original_duration) * 100
-    
-    # Log results
-    logfire.info(
-        "Performance comparison completed",
-        original_duration_seconds=round(original_duration, 2),
-        enhanced_duration_seconds=round(enhanced_duration, 2),
-        improvement_percentage=round(improvement_percentage, 2)
-    )
-    
-    # Return comparison results
-    results = {
-        "original_duration_seconds": round(original_duration, 2),
-        "enhanced_duration_seconds": round(enhanced_duration, 2),
-        "improvement_percentage": round(improvement_percentage, 2),
-        "original_recommendation_count": len(original_plan.recommendations),
-        "enhanced_recommendation_count": len(enhanced_plan.recommendations)
-    }
-    
-    return results

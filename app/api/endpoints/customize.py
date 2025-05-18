@@ -2,8 +2,6 @@
 API endpoints for resume customization.
 """
 
-import time
-import traceback
 import uuid
 
 import logfire
@@ -14,12 +12,8 @@ from app.db.session import get_db
 from app.models.job import JobDescription
 from app.models.resume import Resume, ResumeVersion
 from app.schemas.customize import (
-    CustomizationPlan,
     ResumeCustomizationRequest,
     ResumeCustomizationResponse,
-)
-from app.services.parallel_customization_service import (
-    get_parallel_customization_service,
 )
 from app.services.prompts import MAX_FEEDBACK_ITERATIONS
 from app.services.pydanticai_optimizer import get_pydanticai_optimizer_service
@@ -132,35 +126,3 @@ async def customize_resume_endpoint(
     )
 
     return response
-
-
-# TODO: Remove this deprecated endpoint entirely in the next major version
-@router.post("/plan", response_model=dict)
-async def generate_customization_plan(request: dict, db: Session = Depends(get_db)):
-    """
-    [DEPRECATED] This endpoint is no longer in use.
-    
-    The application now uses the PydanticAI-based four-stage workflow with WebSocket 
-    progress reporting for resume customization.
-    
-    This endpoint is kept for backward compatibility but returns a deprecation notice.
-    """
-    logfire.info("Deprecated /plan endpoint accessed")
-    
-    return {
-        "detail": "This endpoint is deprecated. The application now uses the WebSocket-based four-stage workflow for resume customization."
-    }
-
-
-# TODO: Remove this deprecated endpoint entirely in the next major version
-@router.post("/parallel", response_model=dict)
-async def generate_customization_plan_parallel(request: dict, db: Session = Depends(get_db)):
-    """
-    [DEPRECATED] This endpoint is no longer in use.
-    
-    The application now uses the PydanticAI-based four-stage workflow with WebSocket 
-    progress reporting for resume customization.
-    
-    This endpoint is kept for backward compatibility but returns a deprecation notice.
-    """
-    return await generate_customization_plan(request, db)
