@@ -10,7 +10,6 @@ from fastapi.responses import JSONResponse
 from app.api.endpoints import (
     resumes,
     jobs,
-    ats,
     customize,
     cover_letter,
     export,
@@ -93,7 +92,6 @@ api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 api_router.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
-api_router.include_router(ats.router, prefix="/ats", tags=["ats"])
 api_router.include_router(customize.router, prefix="/customize", tags=["customize"])
 api_router.include_router(enhance_customize.router, prefix="/enhance-customize", tags=["enhanced-customize"])
 api_router.include_router(cover_letter.router, prefix="/cover-letter", tags=["cover-letter"])

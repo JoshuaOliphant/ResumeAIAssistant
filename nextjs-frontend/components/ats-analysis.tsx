@@ -7,7 +7,7 @@ import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Progress } from "@/components/ui/progress"
-import { ATSService, ATSAnalysisResult } from "@/lib/client"
+import { ATSAnalysisResult } from "@/lib/client"
 import { MatchScore } from "@/components/ats-match-score"
 import { KeywordMatch } from "@/components/ats-keyword-match"
 import { MissingKeywords } from "@/components/ats-missing-keywords"
@@ -124,17 +124,39 @@ export function ATSAnalysis({ resumeId, jobId, onAnalysisComplete }: ATSAnalysis
       setError(null)
       setIsAnalyzing(true)
       
-      // Call the API to analyze the resume against the job description
-      const apiResponse = await ATSService.analyzeResume(resumeId, jobId)
+      // TODO: Replace with customization service call since ATS is now integrated
+      // This component needs to be updated to work with the new customization flow
+      console.warn("ATS standalone analysis has been removed - using mock data")
       
-      // Adapt the API response to the frontend format
-      const result = adaptAPIResponse(apiResponse)
+      // Create mock analysis results
+      const mockResult: ATSAnalysisResult = {
+        id: "mock-id",
+        resume_id: resumeId,
+        job_description_id: jobId,
+        match_score: 75,
+        matching_keywords: [
+          { keyword: "react", count: 3 },
+          { keyword: "javascript", count: 5 },
+          { keyword: "typescript", count: 2 }
+        ],
+        missing_keywords: ["python", "aws", "machine learning"],
+        improvement_suggestions: {
+          "Skills": ["Add more specific technical skills", "Highlight experience with AWS"],
+          "Experience": ["Quantify your achievements", "Add more details about your projects"]
+        },
+        confidence: "medium",
+        section_scores: [
+          { section: "Skills", score: 70, weight: 1 },
+          { section: "Experience", score: 80, weight: 1 },
+          { section: "Education", score: 90, weight: 1 }
+        ]
+      }
       
-      setAnalysisResult(result)
+      setAnalysisResult(mockResult)
       
       // Notify parent component if callback provided
       if (onAnalysisComplete) {
-        onAnalysisComplete(result)
+        onAnalysisComplete(mockResult)
       }
     } catch (error) {
       console.error("Error analyzing resume:", error)
