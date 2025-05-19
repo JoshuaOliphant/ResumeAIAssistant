@@ -83,32 +83,38 @@ class ResumeAnalysis(BaseModel):
     match_score: int = Field(
         ..., ge=0, le=100,
         description="Overall ATS match score 0-100",
-        json_schema_extra={"example": 72},
+        examples=[72],
     )
     key_matches: List[str] = Field(
         ...,
         description="Skills or experiences that strongly match the job",
-        json_schema_extra={"example": ["Python", "REST APIs"]},
+        examples=[["Python", "REST APIs"]],
     )
     missing_skills: List[str] = Field(
         ..., description="Important skills missing from the resume", 
-        json_schema_extra={"example": ["Docker"]}
+        examples=[["Docker"]],
     )
     strengths: List[str] = Field(
         ...,
         description="Resume strengths relevant to the job",
-        json_schema_extra={"example": ["5 years Python", "AWS certified"]},
+        examples=[["5 years Python experience", "AWS certified"]],
     )
     weaknesses: List[str] = Field(
         ...,
         description="Areas where the resume could be improved",
-        json_schema_extra={"example": ["Limited leadership experience"]},
+        examples=[["Limited leadership experience"]],
     )
     section_analysis: Dict[str, str] = Field(
         ...,
         description="Analysis notes for each resume section",
-        json_schema_extra={"example": {"Experience": "Relevant but lacks metrics"}},
+        examples=[{"Experience": "Relevant but lacks metrics"}],
     )
+    
+    class Config:
+        """Pydantic config for this model."""
+        extra = "forbid"  # Don't allow extra fields not in the model
+        validate_assignment = True  # Validate attribute assignments
+        populate_by_name = True  # Allow population by field name and alias
 
 
 class CustomizationPlan(BaseModel):
@@ -117,27 +123,36 @@ class CustomizationPlan(BaseModel):
     target_score: int = Field(
         ..., ge=0, le=100,
         description="Desired match score after customization",
-        json_schema_extra={"example": 90},
+        examples=[90],
     )
     section_changes: Dict[str, str] = Field(
         ...,
         description="Text changes proposed for each resume section",
-        json_schema_extra={"example": {"Summary": "Add metrics around API development"}},
+        examples=[{"Summary": "Add metrics around API development"}],
     )
     keywords_to_add: List[str] = Field(
         ..., description="Keywords to incorporate", 
-        json_schema_extra={"example": ["Docker", "Kubernetes"]}
+        examples=[["Docker", "Kubernetes"]],
     )
     format_improvements: List[str] = Field(
         ...,
         description="Formatting adjustments for better ATS readability",
-        json_schema_extra={"example": ["Use bullet points for achievements"]},
+        examples=[["Use bullet points for achievements"]],
     )
     change_explanations: Dict[str, str] = Field(
         ...,
         description="Rationale for each major change",
-        json_schema_extra={"example": {"Add Docker": "Job description emphasizes containerization"}},
+        examples=[{"Add Docker": "Job description emphasizes containerization"}],
     )
+    
+    class Config:
+        """Pydantic config for this model."""
+        extra = "forbid"  # Don't allow extra fields not in the model
+        validate_assignment = True  # Validate attribute assignments
+        populate_by_name = True  # Allow population by field name and alias
+        json_encoders = {
+            # Custom encoders if needed
+        }
 
 
 class ImplementationResult(BaseModel):
@@ -146,61 +161,86 @@ class ImplementationResult(BaseModel):
     updated_sections: Dict[str, str] = Field(
         ...,
         description="Final text for each updated section",
-        json_schema_extra={"example": {"Skills": "Python, Docker, Kubernetes"}},
+        examples=[{"Skills": "Python, Docker, Kubernetes"}],
     )
     final_score: int = Field(
         ..., ge=0, le=100,
         description="Score achieved after implementing changes",
-        json_schema_extra={"example": 88},
+        examples=[88],
     )
     applied_keywords: List[str] = Field(
         ..., description="Keywords that were actually added",
-        json_schema_extra={"example": ["Docker"]}
+        examples=[["Docker"]]
     )
     notes: Optional[str] = Field(
         None, description="Additional notes about the implementation"
     )
+    
+    class Config:
+        """Pydantic config for this model."""
+        extra = "forbid"  # Don't allow extra fields not in the model
+        validate_assignment = True  # Validate attribute assignments
+        populate_by_name = True  # Allow population by field name and alias
 
 
 class EvidenceItem(BaseModel):
     """Evidence supporting the truthfulness of a resume claim."""
 
-    claim: str = Field(..., description="Resume statement to verify",
-                     json_schema_extra={"example": "Led migration to AWS"})
-    evidence: str = Field(
-        ..., description="Supporting proof or reference",
-        json_schema_extra={"example": "Project documentation"}
+    claim: str = Field(..., 
+        description="Resume statement to verify",
+        examples=["Led migration to AWS"]
     )
-    verified: bool = Field(..., description="Whether the evidence validates the claim",
-                         json_schema_extra={"example": True})
+    evidence: str = Field(
+        ..., 
+        description="Supporting proof or reference",
+        examples=["Project documentation"]
+    )
+    verified: bool = Field(..., 
+        description="Whether the evidence validates the claim",
+        examples=[True]
+    )
     notes: Optional[str] = Field(None, description="Additional verification notes")
+    
+    class Config:
+        """Pydantic config for this model."""
+        extra = "forbid"  # Don't allow extra fields not in the model
+        validate_assignment = True  # Validate attribute assignments
+        populate_by_name = True  # Allow population by field name and alias
 
 
 class VerificationResult(BaseModel):
     """Verification stage output after all changes are applied."""
 
-    is_truthful: bool = Field(..., description="Whether modifications remain truthful",
-                            json_schema_extra={"example": True})
+    is_truthful: bool = Field(..., 
+        description="Whether modifications remain truthful",
+        examples=[True]
+    )
     issues: List[str] = Field(
         default_factory=list,
         description="List of truthfulness or quality issues",
-        json_schema_extra={"example": ["Unable to verify AWS certification"]},
+        examples=[["Unable to verify AWS certification"]],
     )
     final_score: int = Field(
         ..., ge=0, le=100,
         description="Final ATS match score after verification",
-        json_schema_extra={"example": 88},
+        examples=[88],
     )
     improvement: int = Field(
         ..., ge=0, le=100,
         description="Score improvement from the original resume",
-        json_schema_extra={"example": 16},
+        examples=[16],
     )
     section_assessments: Dict[str, str] = Field(
         ...,
         description="Assessment notes for each section",
-        json_schema_extra={"example": {"Summary": "Improved clarity"}},
+        examples=[{"Summary": "Improved clarity"}],
     )
+    
+    class Config:
+        """Pydantic config for this model."""
+        extra = "forbid"  # Don't allow extra fields not in the model
+        validate_assignment = True  # Validate attribute assignments
+        populate_by_name = True  # Allow population by field name and alias
 
 
 class WorkflowStage(str, Enum):
@@ -217,19 +257,25 @@ class WebSocketProgressUpdate(BaseModel):
 
     stage: WorkflowStage = Field(
         ..., description="Current processing stage", 
-        json_schema_extra={"example": "planning"}
+        examples=[WorkflowStage.PLANNING]
     )
     percentage: int = Field(
         ..., ge=0, le=100,
         description="Percentage completion of the current stage",
-        json_schema_extra={"example": 40},
+        examples=[40],
     )
     message: Optional[str] = Field(
         None, description="Human-readable progress message", 
-        json_schema_extra={"example": "Analyzing experience section"}
+        examples=["Analyzing experience section"]
     )
     overall_progress: int = Field(
         ..., ge=0, le=100,
         description="Overall workflow progress percentage",
-        json_schema_extra={"example": 25},
+        examples=[25],
     )
+    
+    class Config:
+        """Pydantic config for this model."""
+        extra = "forbid"  # Don't allow extra fields not in the model
+        validate_assignment = True  # Validate attribute assignments
+        populate_by_name = True  # Allow population by field name and alias
