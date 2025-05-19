@@ -84,7 +84,7 @@ async def customize_resume_enhanced(
     )
 
     # Use the PydanticAI optimizer service for the complete workflow
-    pydanticai_service = get_pydanticai_optimizer_service(db)
+    pydanticai_service = await get_pydanticai_optimizer_service(db)
 
     # Get the ATS analysis from the request
     ats_analysis = customization_request.ats_analysis

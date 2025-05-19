@@ -67,7 +67,7 @@ class EnhancedCustomizationService:
         )
         
         # Get the PydanticAI service
-        pydanticai_service = get_pydanticai_optimizer_service(self.db)
+        pydanticai_service = await get_pydanticai_optimizer_service(self.db)
         
         # Generate a basic plan using PydanticAI
         # Create a return structure that matches CustomizationPlan but with placeholder data

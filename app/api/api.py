@@ -18,6 +18,7 @@ from app.api.endpoints import (
     enhance_customize,
     progress,
     resume_customizer,
+    templates as template_endpoints,
 )
 from app.core.config import settings
 from app.db.session import Base, engine
@@ -98,12 +99,22 @@ api_router.include_router(cover_letter.router, prefix="/cover-letter", tags=["co
 api_router.include_router(export.router, prefix="/export", tags=["export"])
 api_router.include_router(progress.router, prefix="/progress", tags=["progress"])
 api_router.include_router(requirements.router, prefix="/requirements", tags=["requirements"])
+api_router.include_router(template_endpoints.router, prefix="/templates", tags=["templates"])
 api_router.include_router(
     resume_customizer.router, prefix="/resume-customizer", tags=["resume-customizer"]
 )
 
 # Add the API router to the FastAPI application
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Debug log all registered routes
+for route in app.routes:
+    logfire.debug(
+        "Registered route",
+        path=route.path,
+        name=getattr(route, "name", None),
+        methods=[method for method in getattr(route, "methods", [])],
+    )
 
 # Exception handler for global error logging
 @app.exception_handler(Exception)

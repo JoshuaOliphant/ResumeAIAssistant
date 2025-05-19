@@ -8,6 +8,7 @@ from app.core.logging import (
     setup_fastapi_instrumentation,
     setup_sqlalchemy_instrumentation,
     setup_httpx_instrumentation,
+    setup_pydanticai_instrumentation,
 )
 
 # Import smart request handler setup function
@@ -21,7 +22,7 @@ except ImportError:
 configure_logging(
     service_name="resume-ai-assistant",
     environment=os.getenv("ENVIRONMENT", "development"),
-    log_level=os.getenv("LOG_LEVEL", "INFO"),
+    log_level=os.getenv("LOG_LEVEL", "DEBUG"),
     capture_headers=False,  # Set to True to capture headers (be careful with sensitive data)
     enable_system_metrics=True
 )
@@ -48,7 +49,13 @@ try:
         capture_headers=False  # Avoid capturing potentially sensitive headers
     )
     
-    logfire.instrument_pydantic_ai()
+    # Set up PydanticAI instrumentation with advanced settings
+    setup_pydanticai_instrumentation(
+        log_agents=True,
+        log_prompts=True,  # Set to True to see the actual prompts
+        log_llm_responses=True,  # Set to True to see raw responses from LLMs
+        log_completions=True  # Set to True to see parsed completions
+    )
     
     # Set up smart request handling
     if SMART_REQUEST_AVAILABLE:

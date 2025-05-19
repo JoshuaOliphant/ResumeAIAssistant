@@ -1,8 +1,8 @@
 "use client"
 
-import { createContext, useState, useContext, useEffect, ReactNode } from "react"
+import { createContext, useState, useContext, useEffect, ReactNode, useCallback } from "react"
 import { useRouter } from "next/navigation"
-import { AuthService, User } from "@/lib/client"
+import { AuthService, User, ApiError } from "@/lib/client"
 import { AUTH_DEV_MODE, MOCK_USER, MOCK_TOKEN } from "@/lib/auth-dev"
 
 type AuthContextType = {
@@ -12,6 +12,7 @@ type AuthContextType = {
   login: (username: string, password: string) => Promise<void>
   register: (email: string, username: string, password: string, fullName?: string) => Promise<void>
   logout: () => void
+  refreshToken: () => Promise<boolean>
   error: string | null
   clearError: () => void
 }
@@ -22,41 +23,56 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
+  const [lastRefresh, setLastRefresh] = useState<number>(0)
   const router = useRouter()
+
+  // Refresh token handler
+  const refreshToken = useCallback(async (): Promise<boolean> => {
+    try {
+      // For development mode
+      if (AUTH_DEV_MODE) {
+        console.log("Using development mode authentication")
+        
+        // Set development token if not present
+        if (typeof window !== 'undefined' && !localStorage.getItem("auth_token")) {
+          localStorage.setItem("auth_token", MOCK_TOKEN)
+        }
+        
+        // Set mock user
+        setUser(MOCK_USER)
+        setLastRefresh(Date.now())
+        return true
+      }
+      
+      // Production mode - check if we have a token
+      const token = localStorage.getItem("auth_token")
+      
+      if (token) {
+        // Fetch current user data
+        const userData = await AuthService.getCurrentUser()
+        setUser(userData)
+        setLastRefresh(Date.now())
+        return true
+      }
+      return false
+    } catch (err) {
+      console.error("Auth refresh failed:", err)
+      // Only clear token if it's an authentication error
+      if (err instanceof ApiError && err.status === 401) {
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem("auth_token")
+        }
+        setUser(null)
+      }
+      return false
+    }
+  }, [])
 
   // Check if user is logged in on mount
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
-        // For development mode
-        if (AUTH_DEV_MODE) {
-          console.log("Using development mode authentication")
-          
-          // Set development token if not present
-          if (typeof window !== 'undefined' && !localStorage.getItem("auth_token")) {
-            localStorage.setItem("auth_token", MOCK_TOKEN)
-          }
-          
-          // Set mock user
-          setUser(MOCK_USER)
-          setIsLoading(false)
-          return
-        }
-        
-        // Production mode - check if we have a token
-        const token = localStorage.getItem("auth_token")
-        
-        if (token) {
-          // Fetch current user data
-          const userData = await AuthService.getCurrentUser()
-          setUser(userData)
-        }
-      } catch (err) {
-        console.error("Auth check failed:", err)
-        // Clear invalid token
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem("auth_token")
-        }
+        await refreshToken()
       } finally {
         setIsLoading(false)
       }
@@ -64,6 +80,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     checkAuthStatus()
   }, [])
+  
+  // Refresh authentication periodically
+  useEffect(() => {
+    // Skip in dev mode or if no user
+    if (AUTH_DEV_MODE || !user) return
+    
+    // Refresh token more frequently (every 5 minutes) to prevent expiration during long operations
+    const refreshInterval = setInterval(() => {
+      console.log('Periodic token refresh');
+      refreshToken().then(success => {
+        console.log(`Periodic token refresh ${success ? 'succeeded' : 'failed'}`);
+      });
+    }, 5 * 60 * 1000) // 5 minutes
+    
+    return () => clearInterval(refreshInterval)
+  }, [user, refreshToken])
 
   const login = async (username: string, password: string) => {
     setIsLoading(true)
@@ -178,6 +210,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setError(null)
   }
 
+  // Expose auth context to window for API client to access
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      (window as any).__auth_context = {
+        refreshToken
+      };
+    }
+    
+    return () => {
+      if (typeof window !== 'undefined') {
+        delete (window as any).__auth_context;
+      }
+    };
+  }, [refreshToken]);
+
   return (
     <AuthContext.Provider
       value={{
@@ -187,6 +234,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login,
         register,
         logout,
+        refreshToken,
         error,
         clearError
       }}

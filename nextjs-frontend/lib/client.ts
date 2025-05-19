@@ -140,6 +140,19 @@ export class ApiError extends Error {
   }
 }
 
+// Track the last token refresh attempt to prevent infinite loops
+let lastTokenRefreshAttempt = 0;
+const TOKEN_REFRESH_COOLDOWN = 5000; // 5 seconds
+
+// Get auth context for token refresh (avoiding circular imports)
+function getAuthContext() {
+  if (typeof window === 'undefined') return null;
+  
+  // This accesses the auth context from window if available
+  // The auth context will be stored on window by auth.tsx
+  return (window as any).__auth_context || null;
+}
+
 // Helper function for fetch requests
 async function fetchWithAuth(
   endpoint: string,
@@ -176,7 +189,44 @@ async function fetchWithAuth(
     
     console.log(`Response data:`, data);
 
-    // Check if the request was successful
+    // Handle auth errors - try to refresh token
+    if (response.status === 401) {
+      // Avoid infinite refresh loops
+      const now = Date.now();
+      if (now - lastTokenRefreshAttempt < TOKEN_REFRESH_COOLDOWN) {
+        throw new ApiError(
+          response.status,
+          'Authentication failed. Please log in again.',
+          data
+        );
+      }
+      
+      // Try to refresh token by triggering auth context refresh
+      lastTokenRefreshAttempt = now;
+      const authContext = getAuthContext();
+      
+      if (authContext && typeof window !== 'undefined') {
+        const refreshSuccess = await authContext.refreshToken();
+        
+        if (refreshSuccess) {
+          // Retry the request with the new token
+          return fetchWithAuth(endpoint, options);
+        }
+      }
+
+      // If we get here, token refresh failed or not possible
+      // But don't redirect to login page during websocket data flow or long-running processes
+      // Instead, just throw an auth error and let the calling code handle it as needed
+      // This prevents redirect loops during customizations
+      console.warn('Token refresh failed, but not redirecting to login during API call');
+      throw new ApiError(
+        401,
+        'Authentication failed but not redirecting',
+        data
+      );
+    }
+
+    // Check if the request was successful for non-auth errors
     if (!response.ok) {
       throw new ApiError(
         response.status,
@@ -479,7 +529,12 @@ export const CustomizationService = {
       ...(options?.headers || {})
     };
     
-    const response = await fetch(`${BACKEND_API_URL}/api/v1/customize/`, {
+    const customizeUrl = `${BACKEND_API_URL}${API_VERSION}/customize/`;
+    console.log('Making customize request to URL:', customizeUrl);
+    console.log('With request body:', requestBody);
+    console.log('With headers:', headers);
+    
+    const response = await fetch(customizeUrl, {
       method: 'POST',
       headers,
       body: requestBody,
@@ -581,14 +636,27 @@ export const CustomizationService = {
     jobDescriptionId: string,
     templateId: string
   ): Promise<CustomizationResponse> {
-    return fetchWithAuth('/customize/', {
-      method: 'POST',
-      body: JSON.stringify({
-        resume_id: resumeId,
-        job_description_id: jobDescriptionId,
-        template_id: templateId,
-      }),
-    });
+    console.log('Starting customization:', { resumeId, jobDescriptionId, templateId });
+    
+    // Directly use the customizeResume method since it's the same endpoint
+    try {
+      const result = await this.customizeResume(
+        resumeId,
+        jobDescriptionId,
+        'balanced' // Default level
+      );
+      
+      // Transform the response to match the expected CustomizationResponse format
+      // This avoids having to duplicate code and ensures we're using a working endpoint
+      return {
+        customization_id: result.id,
+        status: 'started',
+        message: 'Customization started successfully'
+      };
+    } catch (error) {
+      console.error('Error in customization:', error);
+      throw error;
+    }
   },
 
   async getCustomizationResult(customizationId: string): Promise<CustomizationResult> {
@@ -598,6 +666,49 @@ export const CustomizationService = {
   createProgressWebSocket(customizationId: string, token: string): WebSocket {
     const base = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5001/api/v1';
     const ws = new WebSocket(`${base}/ws/customize/${customizationId}?token=${token}`);
+    
+    // Setup token refresh mechanism for long-running WebSocket connections
+    let wsTokenRefreshInterval: NodeJS.Timeout | null = null;
+    
+    ws.onopen = () => {
+      console.log('WebSocket connection opened for customization:', customizationId);
+      // Refresh token periodically while websocket is open
+      if (typeof window !== 'undefined') {
+        const authContext = getAuthContext();
+        if (authContext) {
+          // First refresh now to ensure token is current when starting the process
+          authContext.refreshToken().then(success => {
+            if (!success) {
+              console.warn('Initial WebSocket token refresh failed');
+            }
+          });
+          
+          // Refresh more frequently (every 2 minutes) to ensure WebSocket stays authenticated
+          wsTokenRefreshInterval = setInterval(() => {
+            authContext.refreshToken().then(success => {
+              if (!success) {
+                console.warn('WebSocket token refresh failed');
+              } else {
+                console.log('WebSocket token refreshed successfully');
+              }
+            });
+          }, 2 * 60 * 1000); // 2 minutes
+        }
+      }
+    };
+    
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+    
+    ws.onclose = (event) => {
+      console.log('WebSocket connection closed:', event.code, event.reason);
+      // Clean up the interval when the socket closes
+      if (wsTokenRefreshInterval) {
+        clearInterval(wsTokenRefreshInterval);
+      }
+    };
+    
     return ws;
   },
 };

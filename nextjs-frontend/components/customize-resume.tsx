@@ -66,6 +66,13 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
   const [currentStage, setCurrentStage] = useState<CustomizationStage>('evaluation')
   const [resume, setResume] = useState<string | null>(null)
   const [jobDescription, setJobDescription] = useState<string | null>(null)
+  
+  // Debug trace customization_id
+  useEffect(() => {
+    if (customizationId) {
+      console.log('Customization ID set:', customizationId);
+    }
+  }, [customizationId]);
 
   // Load resume and job description
   useEffect(() => {
@@ -105,19 +112,47 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
   }, []);
 
   const startCustomizationProcess = async () => {
-    if (!resumeId || !jobId || !selectedTemplate) return;
+    if (!resumeId || !jobId) return;
     try {
       setLoading(true);
       setStage('evaluation');
-      const resp: CustomizationResponse = await CustomizationService.startCustomization(
-        resumeId,
-        jobId,
-        selectedTemplate
-      );
-      setCustomizationId(resp.customization_id);
+      console.log('Starting customization process with:', { resumeId, jobId, selectedTemplate: selectedTemplate || 'default' });
+      
+      let customizationResponse: CustomizationResponse;
+      try {
+        console.log('Before calling CustomizationService.startCustomization');
+        customizationResponse = await CustomizationService.startCustomization(
+          resumeId,
+          jobId,
+          selectedTemplate || 'default-template'
+        );
+        console.log('Customization response:', customizationResponse);
+        setCustomizationId(customizationResponse.customization_id);
+      } catch (error) {
+        console.error('Failed to start customization:', error);
+        setError(error instanceof Error ? error.message : 'Failed to start customization');
+        setLoading(false);
+        return;
+      }
 
+      // Get the latest token in case it was refreshed
+      // Get the latest token and keep refreshing it
       const token = localStorage.getItem('auth_token') || '';
-      const ws = CustomizationService.createProgressWebSocket(resp.customization_id, token);
+      // Refresh token now before establishing websocket to ensure it's fresh
+      try {
+        // Try to refresh the token through the auth context for long-running processes
+        const authContext = (window as any).__auth_context;
+        if (authContext && typeof authContext.refreshToken === 'function') {
+          await authContext.refreshToken();
+          console.log('Token refreshed before establishing WebSocket connection');
+        }
+      } catch (e) {
+        console.warn('Failed to refresh token before WebSocket connection:', e);
+      }
+      
+      // Now create the WebSocket with the latest token
+      const freshToken = localStorage.getItem('auth_token') || token;
+      const ws = CustomizationService.createProgressWebSocket(customizationResponse.customization_id, freshToken);
 
       ws.onmessage = async (event) => {
         const data = JSON.parse(event.data);
@@ -127,7 +162,7 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
         if (data.stage === 'verification' && data.percentage === 100) {
           ws.close();
           try {
-            const result: CustomizationResult = await CustomizationService.getCustomizationResult(resp.customization_id);
+            const result: CustomizationResult = await CustomizationService.getCustomizationResult(customizationResponse.customization_id);
             setCustomizationResult(result);
             if (result.plan) {
               setCustomizationPlan(result.plan as CustomizationPlan);
@@ -140,9 +175,63 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
         }
       };
 
-      ws.onerror = () => {
-        setError('WebSocket error');
-        setLoading(false);
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        // Don't set error or loading state here - let the process continue
+        // The backend should still be processing even if the websocket fails
+        console.log('WebSocket error occurred, but customization is still running in the background');
+        
+        // After a few seconds, try to get the result directly instead of using websocket
+        setTimeout(async () => {
+          try {
+            if (customizationResponse.customization_id) {
+              console.log('Attempting to fetch customization result directly');
+              // Attempt to get the result by direct API call
+              const result = await CustomizationService.getCustomizationResult(customizationResponse.customization_id);
+              if (result) {
+                setCustomizationResult(result);
+                if (result.plan) {
+                  setCustomizationPlan(result.plan as CustomizationPlan);
+                }
+                setStage('complete');
+                setLoading(false);
+              }
+            }
+          } catch (e) {
+            console.error('Error fetching result after websocket error:', e);
+          }
+        }, 10000); // Wait 10 seconds
+      };
+      
+      ws.onclose = (event) => {
+        console.log('WebSocket closed:', event);
+        // Only handle unexpected closes as potential issues
+        if (!event.wasClean) {
+          console.log('WebSocket connection closed unexpectedly, but customization may still be running');
+          
+          // Similar to onerror, try to fetch the result directly
+          setTimeout(async () => {
+            try {
+              if (customizationResponse.customization_id) {
+                console.log('Attempting to fetch customization result after websocket close');
+                const result = await CustomizationService.getCustomizationResult(customizationResponse.customization_id);
+                if (result) {
+                  setCustomizationResult(result);
+                  if (result.plan) {
+                    setCustomizationPlan(result.plan as CustomizationPlan);
+                  }
+                  setStage('complete');
+                  setLoading(false);
+                }
+              }
+            } catch (e) {
+              console.error('Error fetching result after websocket close:', e);
+              // Now we can set an error if direct fetching also fails
+              setError('Unable to get customization status. Please check the Results page to see if customization completed.');
+              setLoading(false);
+            }
+          }, 15000); // Wait 15 seconds
+        }
       };
     } catch (err) {
       console.error('Error starting customization:', err);
@@ -155,7 +244,18 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
   // Start customization process when component mounts and data is loaded
   useEffect(() => {
     if (resumeId && jobId && resume && jobDescription && !customizationId && !loading && !error) {
-      startCustomizationProcess();
+      // Add a small delay to ensure we have all data loaded before starting
+      const timer = setTimeout(() => {
+        console.log('Starting customization with data:', {
+          resumeId,
+          jobId,
+          resumeLength: resume?.length,
+          jobDescriptionLength: jobDescription?.length
+        });
+        startCustomizationProcess();
+      }, 500);
+      
+      return () => clearTimeout(timer);
     }
   }, [resumeId, jobId, resume, jobDescription, customizationId, loading, error]);
 
@@ -168,12 +268,12 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
 
   // Handle retry
   const handleRetry = () => {
-    setCustomizedVersion(null);
     setCustomizationPlan(null);
     setCustomizationId(null);
     setOverallProgress(0);
     setStatusMessage('');
     setStage('evaluation');
+    console.log('Called handleRetry, starting customization process...');
     startCustomizationProcess();
   };
 

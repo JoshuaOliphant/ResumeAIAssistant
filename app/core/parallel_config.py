@@ -14,8 +14,8 @@ MAX_CONCURRENT_TASKS = getattr(settings, 'MAX_CONCURRENT_TASKS', 5)
 
 # Maximum timeout for parallel tasks in seconds
 # Tasks that exceed this timeout will be considered failed
-# Reduced from 60 to 45 seconds to handle API timeouts more proactively
-TASK_TIMEOUT_SECONDS = getattr(settings, 'PARALLEL_TASK_TIMEOUT', 45)
+# Increased to 180 seconds to account for Claude 3.7 Sonnet processing time
+TASK_TIMEOUT_SECONDS = getattr(settings, 'PARALLEL_TASK_TIMEOUT', 180)
 
 # Default weights for different resume sections
 # Used to calculate the importance of each section for optimization
