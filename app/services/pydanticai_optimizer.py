@@ -67,7 +67,7 @@ class PydanticAIOptimizerService:
     DEFAULT_MODEL = "anthropic:claude-3-7-sonnet-latest"
     TEMPERATURE = 0.5  # Lower temperature for more consistent outputs
     MAX_TOKENS = 4096
-    THINKING_BUDGET = 2500  # Increase thinking budget for better quality
+    # We're disabling thinking budget as it causes excessive API calls and hits rate limits
     
     def __init__(self, db: Session, websocket_manager: WebSocketManager):
         """
@@ -93,7 +93,7 @@ class PydanticAIOptimizerService:
             model=self.DEFAULT_MODEL,
             temperature=self.TEMPERATURE,
             max_tokens=self.MAX_TOKENS,
-            thinking_budget=self.THINKING_BUDGET,
+            thinking_budget=0,  # Disabled thinking budget
         )
     
     def _create_agent(self, output_type: Any, system_prompt: str) -> Agent:
@@ -107,8 +107,8 @@ class PydanticAIOptimizerService:
         Returns:
             Configured PydanticAI agent
         """
-        # Create a thinking configuration
-        thinking_config = {"budget_tokens": self.THINKING_BUDGET, "type": "enabled"}
+        # No thinking configuration - using default model behavior
+        thinking_config = None
         
         # Set model timeout
         from app.core.parallel_config import TASK_TIMEOUT_SECONDS
@@ -127,7 +127,7 @@ class PydanticAIOptimizerService:
             model=self.DEFAULT_MODEL,
             temperature=self.TEMPERATURE,
             max_tokens=self.MAX_TOKENS,
-            thinking_budget=self.THINKING_BUDGET,
+            thinking_budget=0,  # Disabled thinking budget
         )
         
         # Create the agent with properly structured output type
@@ -219,10 +219,10 @@ class PydanticAIOptimizerService:
                         customization_id=customization_id,
                     )
                     
-                    # Use the correct timeout value
+                    # Use the correct timeout value - very high to essentially disable timeout
                     result = await asyncio.wait_for(
                         agent.run(message),
-                        timeout=TASK_TIMEOUT_SECONDS - 5,  # Set slightly lower to ensure it triggers before the model timeout
+                        timeout=TASK_TIMEOUT_SECONDS,  # Use the full configured timeout
                     )
                     
                     # Log the result type for debugging
@@ -847,7 +847,8 @@ class PydanticAIOptimizerService:
                     self.DEFAULT_MODEL,
                     output_format="text",  # Use text format for direct output
                     system_prompt=implementation_prompt,
-                    thinking_config={"budget_tokens": self.THINKING_BUDGET, "type": "enabled"},
+                    # Disabled thinking config to avoid excessive API calls
+                    thinking_config=None,
                     temperature=self.TEMPERATURE,
                     max_tokens=self.MAX_TOKENS,
                 )
@@ -1294,7 +1295,8 @@ class PydanticAIOptimizerService:
                     "{{CUSTOMIZATION_LEVEL_INSTRUCTIONS}}", 
                     "Use a balanced approach to customization."
                 ),
-                thinking_config={"budget_tokens": self.THINKING_BUDGET, "type": "enabled"},
+                # Disabled thinking config to avoid excessive API calls
+                thinking_config=None,
                 temperature=self.TEMPERATURE,
                 max_tokens=self.MAX_TOKENS,
             )
@@ -1365,10 +1367,9 @@ class PydanticAIOptimizerService:
             try:
                 # Use a longer timeout for complex resume customization
                 from app.core.parallel_config import TASK_TIMEOUT_SECONDS
-                customized_resume = await asyncio.wait_for(
-                    implementation_agent.run(user_message),
-                    timeout=TASK_TIMEOUT_SECONDS,  # Use configured timeout
-                )
+                # No need to use a timeout for the implementation agent
+                # Let it run as long as needed for complex customizations
+                customized_resume = await implementation_agent.run(user_message)
             except asyncio.TimeoutError:
                 logfire.error(
                     "Timeout in implementation agent",
@@ -1455,10 +1456,9 @@ class PydanticAIOptimizerService:
             # Run the verification agent
             try:
                 from app.core.parallel_config import TASK_TIMEOUT_SECONDS
-                verification_result = await asyncio.wait_for(
-                    verification_agent.run(verification_message),
-                    timeout=TASK_TIMEOUT_SECONDS,  # Use configured timeout
-                )
+                # No need to use a timeout for the verification agent
+                # Let it run as long as needed for complex verifications
+                verification_result = await verification_agent.run(verification_message)
             except asyncio.TimeoutError:
                 logfire.error(
                     "Timeout in verification agent",

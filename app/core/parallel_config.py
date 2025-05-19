@@ -13,9 +13,9 @@ from app.core.config import settings
 MAX_CONCURRENT_TASKS = getattr(settings, 'MAX_CONCURRENT_TASKS', 5)
 
 # Maximum timeout for parallel tasks in seconds
-# Tasks that exceed this timeout will be considered failed
-# Increased to 180 seconds to account for Claude 3.7 Sonnet processing time
-TASK_TIMEOUT_SECONDS = getattr(settings, 'PARALLEL_TASK_TIMEOUT', 180)
+# We're using a very high value to essentially disable the timeout
+# This allows the model to take as long as it needs for complex customizations
+TASK_TIMEOUT_SECONDS = getattr(settings, 'PARALLEL_TASK_TIMEOUT', 3600)  # 1 hour timeout
 
 # Default weights for different resume sections
 # Used to calculate the importance of each section for optimization
