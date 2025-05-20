@@ -26,7 +26,7 @@ from app.schemas import (
     TaskStatusResponse
 )
 from app.services.claude_code.executor import ClaudeCodeExecutor, ClaudeCodeExecutionError
-from app.services.claude_code.progress_tracker import progress_tracker, progress_update_callback
+from app.services.claude_code.progress_tracker import progress_tracker
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -331,12 +331,11 @@ async def customize_resume_async(
         executor = get_claude_code_executor()
         
         # Start the customization in the background
-        callback = progress_update_callback(task.task_id)
-        result = executor.customize_resume_with_progress(
+        result = executor.customize_resume(
             resume_path=resume_path,
             job_description_path=job_description_path,
             output_path=output_path,
-            progress_callback=callback,
+            task_id=task.task_id,
             timeout=timeout_seconds
         )
         
