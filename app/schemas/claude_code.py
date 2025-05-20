@@ -51,6 +51,81 @@ class QueuedTaskResponse(BaseModel):
     status: str = Field(..., description="Current status of the task")
 
 
+class TodoInfo(BaseModel):
+    """
+    Information about todo items tracked in logs.
+    
+    Attributes:
+        total: Total number of todo items found
+        completed: Number of completed todo items
+        completed_items: List of completed todo items
+        all_items: List of all todo items
+        current_item: Currently active todo item
+    """
+    total: int = Field(0, description="Total number of todo items")
+    completed: int = Field(0, description="Number of completed todo items")
+    completed_items: List[str] = Field(
+        default_factory=list,
+        description="List of completed todo items"
+    )
+    all_items: List[str] = Field(
+        default_factory=list,
+        description="List of all todo items"
+    )
+    current_item: Optional[str] = Field(
+        None,
+        description="Currently active todo item"
+    )
+
+
+class LogAnalysis(BaseModel):
+    """
+    Analysis of log content for key events and progress indicators.
+    
+    Attributes:
+        has_error: Whether the logs contain errors
+        has_todos: Whether the logs contain todo items
+        has_output: Whether output files were generated
+        has_completion: Whether the task completed successfully
+        total_log_count: Total number of log lines
+        todo_percent_complete: Percent of todo items completed
+        completed_items: List of completed todo items
+        current_item: Currently active todo item
+    """
+    has_error: bool = Field(
+        False, 
+        description="Whether the logs contain errors"
+    )
+    has_todos: bool = Field(
+        False, 
+        description="Whether the logs contain todo items"
+    )
+    has_output: bool = Field(
+        False, 
+        description="Whether output files were generated"
+    )
+    has_completion: bool = Field(
+        False, 
+        description="Whether the task completed successfully"
+    )
+    total_log_count: int = Field(
+        0, 
+        description="Total number of log lines"
+    )
+    todo_percent_complete: Optional[int] = Field(
+        None, 
+        description="Percent of todo items completed"
+    )
+    completed_items: Optional[List[str]] = Field(
+        None,
+        description="List of completed todo items"
+    )
+    current_item: Optional[str] = Field(
+        None,
+        description="Currently active todo item"
+    )
+
+
 class TaskStatusResponse(BaseModel):
     """
     Response model for task status requests.
@@ -63,11 +138,13 @@ class TaskStatusResponse(BaseModel):
         result: Optional task result data (only present when status is "completed")
         error: Optional error message (only present when status is "error")
         logs: Optional list of log messages (only present if include_logs=True)
+        log_analysis: Analysis of log content for key events
+        todos: Information about todo items tracked in logs
     """
     task_id: str = Field(..., description="Unique identifier for the task")
     status: str = Field(
         ..., 
-        description="Current status (initializing, analyzing, planning, implementing, completed, error)"
+        description="Current status (initializing, running, completed, error)"
     )
     progress: int = Field(
         ..., 
@@ -95,6 +172,14 @@ class TaskStatusResponse(BaseModel):
     logs: Optional[List[str]] = Field(
         None,
         description="Log messages from the execution (only present if include_logs=True)"
+    )
+    log_analysis: Optional[LogAnalysis] = Field(
+        None,
+        description="Analysis of log content for key events and progress indicators"
+    )
+    todos: Optional[TodoInfo] = Field(
+        None,
+        description="Information about todo items tracked in logs"
     )
 
 

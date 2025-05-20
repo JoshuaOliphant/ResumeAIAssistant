@@ -16,6 +16,7 @@ import tempfile
 import threading
 import queue
 import time
+import re
 from pathlib import Path
 from typing import Dict, Any, Optional, Callable, List
 
@@ -459,46 +460,21 @@ Do not create subdirectories for output files.
             stdout_buffer = []  # Buffer for collecting JSON output
             json_mode = False   # Flag to track if we're collecting JSON output
             
-            # Send periodic progress updates based on elapsed time
-            def update_progress(elapsed):
-                # Calculate progress percentage based on elapsed time relative to timeout
-                # Maximum 90% progress from time-based estimation
-                progress_pct = min(90, int((elapsed / timeout_seconds) * 100))
-                
-                # Send progress update with appropriate message
-                if progress_pct < 25:
-                    message = "Analyzing resume and job requirements"
-                elif progress_pct < 50:
-                    message = "Generating customization strategy"
-                elif progress_pct < 75:
-                    message = "Applying optimization to resume sections"
-                else:
-                    message = "Finalizing customized resume"
-                    
-                # Add log with progress information
-                log_streamer.add_log(
-                    task_id, 
-                    f"Progress: {message}",
-                    level="info",
-                    metadata={
-                        "progress_pct": progress_pct,
-                        "elapsed_time": elapsed,
-                        "timeout": timeout_seconds
-                    }
-                )
-                
-                return last_progress_time
-            
             # Poll the process until it completes or times out
             try:
                 while process.poll() is None:
                     # Check if timeout has been exceeded
                     elapsed = time.time() - start_time
                     
-                    # Send progress updates every 15 seconds if no other activity
-                    if time.time() - last_progress_time > 15:
+                    # Just log elapsed time for monitoring, but don't create artificial progress
+                    if time.time() - last_progress_time > 30:  # Reduced frequency to 30 seconds
                         last_progress_time = time.time()
-                        update_progress(elapsed)
+                        # Just log elapsed time without updating progress percentage
+                        log_streamer.add_log(
+                            task_id, 
+                            f"Still processing, elapsed time: {int(elapsed)}s",
+                            level="info"
+                        )
                     
                     # Check for timeout
                     if elapsed > timeout_seconds:
@@ -886,7 +862,7 @@ Do not create subdirectories for output files.
         timeout: Optional[int] = None
     ):
         """
-        Execute the customization with progress updates.
+        Execute the customization with log-based progress tracking.
         
         Args:
             resume_path: Path to the resume file
@@ -898,40 +874,51 @@ Do not create subdirectories for output files.
         """
         # Import log streamer
         from app.services.claude_code.log_streamer import get_log_streamer
+        from app.services.claude_code.progress_tracker import progress_tracker
         log_streamer = get_log_streamer()
         
         # Print to console for real-time tracking
         print(f"[Claude Code] Starting customization task {task_id} with timeout: {timeout or 'default'} seconds")
         
         try:
-            def update_progress(status: str, progress: int, message: str):
-                # Add to log
-                log_streamer.add_log(task_id, f"Progress: {message} ({progress}%)")
+            # Initialize with a basic loading message
+            # All real progress will come from log parsing rather than artificial stages
+            log_streamer.add_log(task_id, "Starting Claude Code resume customization...")
+            
+            # Get task to update progress
+            task = progress_tracker.get_task(task_id)
+            if task:
+                task.update("initializing", 0, "Starting Claude Code resume customization")
                 
-                # Print to console for real-time tracking
-                print(f"[Claude Code] {task_id}: Progress: {message} ({progress}%)")
-                
+                # Register for progress callback if provided
                 if progress_callback:
-                    # Get current logs
-                    logs = log_streamer.get_logs(task_id)
+                    # Create a subscriber function
+                    def progress_subscriber(update):
+                        # Get current logs
+                        logs = log_streamer.get_logs(task_id)
+                        
+                        # Add logs to the update
+                        update["logs"] = logs
+                        
+                        # Call progress callback
+                        progress_callback(update)
+                        
+                    # Set up an async queue for updates
+                    import asyncio
+                    update_queue = asyncio.Queue()
+                    task.add_subscriber(update_queue)
                     
-                    # Call progress callback with status, progress, and logs
+                    # Send initial progress
                     progress_callback({
                         "task_id": task_id,
-                        "status": status,
-                        "progress": progress,
-                        "message": message,
-                        "logs": logs
+                        "status": "initializing",
+                        "progress": 0,
+                        "message": "Starting Claude Code resume customization",
+                        "logs": log_streamer.get_logs(task_id)
                     })
-            
-            # Phase 1: Research & Analysis
-            update_progress("analyzing", 10, "Analyzing resume and job description")
             
             # Execute the actual customization with streaming logs
             try:
-                # This will run with logs streamed to the log_streamer
-                update_progress("executing", 30, "Executing Claude Code")
-                
                 # Run customization with our task_id for log streaming
                 result = self.customize_resume(
                     resume_path=resume_path,
@@ -943,33 +930,53 @@ Do not create subdirectories for output files.
                 
                 # Check if output files exist and create them if not
                 if not os.path.exists(output_path):
-                    print(f"[Claude Code] {task_id}: WARNING: Output file not found at {output_path}, generating basic file")
+                    log_message = f"WARNING: Output file not found at {output_path}, generating basic file"
+                    print(f"[Claude Code] {task_id}: {log_message}")
+                    log_streamer.add_log(task_id, log_message, level="warning")
+                    
                     # Write something to the output path so we don't get an error
                     with open(output_path, 'w') as f:
                         f.write("# Customized Resume\n\nClaude Code did not produce a valid customized resume. Please try again.")
                 
                 summary_path = os.path.join(os.path.dirname(output_path), "customized_resume_output.md")
                 if not os.path.exists(summary_path):
-                    print(f"[Claude Code] {task_id}: WARNING: Summary file not found at {summary_path}, generating basic file")
+                    log_message = f"WARNING: Summary file not found at {summary_path}, generating basic file"
+                    print(f"[Claude Code] {task_id}: {log_message}")
+                    log_streamer.add_log(task_id, log_message, level="warning")
+                    
                     # Write something to the summary path
                     with open(summary_path, 'w') as f:
                         f.write("# Customization Summary\n\nClaude Code did not produce a valid customization summary. Please try again.")
                 
-                # Process is complete, update progress
-                update_progress("processing", 90, "Finalizing customization")
+                # Process is complete - add log to trigger completion
+                log_streamer.add_log(task_id, "Claude Code execution completed successfully")
                 
-                # Complete
-                update_progress("completed", 100, "Customization complete")
+                # If task wasn't updated by log parsing, force to completed
+                task = progress_tracker.get_task(task_id)
+                if task and task.status != "completed":
+                    task.update("completed", 100, "Customization complete")
                 
             except subprocess.TimeoutExpired:
                 logger.error(f"Claude Code execution timed out for task {task_id}")
-                update_progress("error", 0, "Claude Code execution timed out")
+                log_streamer.add_log(task_id, "ERROR: Claude Code execution timed out", level="error")
+                
+                # Explicitly set error state for progress tracking
+                task = progress_tracker.get_task(task_id)
+                if task:
+                    task.set_error("Claude Code execution timed out")
+                    
                 raise
             
         except Exception as e:
             logger.error(f"Error in customization task {task_id}: {str(e)}")
-            log_streamer.add_log(task_id, f"ERROR: {str(e)}")
+            log_streamer.add_log(task_id, f"ERROR: {str(e)}", level="error")
             
+            # Update task for progress tracking
+            task = progress_tracker.get_task(task_id)
+            if task:
+                task.set_error(str(e))
+                
+            # Send final error update via callback if provided
             if progress_callback:
                 # Get logs for error context
                 logs = log_streamer.get_logs(task_id)

@@ -126,6 +126,15 @@ class ClaudeCodeLogStreamer:
                 logger.error(f"Task {task_id}: {message}")
             elif level == "warning":
                 logger.warning(f"Task {task_id}: {message}")
+                
+            # Update progress tracker based on this log message
+            try:
+                # Deferred import to avoid circular imports
+                from app.services.claude_code.progress_tracker import progress_tracker
+                progress_tracker.process_log(task_id, message)
+            except Exception as e:
+                # Just log it but don't interrupt the main flow
+                logger.error(f"Error updating progress from log: {str(e)}")
     
     def get_logs(self, task_id: str) -> List[str]:
         """
