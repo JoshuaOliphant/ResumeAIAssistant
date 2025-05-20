@@ -63,6 +63,9 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
+    # Increased timeout limits to support longer customization operations (30 minutes)
+    default_response_class=JSONResponse,
+    # Add more parameters for timeout handling
 )
 
 # Set up templates

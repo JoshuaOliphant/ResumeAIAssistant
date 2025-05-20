@@ -154,13 +154,32 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
         customizationLevel,
         operationId ? { 
           headers: { 'X-Operation-ID': operationId },
-          timeout: 900  // Use 15-minute timeout (900 seconds)
-        } : { timeout: 900 }
+          timeout: 1800  // Use 30-minute timeout (1800 seconds)
+        } : { timeout: 1800 }
       );
-      console.log("Claude Code customization result:", result);
       
-      // Store the result
-      setCustomizedVersion(result);
+      // Log the raw result for debugging
+      console.log("Claude Code customization raw result:", result);
+      console.log("Result type:", typeof result);
+      console.log("Result keys:", Object.keys(result));
+      console.log("Content field:", result.customized_resume || result.content);
+      
+      // Ensure we have all the needed fields from the result
+      console.log('Claude Code customization complete, received result:', result);
+      
+      // Create a valid customizedVersion object even if the structure from API is different
+      const versionObj = {
+        id: result.id || result.customization_id || 'latest',
+        resume_id: resumeId,
+        content: result.customized_resume || result.content,
+        version_number: 1,
+        is_customized: true,
+        job_description_id: jobId,
+        created_at: new Date().toISOString()
+      };
+      
+      console.log('Created version object:', versionObj);
+      setCustomizedVersion(versionObj);
       
       // Store customization summary if available 
       if (result.customization_summary) {
@@ -177,8 +196,14 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       
       // Call onSuccess callback if provided
       if (onSuccess) {
-        onSuccess(result);
+        onSuccess(versionObj);
       }
+      
+      // Automatically navigate to results page after a short delay
+      setTimeout(() => {
+        console.log('Auto-navigating to results page');
+        handleViewResults();
+      }, 1500);
     } catch (err) {
       console.error("Error customizing resume with Claude Code:", err);
       setError(err instanceof Error ? err.message : "Failed to customize resume");
@@ -221,7 +246,12 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
   // Handle view results (direct to customization result page)
   const handleViewResults = () => {
     if (customizedVersion) {
-      router.push(`/customize/result?resumeId=${resumeId}&jobId=${jobId}&versionId=${customizedVersion.id}`);
+      // Check if we have a valid version ID, if not use a fallback approach
+      const versionId = customizedVersion.id || 'latest';
+      console.log('Navigating to results page with params:', { resumeId, jobId, versionId });
+      router.push(`/customize/result?resumeId=${resumeId}&jobId=${jobId}&versionId=${versionId}`);
+    } else {
+      console.error('Cannot navigate to results: customizedVersion is null or undefined');
     }
   };
   

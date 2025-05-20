@@ -206,7 +206,8 @@ export function ProgressTracker({
       try {
         // Get the token from localStorage instead of using getAccessToken
         const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
-        const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5000/api/v1'}/progress/ws/${taskId}?token=${token}`;
+        // Use the same port as the API configuration (5001 instead of 5000)
+        const wsUrl = `${process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5001/api/v1'}/progress/ws/${taskId}?token=${token}`;
         console.log(`Connecting to WebSocket: ${wsUrl.replace(/token=.*/, 'token=***')}`);
         
         const ws = new WebSocket(wsUrl);
@@ -307,12 +308,27 @@ export function ProgressTracker({
     const loadLogs = async () => {
       try {
         setIsLoadingLogs(true);
-        const initialLogs = await ClaudeCodeService.getLogs(taskId);
-        setLogs(initialLogs);
+        
+        // Add debug message
+        console.log(`Loading logs for task ID: ${taskId}`);
+        
+        try {
+          // Get initial logs - don't block on failure
+          const initialLogs = await ClaudeCodeService.getLogs(taskId);
+          console.log(`Received ${initialLogs.length} logs from API`);
+          setLogs(initialLogs);
+        } catch (err) {
+          console.error('Error fetching initial logs:', err);
+          // Add diagnostic log
+          setLogs(prev => [...prev, `[System] Error fetching logs: ${err.message || 'Unknown error'}`]);
+        }
+        
         setIsLoadingLogs(false);
         
         // Start streaming logs
+        console.log(`Starting log stream for task ID: ${taskId}`);
         const cleanup = ClaudeCodeService.streamLogs(taskId, (newLogs) => {
+          console.log(`Received ${newLogs.length} new logs from stream`);
           setLogs(prev => {
             // Filter out duplicates
             const allLogs = [...prev, ...newLogs];
@@ -328,8 +344,10 @@ export function ProgressTracker({
         
         logStreamCleanupRef.current = cleanup;
       } catch (error) {
-        console.error('Error loading logs:', error);
+        console.error('Error in logs handling:', error);
         setIsLoadingLogs(false);
+        // Add error to logs display for visibility
+        setLogs(prev => [...prev, `[System] Error setting up log streaming: ${error.message || 'Unknown error'}`]);
       }
     };
     
@@ -338,6 +356,7 @@ export function ProgressTracker({
     // Cleanup function
     return () => {
       if (logStreamCleanupRef.current) {
+        console.log('Cleaning up log stream');
         logStreamCleanupRef.current();
       }
     };

@@ -24,37 +24,64 @@ export function CustomizationResult({ resumeId, versionId, originalVersionId }: 
   // Fetch customized version and diff data
   useEffect(() => {
     const fetchData = async () => {
-      if (!resumeId || !versionId) return
+      if (!resumeId) {
+        console.error("Missing resumeId parameter");
+        setError("Resume ID is required");
+        setLoading(false);
+        return;
+      }
       
       try {
-        setLoading(true)
-        setError(null)
-        console.log("Fetching version data for:", resumeId, versionId);
+        setLoading(true);
+        setError(null);
+        console.log("Fetching resume data for:", resumeId, "with version:", versionId || "latest");
         
-        // For development mode, get the resume directly 
-        // (since dev storage only keeps current version)
+        // Get the resume data
         const resume = await ResumeService.getResume(resumeId);
         console.log("Got resume:", resume);
         
-        // In dev mode, we'll just use the current version
-        // This won't be an issue in production where we can fetch specific versions
-        setCustomizedVersion(resume.current_version);
-        console.log("Set customized version:", resume.current_version);
+        // Find the appropriate version to display
+        let versionToUse;
+        
+        if (versionId === 'latest' || !versionId) {
+          // Use the current version if no specific version is requested or 'latest' is specified
+          console.log("Using current version:", resume.current_version);
+          versionToUse = resume.current_version;
+        } else {
+          // Try to find the specified version
+          versionToUse = resume.current_version;
+          // In production, we would fetch the specific version
+          // For now, we'll use the current version as a fallback
+          console.log("Using current version for now (would fetch specific version in production)");
+        }
+        
+        // Set the customized version
+        if (!versionToUse) {
+          throw new Error("Could not find the requested resume version");
+        }
+        
+        setCustomizedVersion(versionToUse);
+        console.log("Set customized version:", versionToUse);
         
         try {
           // Get resume diff - handle this separately so if it fails, we still show the resume
-          const diff = await ResumeService.getResumeDiff(resumeId, resume.current_version.id, originalVersionId)
+          const diffVersionId = versionToUse.id;
+          console.log("Fetching diff using version ID:", diffVersionId);
+          
+          const diff = await ResumeService.getResumeDiff(resumeId, diffVersionId, originalVersionId);
           console.log("Got resume diff:", diff);
           
           // Make sure the diff has the required properties
-          if (!diff.section_analysis) {
+          let updatedDiff = { ...diff };
+          
+          if (!updatedDiff.section_analysis) {
             console.warn("Diff is missing section_analysis, adding an empty object");
-            diff.section_analysis = {};
+            updatedDiff.section_analysis = {};
           }
           
-          if (!diff.diff_statistics) {
+          if (!updatedDiff.diff_statistics) {
             console.warn("Diff is missing diff_statistics, adding default values");
-            diff.diff_statistics = {
+            updatedDiff.diff_statistics = {
               additions: 0,
               deletions: 0,
               modifications: 0
@@ -62,37 +89,39 @@ export function CustomizationResult({ resumeId, versionId, originalVersionId }: 
           }
 
           // Ensure original and customized content are strings
-          if (!diff.original_content || typeof diff.original_content !== 'string') {
-            console.warn("Diff is missing or invalid original_content, using empty string");
-            diff.original_content = "";
+          if (!updatedDiff.original_content || typeof updatedDiff.original_content !== 'string') {
+            console.warn("Diff is missing or invalid original_content, using resume content");
+            updatedDiff.original_content = resume.current_version?.content || "";
           }
           
-          if (!diff.customized_content || typeof diff.customized_content !== 'string') {
-            console.warn("Diff is missing or invalid customized_content, using empty string");
-            diff.customized_content = "";
+          if (!updatedDiff.customized_content || typeof updatedDiff.customized_content !== 'string') {
+            console.warn("Diff is missing or invalid customized_content, using current version content");
+            updatedDiff.customized_content = versionToUse.content || "";
           }
           
           // Strip any HTML from the content that might interfere with the diff viewer
-          if (diff.original_content.includes('<span') || diff.original_content.includes('</span>')) {
+          if (updatedDiff.original_content.includes('<span') || updatedDiff.original_content.includes('</span>')) {
             console.warn("Stripping HTML from original_content");
-            diff.original_content = diff.original_content.replace(/<\/?[^>]+(>|$)/g, "");
+            updatedDiff.original_content = updatedDiff.original_content.replace(/<\/?[^>]+(>|$)/g, "");
           }
           
-          if (diff.customized_content.includes('<span') || diff.customized_content.includes('</span>')) {
+          if (updatedDiff.customized_content.includes('<span') || updatedDiff.customized_content.includes('</span>')) {
             console.warn("Stripping HTML from customized_content");
-            diff.customized_content = diff.customized_content.replace(/<\/?[^>]+(>|$)/g, "");
+            updatedDiff.customized_content = updatedDiff.customized_content.replace(/<\/?[^>]+(>|$)/g, "");
           }
           
-          setResumeDiff(diff)
-          console.log("Set resume diff:", diff);
+          setResumeDiff(updatedDiff);
+          console.log("Set resume diff:", updatedDiff);
         } catch (diffErr) {
           console.error("Error fetching diff:", diffErr);
+          console.log("Creating fallback diff object using resume content");
+          
           // Create a minimal valid diff object to avoid rendering errors
           setResumeDiff({
             id: resumeId,
             title: resume.title,
             original_content: resume.current_version?.content?.replace(/<\/?[^>]+(>|$)/g, "") || "",
-            customized_content: resume.current_version?.content?.replace(/<\/?[^>]+(>|$)/g, "") || "",
+            customized_content: versionToUse.content?.replace(/<\/?[^>]+(>|$)/g, "") || "",
             diff_content: "",
             diff_statistics: {
               additions: 0,
@@ -104,14 +133,14 @@ export function CustomizationResult({ resumeId, versionId, originalVersionId }: 
           });
         }
       } catch (err) {
-        console.error("Error fetching customization result:", err)
-        setError(err instanceof Error ? err.message : "Failed to load customization result")
+        console.error("Error fetching customization result:", err);
+        setError(err instanceof Error ? err.message : "Failed to load customization result");
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
     }
     
-    fetchData()
+    fetchData();
   }, [resumeId, versionId, originalVersionId])
 
   // Handle file download

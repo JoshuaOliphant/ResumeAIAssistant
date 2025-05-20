@@ -13,9 +13,28 @@ export default function CustomizationResultPage() {
   const jobId = searchParams.get('jobId')
   const versionId = searchParams.get('versionId')
   
-  // Log params for debugging
+  // Enhanced debug logging for navigation parameters
   useEffect(() => {
-    console.log("Result page params:", { resumeId, jobId, versionId });
+    console.log("Result page loaded with params:", { 
+      resumeId, 
+      jobId, 
+      versionId,
+      hasAllParams: Boolean(resumeId && versionId),
+      fullUrl: typeof window !== 'undefined' ? window.location.href : 'N/A'
+    });
+    
+    // Track parameter changes
+    if (!resumeId) {
+      console.warn("Missing resumeId parameter in result page");
+    }
+    
+    if (!versionId) {
+      console.warn("Missing versionId parameter in result page");
+    }
+    
+    if (!jobId) {
+      console.warn("Missing jobId parameter in result page (not critical)");
+    }
   }, [resumeId, jobId, versionId]);
   
   // Check if all required params are present

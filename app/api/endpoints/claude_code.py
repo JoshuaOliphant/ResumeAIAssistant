@@ -27,7 +27,7 @@ from app.schemas import (
 )
 from app.services.claude_code.executor import ClaudeCodeExecutor, ClaudeCodeExecutionError
 from app.services.claude_code.progress_tracker import progress_tracker, progress_update_callback
-from app.core import config
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -137,7 +137,7 @@ async def customize_resume_sync(
             timeout_seconds = min(x_operation_timeout, settings.CLAUDE_CODE_MAX_TIMEOUT)
             logger.info(f"Using custom timeout: {timeout_seconds} seconds")
         else:
-            timeout_seconds = settings.CLAUDE_CODE_TIMEOUT  # Use default (15 min)
+            timeout_seconds = 1800  # Use 30-minute default
             logger.info(f"Using default timeout: {timeout_seconds} seconds")
             
         # Check if we have an operation ID from the header parameter
@@ -166,11 +166,21 @@ async def customize_resume_sync(
         executor = get_claude_code_executor()
         
         # Set up a progress tracker task for this operation
+        # Get or create task using the task ID
         task = progress_tracker.get_task(task_id)
         if not task:
             # Create new task if it doesn't exist
+            logger.info(f"Creating new progress tracker task with ID: {task_id}")
             task = progress_tracker.create_task()
-            task.task_id = task_id
+            task.task_id = task_id  # Explicitly set the task ID
+            
+            # Log confirmation of task creation
+            logger.info(f"Task created with ID: {task.task_id}")
+            # Verify task is properly registered
+            if not progress_tracker.get_task(task_id):
+                logger.warning(f"Task verification failed - newly created task not found!")
+        else:
+            logger.info(f"Using existing progress tracker task with ID: {task_id}")
         
         # Execute the customization with logs and timeout
         result = executor.customize_resume(
@@ -227,7 +237,7 @@ async def customize_resume_sync(
             raise HTTPException(status_code=408, detail=f"Claude Code execution timed out: {str(e)}")
         
         # Check if fallback is enabled
-        if config.ENABLE_FALLBACK:
+        if settings.ENABLE_FALLBACK:
             logger.info("Falling back to legacy customization service")
             return await fallback_customize_resume(request, db)
         
@@ -279,7 +289,7 @@ async def customize_resume_async(
             timeout_seconds = min(x_operation_timeout, settings.CLAUDE_CODE_MAX_TIMEOUT)
             logger.info(f"Using custom timeout: {timeout_seconds} seconds")
         else:
-            timeout_seconds = settings.CLAUDE_CODE_TIMEOUT  # Use default (15 min)
+            timeout_seconds = 1800  # Use 30-minute default
             logger.info(f"Using default timeout: {timeout_seconds} seconds")
             
         # Use operation ID if provided
@@ -306,11 +316,21 @@ async def customize_resume_async(
             # Use existing task ID if provided
             task = progress_tracker.get_task(task_id)
             if not task:
+                logger.info(f"Creating new progress tracker task with provided ID: {task_id}")
                 task = progress_tracker.create_task()
                 task.task_id = task_id
+                
+                # Log confirmation of task creation
+                logger.info(f"Task created with provided ID: {task.task_id}")
+                # Verify task is properly registered
+                if not progress_tracker.get_task(task_id):
+                    logger.warning(f"Task verification failed - newly created task not found!")
+            else:
+                logger.info(f"Using existing progress tracker task with ID: {task_id}")
         else:
             # Create a new task with a generated ID
             task = progress_tracker.create_task()
+            logger.info(f"Created new task with generated ID: {task.task_id}")
         
         # Initialize the Claude Code executor
         executor = get_claude_code_executor()
@@ -429,13 +449,17 @@ async def get_customize_logs(
 @router.get("/customize-resume/logs/{task_id}/stream")
 async def stream_customize_logs(
     task_id: str,
+    max_duration: Optional[int] = Query(3600, ge=10, le=86400, description="Maximum stream duration in seconds"),
+    format: Optional[str] = Query("sse", description="Output format: 'sse' for Server-Sent Events or 'json' for direct JSON streaming"),
     db: Session = Depends(get_db)
 ):
     """
-    Stream logs for a customization task as they arrive.
+    Stream logs for a customization task as they arrive in real-time.
     
     Args:
         task_id: ID of the task to stream logs for
+        max_duration: Maximum duration to stream logs (10s to 24h, default: 1h)
+        format: Output format, either 'sse' (default) or 'json'
         db: Database session
         
     Returns:
@@ -450,51 +474,102 @@ async def stream_customize_logs(
     from app.services.claude_code.log_streamer import get_log_streamer
     log_streamer = get_log_streamer()
     
-    # Set up streaming response
-    async def stream_generator():
-        # Yield initial logs
-        logs = log_streamer.get_logs(task_id)
-        yield "data: " + json.dumps({"task_id": task_id, "logs": logs}) + "\n\n"
-        
-        # Create queue for new logs
-        q = log_streamer.create_log_stream(task_id)
-        
-        # Stream new logs as they arrive
-        while True:
-            # Check if task has completed or errored
-            if task.status in ["completed", "error"]:
-                # Yield final logs
-                logs = log_streamer.get_logs(task_id)
-                yield "data: " + json.dumps({"task_id": task_id, "logs": logs, "status": task.status}) + "\n\n"
-                # End stream
-                break
+    # Set up streaming response based on format
+    if format.lower() == "sse":
+        # Server-Sent Events format
+        async def sse_generator():
+            # Yield initial logs
+            logs = log_streamer.get_logs(task_id)
+            yield "data: " + json.dumps({"task_id": task_id, "logs": logs, "status": task.status}) + "\n\n"
             
+            # Stream logs as they arrive using the enhanced streamer
             try:
-                # Wait for a new log message
-                try:
-                    # Try to get a message with a short timeout
-                    message = await asyncio.get_event_loop().run_in_executor(
-                        None, lambda: q.get(timeout=1)
-                    )
-                except queue.Empty:
-                    # If no new message, send a heartbeat
+                async for log in log_streamer.stream_logs(task_id, timeout=max_duration):
+                    # If log is a dict, it's a structured log
+                    if isinstance(log, dict):
+                        yield "data: " + json.dumps({
+                            "task_id": task_id, 
+                            "new_log": log.get("formatted_message", str(log)),
+                            "log_data": log
+                        }) + "\n\n"
+                    else:
+                        # Plain text log
+                        yield "data: " + json.dumps({"task_id": task_id, "new_log": log}) + "\n\n"
+                    
+                    # Add heartbeat comment every 10 logs to keep connection alive
                     yield ": heartbeat\n\n"
-                    continue
                 
-                # Send the new message
-                if message:
-                    yield "data: " + json.dumps({"task_id": task_id, "new_log": message}) + "\n\n"
+                # At end of stream, yield final state
+                logs = log_streamer.get_logs(task_id)
+                yield "data: " + json.dumps({
+                    "task_id": task_id, 
+                    "logs": logs, 
+                    "status": task.status,
+                    "completed": True
+                }) + "\n\n"
+                
             except Exception as e:
-                logger.error(f"Error streaming logs: {str(e)}")
+                logger.error(f"Error in SSE log stream for task {task_id}: {str(e)}")
                 yield "data: " + json.dumps({"error": str(e)}) + "\n\n"
-                break
         
-    # Return streaming response
-    return StreamingResponse(
-        stream_generator(),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "Connection": "keep-alive"}
-    )
+        # Return SSE streaming response
+        return StreamingResponse(
+            sse_generator(),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache, no-transform",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"  # Disable proxy buffering
+            }
+        )
+        
+    else:
+        # Direct JSON streaming
+        async def json_generator():
+            # Stream logs as they arrive using the enhanced streamer
+            try:
+                # Start with task info and existing logs
+                yield json.dumps({
+                    "task_id": task_id,
+                    "status": task.status,
+                    "logs": log_streamer.get_logs(task_id),
+                    "type": "init"
+                })
+                
+                # Stream new logs as they arrive
+                async for log in log_streamer.stream_logs(task_id, timeout=max_duration):
+                    # If log is a dict, it's a structured log
+                    if isinstance(log, dict):
+                        yield json.dumps({
+                            "task_id": task_id,
+                            "log": log,
+                            "type": "log"
+                        })
+                    else:
+                        # Plain text log
+                        yield json.dumps({
+                            "task_id": task_id,
+                            "log": log,
+                            "type": "log"
+                        })
+                
+                # Final state
+                yield json.dumps({
+                    "task_id": task_id,
+                    "status": task.status,
+                    "type": "complete"
+                })
+                
+            except Exception as e:
+                logger.error(f"Error in JSON log stream for task {task_id}: {str(e)}")
+                yield json.dumps({"error": str(e), "type": "error"})
+        
+        # Return JSON lines streaming response
+        return StreamingResponse(
+            json_generator(),
+            media_type="application/json-seq",
+            headers={"Cache-Control": "no-cache"}
+        )
 
 
 @router.get("/customize-resume/result/{task_id}", response_model=CustomizedResumeResponse)
@@ -605,7 +680,7 @@ async def customize_content(
             timeout_seconds = min(x_operation_timeout, settings.CLAUDE_CODE_MAX_TIMEOUT)
             logger.info(f"Using custom timeout: {timeout_seconds} seconds")
         else:
-            timeout_seconds = settings.CLAUDE_CODE_TIMEOUT  # Use default (15 min)
+            timeout_seconds = 1800  # Use 30-minute default
             logger.info(f"Using default timeout: {timeout_seconds} seconds")
             
         # Check if we have an operation ID from the header parameter
@@ -673,7 +748,7 @@ async def customize_content(
             raise HTTPException(status_code=408, detail=f"Claude Code execution timed out: {str(e)}")
             
         # Check if fallback is enabled
-        if config.ENABLE_FALLBACK:
+        if settings.ENABLE_FALLBACK:
             logger.info("Falling back to legacy customization service")
             return await fallback_customize_resume(request, db)
         

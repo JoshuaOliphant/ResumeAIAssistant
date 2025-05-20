@@ -105,7 +105,7 @@ class ClaudeCodeExecutor:
             with open(job_description_path, 'r') as f:
                 job_description_content = f.read()
             
-            # Create a structured prompt based on the template
+            # Create a structured prompt based on the template with clearer instructions
             complete_prompt = f"""
 # Resume Customization Task
 
@@ -117,12 +117,38 @@ class ClaudeCodeExecutor:
 {self.prompt_template}
 
 ## Expected Outputs
-1. Generate customized resume in markdown format and save it to a file named "new_customized_resume.md"
-2. Create a detailed change summary and save it to a file named "customized_resume_output.md"
-3. Both output files should be saved in the current working directory (not in subdirectories)
-4. Save any intermediate files for verification
+You will need to output two primary files and several optional intermediate files.
 
-IMPORTANT: After completing all your analysis, you MUST directly create the output markdown files "new_customized_resume.md" and "customized_resume_output.md" in the current directory. Do not rely on the platform to extract content from your response.
+Instead of directly creating files (since you may not have permission), please PRINT the contents to stdout as follows:
+
+1. First, perform your complete analysis of the resume and job description
+2. Then output the customized resume with this exact format:
+   ```
+   === BEGIN CUSTOMIZED RESUME ===
+   [Your complete customized resume content in markdown format]
+   === END CUSTOMIZED RESUME ===
+   ```
+
+3. Then output the detailed change summary with this exact format:
+   ```
+   === BEGIN CUSTOMIZATION SUMMARY ===
+   [Your complete customization summary in markdown format]
+   === END CUSTOMIZATION SUMMARY ===
+   ```
+
+4. If you generate any intermediate files, output them with this format:
+   ```
+   === BEGIN INTERMEDIATE FILE: [filename] ===
+   [Content of the intermediate file]
+   === END INTERMEDIATE FILE: [filename] ===
+   ```
+
+## IMPORTANT INSTRUCTIONS
+- Do NOT attempt to use Write or Edit tools as they might require permissions
+- Instead, print ALL output using the special format markers above
+- Ensure your customized resume is complete and properly formatted in markdown
+- Include detailed change summary with match scores and specific changes made
+- Use the exact BEGIN/END markers shown above to delimit each output
             """
             
             return complete_prompt
@@ -133,7 +159,7 @@ IMPORTANT: After completing all your analysis, you MUST directly create the outp
     
     def _process_output(self, output: str) -> Dict[str, Any]:
         """
-        Process the JSON output from Claude Code.
+        Process the output from Claude Code.
         
         Args:
             output: The raw output from Claude Code
@@ -142,79 +168,89 @@ IMPORTANT: After completing all your analysis, you MUST directly create the outp
             Parsed output as a dictionary
         """
         try:
-            # Clean the output to handle only the JSON part
-            # Look for content that looks like JSON output
-            import re
-            json_match = re.search(r'({[\s\S]*})', output)
+            # Initialize result dictionary
+            result = {
+                "raw_output": output,
+                "customized_resume": "",
+                "customization_summary": "",
+                "intermediate_files": {}
+            }
             
+            # Process output now
+            
+            # Check if we have the special format markers in the output
+            # Extract customized resume
+            resume_pattern = r'=== BEGIN CUSTOMIZED RESUME ===\s*([\s\S]*?)\s*=== END CUSTOMIZED RESUME ==='
+            resume_match = re.search(resume_pattern, output)
+            if resume_match:
+                result["customized_resume"] = resume_match.group(1).strip()
+                logger.info("Successfully extracted customized resume from output")
+            
+            # Extract customization summary
+            summary_pattern = r'=== BEGIN CUSTOMIZATION SUMMARY ===\s*([\s\S]*?)\s*=== END CUSTOMIZATION SUMMARY ==='
+            summary_match = re.search(summary_pattern, output)
+            if summary_match:
+                result["customization_summary"] = summary_match.group(1).strip()
+                logger.info("Successfully extracted customization summary from output")
+            
+            # Extract any intermediate files
+            intermediate_pattern = r'=== BEGIN INTERMEDIATE FILE: ([\w\.-]+) ===\s*([\s\S]*?)\s*=== END INTERMEDIATE FILE: \1 ==='
+            intermediate_matches = re.finditer(intermediate_pattern, output)
+            
+            for match in intermediate_matches:
+                filename = match.group(1)
+                content = match.group(2).strip()
+                result["intermediate_files"][filename] = content
+                logger.info(f"Extracted intermediate file: {filename}")
+            
+            # If we found any of these, consider the extraction successful
+            if result["customized_resume"] or result["customization_summary"] or result["intermediate_files"]:
+                logger.info("Successfully extracted data using format markers")
+                return result
+            
+            # Fallback: Try to parse JSON output if any is present
+            json_match = re.search(r'({[\s\S]*})', output)
             if json_match:
                 json_str = json_match.group(1)
                 try:
                     # Parse the JSON output
                     parsed_output = json.loads(json_str)
                     
-                    # Extract the relevant parts
-                    return {
-                        "customized_resume": parsed_output.get("customized_resume", ""),
-                        "customization_summary": parsed_output.get("customization_summary", ""),
-                        "intermediate_files": parsed_output.get("intermediate_files", {})
-                    }
+                    # Extract relevant parts if available
+                    if "customized_resume" in parsed_output:
+                        result["customized_resume"] = parsed_output.get("customized_resume", "")
+                    if "customization_summary" in parsed_output:
+                        result["customization_summary"] = parsed_output.get("customization_summary", "")
+                    if "intermediate_files" in parsed_output:
+                        result["intermediate_files"] = parsed_output.get("intermediate_files", {})
+                    
+                    logger.info("Successfully parsed JSON output")
+                    return result
                 except json.JSONDecodeError:
                     logger.warning(f"Found JSON-like content but failed to parse it: {json_str[:100]}...")
             
-            # If output contains markdown content, try to extract it directly
-            markdown_content = ""
-            summary_content = ""
+            # Fallback: Look for markdown content in the output
+            if not result["customized_resume"]:
+                # Try to find a markdown resume anywhere in the output
+                md_sections = re.split(r'\n#{1,2} ', output)
+                for section in md_sections:
+                    if 'resume' in section.lower()[:50] and len(section) > 200:
+                        result["customized_resume"] = section.strip()
+                        logger.info("Found potential resume content in output")
+                        break
             
-            # Try to find files in the executor's current working directory
-            if os.path.exists("new_customized_resume.md"):
-                try:
-                    with open("new_customized_resume.md", 'r') as f:
-                        markdown_content = f.read()
-                    logger.info("Found new_customized_resume.md in current working directory")
-                except Exception as e:
-                    logger.error(f"Error reading new_customized_resume.md: {str(e)}")
+            # If we have no resume content, generate a warning
+            if not result["customized_resume"]:
+                result["customized_resume"] = "Claude Code did not produce a valid customized resume. Please try again."
+                logger.warning("No resume content found in output")
             
-            if os.path.exists("customized_resume_output.md"):
-                try:
-                    with open("customized_resume_output.md", 'r') as f:
-                        summary_content = f.read()
-                    logger.info("Found customized_resume_output.md in current working directory")
-                except Exception as e:
-                    logger.error(f"Error reading customized_resume_output.md: {str(e)}")
-                    
-            # If not found in current directory, try looking in the working directory
-            if not markdown_content or not summary_content:
-                temp_dir = self.working_dir
-                logger.info(f"Searching for output files in working directory: {temp_dir}")
-                for filename in os.listdir(temp_dir):
-                    full_path = os.path.join(temp_dir, filename)
-                    
-                    if filename == "new_customized_resume.md" and os.path.isfile(full_path) and not markdown_content:
-                        with open(full_path, 'r') as f:
-                            markdown_content = f.read()
-                            logger.info(f"Found new_customized_resume.md in {temp_dir}")
-                            
-                    elif filename == "customized_resume_output.md" and os.path.isfile(full_path) and not summary_content:
-                        with open(full_path, 'r') as f:
-                            summary_content = f.read()
-                            logger.info(f"Found customized_resume_output.md in {temp_dir}")
+            # If we have no summary content, generate a warning
+            if not result["customization_summary"]:
+                result["customization_summary"] = "Claude Code execution failed to produce a valid summary."
+                logger.warning("No summary content found in output")
             
-            if markdown_content or summary_content:
-                logger.info("Found markdown files directly in output directory")
-                return {
-                    "customized_resume": markdown_content,
-                    "customization_summary": summary_content,
-                    "raw_output": output
-                }
-                
-            # If all else fails
-            logger.warning("Claude Code output is not valid JSON and no files found, returning raw output")
-            return {
-                "raw_output": output,
-                "customized_resume": "Claude Code did not produce a valid customized resume. Please try again.",
-                "customization_summary": "Claude Code execution failed to produce a valid summary."
-            }
+            return result
+            
         except Exception as e:
             logger.error(f"Error processing Claude Code output: {str(e)}")
             return {
@@ -291,8 +327,8 @@ IMPORTANT: After completing all your analysis, you MUST directly create the outp
         from app.core.config import settings
         from app.services.claude_code.log_streamer import get_log_streamer
         
-        # Use specified timeout or default from config
-        timeout_seconds = timeout or settings.CLAUDE_CODE_TIMEOUT or 600  # 10-minute default
+        # Use specified timeout or default from config (30-minute default)
+        timeout_seconds = timeout or settings.CLAUDE_CODE_TIMEOUT or 1800  # 30-minute default
         
         try:
             # Set up task ID for logging if not provided
@@ -319,69 +355,301 @@ IMPORTANT: After completing all your analysis, you MUST directly create the outp
             logger.info("Executing Claude Code for resume customization")
             log_streamer.add_log(task_id, "Executing Claude Code process...")
             
-            # Print to console 
+            # Print to console and log for streaming
             print(f"[Claude Code] Starting customization for task: {task_id}")
+            log_streamer.add_log(task_id, f"Starting customization with 30-minute timeout. Be patient, this may take a while...")
             
+            # Set paths for Claude working directory and output
+            claude_work_dir = os.path.join(temp_dir, ".claude_work")
+            os.makedirs(claude_work_dir, exist_ok=True)
+            
+            # Create temp directories for input and output
+            input_dir = os.path.join(claude_work_dir, "input")
+            output_dir = os.path.join(claude_work_dir, "output")
+            os.makedirs(input_dir, exist_ok=True)
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Write input files to the input directory
+            prompt_file_path = os.path.join(input_dir, "prompt.txt")
+            with open(prompt_file_path, 'w') as f:
+                f.write(prompt)
+                
+            # Define command with the correct arguments for streaming
+            # Don't use --dangerously-skip-permissions since it requires interactive approval
             command = [
                 self.claude_cmd, 
-                "--print", prompt,
-                "--output-format", "json",  # Use JSON format as required with --verbose
-                "--verbose",  # Enable verbose output
+                "--print",  # Non-interactive mode
+                "--output-format", "stream-json",  # Use streaming JSON output format
+                "--verbose",  # Enable verbose output for debugging
+                # Read the prompt from file instead of passing it directly
+                f"@{prompt_file_path}"
             ]
             
+            # Log the command we're using
+            log_streamer.add_log(
+                task_id, 
+                f"Executing Claude Code command in directory: {temp_dir}",
+                level="info",
+                metadata={"command": " ".join(command)}
+            )
+            
             # Create process with pipes for stdout/stderr to enable streaming
+            # Prepare environment variables for the subprocess
+            env = os.environ.copy()
+            env["CLAUDE_CODE_OUTPUT_DIR"] = output_dir
+            
+            # Create a script that instructs how to save output
+            instructions_file = os.path.join(input_dir, "INSTRUCTIONS.md")
+            with open(instructions_file, 'w') as f:
+                f.write(f"""# IMPORTANT: Save Output Instructions
+
+Please save your output files directly to the current working directory:
+- Save the customized resume as 'new_customized_resume.md'
+- Save the customization summary as 'customized_resume_output.md'
+- Save any intermediate files to the current directory
+
+Do not create subdirectories for output files.
+""")
+            
+            # Now run the process with environment variables
             process = subprocess.Popen(
                 command,
-                cwd=temp_dir,
+                cwd=temp_dir,  # Run in temp directory where files will be created
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
                 text=True,
-                bufsize=1  # Line buffered
+                bufsize=1,  # Line buffered
+                env=env  # Pass environment variables
             )
             
-            # Set up output queue and start output threads
-            stdout_queue = queue.Queue()
-            stderr_queue = queue.Queue()
+            # Set up output queues and start output threads
+            stdout_queue = queue.Queue(maxsize=1000)  # Increased buffer size
+            stderr_queue = queue.Queue(maxsize=1000)
             
-            # Start streaming threads for stdout and stderr
-            stdout_thread = log_streamer.start_output_stream(task_id, process.stdout, stdout_queue)
-            stderr_thread = log_streamer.start_output_stream(task_id, process.stderr, stderr_queue)
+            # Log start of process execution
+            log_streamer.add_log(
+                task_id, 
+                "Starting Claude Code process with customization task", 
+                level="info",
+                metadata={"command": " ".join(command)}
+            )
+            
+            # Start streaming threads for stdout and stderr with improved naming
+            stdout_thread = log_streamer.start_output_stream(
+                task_id=task_id, 
+                process_output=process.stdout, 
+                output_queue=stdout_queue,
+                stream_type="stdout"
+            )
+            
+            stderr_thread = log_streamer.start_output_stream(
+                task_id=task_id, 
+                process_output=process.stderr, 
+                output_queue=stderr_queue,
+                stream_type="stderr"
+            )
             
             # Wait for process to complete with timeout
             start_time = time.time()
+            last_progress_time = start_time
+            last_activity_time = start_time
             
             # Collect all stdout
             all_stdout = []
+            stdout_buffer = []  # Buffer for collecting JSON output
+            json_mode = False   # Flag to track if we're collecting JSON output
+            
+            # Send periodic progress updates based on elapsed time
+            def update_progress(elapsed):
+                # Calculate progress percentage based on elapsed time relative to timeout
+                # Maximum 90% progress from time-based estimation
+                progress_pct = min(90, int((elapsed / timeout_seconds) * 100))
+                
+                # Send progress update with appropriate message
+                if progress_pct < 25:
+                    message = "Analyzing resume and job requirements"
+                elif progress_pct < 50:
+                    message = "Generating customization strategy"
+                elif progress_pct < 75:
+                    message = "Applying optimization to resume sections"
+                else:
+                    message = "Finalizing customized resume"
+                    
+                # Add log with progress information
+                log_streamer.add_log(
+                    task_id, 
+                    f"Progress: {message}",
+                    level="info",
+                    metadata={
+                        "progress_pct": progress_pct,
+                        "elapsed_time": elapsed,
+                        "timeout": timeout_seconds
+                    }
+                )
+                
+                return last_progress_time
             
             # Poll the process until it completes or times out
             try:
                 while process.poll() is None:
                     # Check if timeout has been exceeded
                     elapsed = time.time() - start_time
+                    
+                    # Send progress updates every 15 seconds if no other activity
+                    if time.time() - last_progress_time > 15:
+                        last_progress_time = time.time()
+                        update_progress(elapsed)
+                    
+                    # Check for timeout
                     if elapsed > timeout_seconds:
+                        log_streamer.add_log(
+                            task_id, 
+                            f"Process exceeded timeout limit of {timeout_seconds}s, terminating",
+                            level="error"
+                        )
                         process.terminate()
                         try:
                             process.wait(timeout=5)  # Give it 5 seconds to terminate
                         except subprocess.TimeoutExpired:
                             process.kill()  # Force kill if it doesn't terminate
+                            log_streamer.add_log(task_id, "Process did not terminate, force killing", level="error")
                         
-                        log_streamer.add_log(task_id, f"ERROR: Process timed out after {elapsed:.1f} seconds")
                         raise subprocess.TimeoutExpired(command, timeout_seconds)
                     
                     # Get any available stdout
+                    stdout_activity = False
                     try:
                         while True:
                             line = stdout_queue.get_nowait()
                             if line is None:  # End of stream
                                 break
+                                
+                            stdout_activity = True
+                            last_activity_time = time.time()
+                            
+                            # Add to our collection of stdout lines
                             all_stdout.append(line)
+                            
+                            # First check if the line itself is JSON (from stream-json)
+                            try:
+                                if line.startswith("{") and line.endswith("}"):
+                                    # This looks like JSON data directly from stream-json
+                                    parsed = json.loads(line)
+                                    if isinstance(parsed, dict):
+                                        # Extract useful information from the streaming JSON output
+                                        if "content" in parsed:
+                                            # This is a content chunk, log it
+                                            content = parsed.get("content", "")
+                                            if content.strip():
+                                                log_streamer.add_log(
+                                                    task_id,
+                                                    f"Output: {content}",
+                                                    level="info"
+                                                )
+                                        elif "status" in parsed:
+                                            # This is a status update
+                                            status = parsed.get("status")
+                                            if status == "complete":
+                                                log_streamer.add_log(
+                                                    task_id,
+                                                    "Claude Code processing completed",
+                                                    level="info",
+                                                    metadata=parsed
+                                                )
+                                            else:
+                                                log_streamer.add_log(
+                                                    task_id, 
+                                                    f"Status: {status}",
+                                                    level="info",
+                                                    metadata=parsed
+                                                )
+                            except json.JSONDecodeError:
+                                # Not JSON or invalid JSON, continue with normal processing
+                                pass
+                                
+                            # Check if line indicates JSON output beginning/ending in markdown format
+                            if "```json" in line:
+                                json_mode = True
+                                stdout_buffer = []  # Clear buffer to start collecting
+                            elif "```" in line and json_mode:
+                                json_mode = False
+                                # Process collected JSON content 
+                                if stdout_buffer:
+                                    json_content = "\n".join(stdout_buffer)
+                                    try:
+                                        # Try to parse and log any structured output
+                                        import json
+                                        parsed = json.loads(json_content)
+                                        if isinstance(parsed, dict):
+                                            # Extract and log specific parts of structured output
+                                            log_message = "Received structured output from Claude Code"
+                                            
+                                            # If we have a progress update, use it
+                                            if "progress" in parsed:
+                                                log_message = f"Progress: {parsed.get('message', 'Processing')} ({parsed.get('progress', 0)}%)"
+                                            
+                                            # If we have a status update, show it
+                                            elif "status" in parsed:
+                                                log_message = f"Status: {parsed.get('status')}: {parsed.get('message', '')}"
+                                                
+                                            # If we have a completion message, show it
+                                            elif "done" in parsed or "completed" in parsed:
+                                                log_message = "Completed Claude Code processing"
+                                                
+                                            # Log the event with metadata
+                                            log_streamer.add_log(
+                                                task_id, 
+                                                log_message,
+                                                level="info",
+                                                metadata={"structured_output": parsed}
+                                            )
+                                    except:
+                                        pass
+                            elif json_mode:
+                                # Collect JSON content
+                                stdout_buffer.append(line)
+                                
+                    except queue.Empty:
+                        pass
+                        
+                    # Check stderr similarly
+                    stderr_activity = False
+                    try:
+                        while True:
+                            line = stderr_queue.get_nowait()
+                            if line is None:  # End of stream
+                                break
+                                
+                            stderr_activity = True
+                            last_activity_time = time.time()
+                            
+                            # Log stderr lines as warnings/errors
+                            if "error" in line.lower() or "exception" in line.lower():
+                                log_streamer.add_log(task_id, line, level="error")
+                            else:
+                                log_streamer.add_log(task_id, line, level="warning")
+                                
                     except queue.Empty:
                         pass
                     
+                    # Update progress if we had activity
+                    if stdout_activity or stderr_activity:
+                        last_progress_time = time.time()
+                        
+                    # Check if process is inactive for too long (potential hanging)
+                    if time.time() - last_activity_time > 60 and elapsed > 120:
+                        log_streamer.add_log(
+                            task_id, 
+                            f"No output from process for 60 seconds, may be hanging",
+                            level="warning"
+                        )
+                        # Only reset the timer, don't take action yet
+                        last_activity_time = time.time()
+                        
                     # Sleep briefly to avoid tight loop
                     time.sleep(0.1)
                 
-                # Get any remaining stdout
+                # Process is done, get any remaining output
                 try:
                     while True:
                         line = stdout_queue.get_nowait()
@@ -391,8 +659,8 @@ IMPORTANT: After completing all your analysis, you MUST directly create the outp
                 except queue.Empty:
                     pass
                 
-                # Join the stdout thread
-                stdout_thread.join(timeout=5)
+                # Try to join the threads with timeout
+                stdout_thread.join(timeout=5) 
                 stderr_thread.join(timeout=5)
                 
                 # Check return code
@@ -406,10 +674,133 @@ IMPORTANT: After completing all your analysis, you MUST directly create the outp
                 # Join stdout lines
                 stdout_content = "\n".join(all_stdout)
                 
-                # Process the output and extract results
+                # Add detailed completion log
+                elapsed_time = time.time() - start_time
+                log_streamer.add_log(
+                    task_id, 
+                    f"Claude Code process completed in {elapsed_time:.1f} seconds with return code {return_code}",
+                    level="info"
+                )
+                
+                # Check for output files directly in the temp directory
+                log_streamer.add_log(task_id, f"Searching for output files in {temp_dir}")
+                
+                # First check temp_dir
+                files_found = os.listdir(temp_dir)
+                log_streamer.add_log(
+                    task_id, 
+                    f"Found {len(files_found)} files in temp directory", 
+                    level="info",
+                    metadata={"files": files_found}
+                )
+                
+                # Look specifically for our expected output files
+                customized_resume_path = os.path.join(temp_dir, "new_customized_resume.md")
+                summary_path = os.path.join(temp_dir, "customized_resume_output.md")
+                
+                if not os.path.exists(customized_resume_path):
+                    log_streamer.add_log(
+                        task_id, 
+                        f"Customized resume file not found at expected path: {customized_resume_path}",
+                        level="warning"
+                    )
+                    # Look for any markdown files that might be the resume
+                    potential_resume_files = [f for f in files_found if f.endswith('.md') and 'resume' in f.lower()]
+                    if potential_resume_files:
+                        customized_resume_path = os.path.join(temp_dir, potential_resume_files[0])
+                        log_streamer.add_log(
+                            task_id, 
+                            f"Using alternative file as resume: {potential_resume_files[0]}",
+                            level="info"
+                        )
+                
+                if not os.path.exists(summary_path):
+                    log_streamer.add_log(
+                        task_id, 
+                        f"Summary file not found at expected path: {summary_path}",
+                        level="warning"
+                    )
+                    # Look for any markdown files that might be the summary
+                    potential_summary_files = [f for f in files_found if f.endswith('.md') and 'summary' in f.lower()]
+                    if potential_summary_files:
+                        summary_path = os.path.join(temp_dir, potential_summary_files[0])
+                        log_streamer.add_log(
+                            task_id, 
+                            f"Using alternative file as summary: {potential_summary_files[0]}",
+                            level="info"
+                        )
+                
+                # Process the output from Claude Code's stdout
                 log_streamer.add_log(task_id, "Processing Claude Code output")
                 parsed_results = self._process_output(stdout_content)
                 
+                # Write the extracted content back to files in the temp directory
+                if parsed_results["customized_resume"]:
+                    resume_output_path = os.path.join(temp_dir, "new_customized_resume.md")
+                    try:
+                        with open(resume_output_path, 'w') as f:
+                            f.write(parsed_results["customized_resume"])
+                        log_streamer.add_log(
+                            task_id, 
+                            f"Wrote extracted customized resume to {resume_output_path}",
+                            level="info"
+                        )
+                    except Exception as e:
+                        log_streamer.add_log(
+                            task_id, 
+                            f"Error writing customized resume: {str(e)}",
+                            level="error"
+                        )
+                else:
+                    log_streamer.add_log(
+                        task_id,
+                        "No customized resume content extracted from output",
+                        level="warning"
+                    )
+                
+                if parsed_results["customization_summary"]:
+                    summary_output_path = os.path.join(temp_dir, "customized_resume_output.md")
+                    try:
+                        with open(summary_output_path, 'w') as f:
+                            f.write(parsed_results["customization_summary"])
+                        log_streamer.add_log(
+                            task_id, 
+                            f"Wrote extracted customization summary to {summary_output_path}",
+                            level="info"
+                        )
+                    except Exception as e:
+                        log_streamer.add_log(
+                            task_id, 
+                            f"Error writing customization summary: {str(e)}",
+                            level="error"
+                        )
+                else:
+                    log_streamer.add_log(
+                        task_id,
+                        "No customization summary content extracted from output",
+                        level="warning"
+                    )
+                
+                # Write any intermediate files extracted from output
+                if parsed_results.get("intermediate_files"):
+                    log_streamer.add_log(task_id, "Writing extracted intermediate files")
+                    for filename, content in parsed_results["intermediate_files"].items():
+                        file_path = os.path.join(temp_dir, filename)
+                        try:
+                            with open(file_path, 'w') as f:
+                                f.write(content)
+                            log_streamer.add_log(
+                                task_id,
+                                f"Wrote intermediate file: {filename} ({len(content)} bytes)",
+                                level="info"
+                            )
+                        except Exception as e:
+                            log_streamer.add_log(
+                                task_id,
+                                f"Error writing intermediate file {filename}: {str(e)}",
+                                level="warning"
+                            )
+                                
                 # Save and return customized resume
                 log_streamer.add_log(task_id, f"Saving results to {output_path}")
                 result = self._save_results(parsed_results, output_path)

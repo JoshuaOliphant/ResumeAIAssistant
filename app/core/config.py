@@ -49,8 +49,8 @@ class Settings(BaseSettings):
     # Claude Code settings
     CLAUDE_CODE_CMD: str = os.getenv("CLAUDE_CODE_CMD", "claude")
     CLAUDE_CODE_WORKING_DIR: Optional[str] = os.getenv("CLAUDE_CODE_WORKING_DIR")
-    CLAUDE_CODE_TIMEOUT: int = int(os.getenv("CLAUDE_CODE_TIMEOUT", "900"))  # 15 minutes
-    CLAUDE_CODE_MAX_TIMEOUT: int = int(os.getenv("CLAUDE_CODE_MAX_TIMEOUT", "1800"))  # 30 minutes max
+    CLAUDE_CODE_TIMEOUT: int = int(os.getenv("CLAUDE_CODE_TIMEOUT", "1800"))  # 30 minutes
+    CLAUDE_CODE_MAX_TIMEOUT: int = int(os.getenv("CLAUDE_CODE_MAX_TIMEOUT", "3600"))  # 60 minutes max
     ENABLE_FALLBACK: bool = os.getenv("ENABLE_FALLBACK", "1") == "1"
     FALLBACK_THRESHOLD: int = int(os.getenv("FALLBACK_THRESHOLD", "3"))  # Number of failures before fallback
 

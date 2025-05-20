@@ -26,7 +26,7 @@ class Task:
         Args:
             task_id: Unique identifier for the task
         """
-        self.task_id = task_id
+        self._task_id = task_id
         self.status = "initializing"
         self.progress = 0
         self.message = "Task initialized"
@@ -35,6 +35,39 @@ class Task:
         self.result = None
         self.error = None
         self.subscribers: Set[asyncio.Queue] = set()
+        self.context = {}  # For storing task-specific context data
+        
+    @property
+    def task_id(self) -> str:
+        """Get the task ID"""
+        return self._task_id
+        
+    @task_id.setter
+    def task_id(self, value: str):
+        """
+        Set the task ID and ensure it's properly registered in the tracker.
+        This is used when a client provides a custom task ID.
+        """
+        # Skip if value is the same
+        if value == self._task_id:
+            return
+            
+        old_id = self._task_id
+        self._task_id = value
+        
+        # Get tracker singleton to update the task registry
+        # This is not ideal from a design perspective, but safer than letting tasks become orphaned
+        tracker = progress_tracker
+        
+        # Update the tasks dictionary to use the new ID
+        with tracker.lock:
+            # Remove the old entry if it exists
+            if old_id in tracker.tasks and tracker.tasks[old_id] == self:
+                del tracker.tasks[old_id]
+                
+            # Add with new ID
+            tracker.tasks[value] = self
+            logger.info(f"Task ID updated from {old_id} to {value}, total tasks: {len(tracker.tasks)}")
         
     def update(self, status: str, progress: int, message: str):
         """
@@ -152,7 +185,9 @@ class ProgressTracker:
         task = Task(task_id)
         
         with self.lock:
+            # Store task in tasks dictionary with the auto-generated ID
             self.tasks[task_id] = task
+            logger.info(f"Created new task with ID {task_id}, total tasks: {len(self.tasks)}")
             
         return task
     

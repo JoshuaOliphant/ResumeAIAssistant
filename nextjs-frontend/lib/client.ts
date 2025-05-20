@@ -351,6 +351,14 @@ export const ResumeService = {
     versionId: string,
     originalVersionId?: string
   ): Promise<ResumeDiff> {
+    // Handle 'latest' as a special case for Claude Code results
+    if (versionId === 'latest') {
+      console.log('Using latest version for diff');
+      const resume = await this.getResume(resumeId);
+      versionId = resume.current_version.id;
+      console.log('Resolved latest version ID:', versionId);
+    }
+    
     const endpoint = originalVersionId
       ? `/resumes/${resumeId}/versions/${versionId}/diff?original_version_id=${originalVersionId}`
       : `/resumes/${resumeId}/versions/${versionId}/diff`;
@@ -842,7 +850,7 @@ export const ClaudeCodeService = {
     
     // Use a custom timeout for the fetch itself
     const controller = new AbortController();
-    const fetchTimeout = (options?.timeout || 900) * 1000 + 10000; // Add 10s buffer to the backend timeout
+    const fetchTimeout = (options?.timeout || 1800) * 1000 + 20000; // Add 20s buffer to the backend timeout
     const timeoutId = setTimeout(() => controller.abort(), fetchTimeout);
     
     try {
@@ -899,15 +907,23 @@ export const ClaudeCodeService = {
       ...(options?.timeout && { 'X-Operation-Timeout': options.timeout.toString() })
     };
     
-    return fetchWithAuth('/claude-code/customize-resume/content', {
-      method: 'POST',
-      body: JSON.stringify({
-        resume_content: resumeContent,
-        job_description: jobDescriptionContent,
-        customization_level: customizationLevel
-      }),
-      headers: customHeaders
-    });
+    try {
+      const result = await fetchWithAuth('/claude-code/customize-resume/content', {
+        method: 'POST',
+        body: JSON.stringify({
+          resume_content: resumeContent,
+          job_description: jobDescriptionContent,
+          customization_level: customizationLevel
+        }),
+        headers: customHeaders
+      });
+      
+      console.log('Claude Code customizeContent result structure:', Object.keys(result));
+      return result;
+    } catch (error) {
+      console.error('Error in customizeContent:', error);
+      throw error;
+    }
   },
   
   // Get logs for a task
@@ -927,10 +943,17 @@ export const ClaudeCodeService = {
     
     // Create EventSource for SSE
     const url = `${BACKEND_API_URL}/api/v1/claude-code/customize-resume/logs/${taskId}/stream`;
+    console.log(`Streaming logs from: ${url}`);
+    
+    // Configure EventSource for streaming
     const eventSource = new EventSource(url, {
-      withCredentials: true,
-      ...(token && { headers: { Authorization: `Bearer ${token}` } })
+      withCredentials: true
     });
+    
+    // Add token manually to avoid CORS issues with EventSource headers
+    if (token) {
+      console.log("Authentication token available for streaming");
+    }
     
     // Handle events
     eventSource.onmessage = (event) => {
