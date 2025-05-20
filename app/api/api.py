@@ -11,7 +11,6 @@ from app.api.endpoints import (
     resumes, 
     jobs, 
     customize, 
-    cover_letter, 
     export, 
     auth, 
     requirements, 
@@ -96,7 +95,6 @@ api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 api_router.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 api_router.include_router(customize.router, prefix="/customize", tags=["customize"])
-api_router.include_router(cover_letter.router, prefix="/cover-letter", tags=["cover-letter"])
 api_router.include_router(export.router, prefix="/export", tags=["export"])
 api_router.include_router(progress.router, prefix="/progress", tags=["progress"])
 api_router.include_router(requirements.router, prefix="/requirements", tags=["requirements"])

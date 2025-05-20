@@ -10,7 +10,6 @@ from app.schemas.customize import (
     CustomizationPlan, CustomizationPlanRequest, CustomizationLevel, RecommendationItem
 )
 from app.schemas.ats import ATSAnalysisRequest, ATSAnalysisResponse
-from app.schemas.cover_letter import CoverLetterRequest, CoverLetterResponse
 from app.schemas.requirements import KeyRequirementsRequest, KeyRequirementsContentRequest, KeyRequirementsResponse, KeyRequirements, Requirement, RequirementCategory
 
 # New schemas for claude_code implementation
@@ -52,10 +51,6 @@ __all__ = [
     # ATS schemas
     "ATSAnalysisRequest", 
     "ATSAnalysisResponse",
-    
-    # Cover letter schemas
-    "CoverLetterRequest", 
-    "CoverLetterResponse",
     
     # Requirements schemas
     "KeyRequirementsRequest", 

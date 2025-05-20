@@ -54,12 +54,7 @@ class Settings(BaseSettings):
     ENABLE_FALLBACK: bool = False  # Disable fallback to legacy customization
     FALLBACK_THRESHOLD: int = int(os.getenv("FALLBACK_THRESHOLD", "3"))  # Number of failures before fallback
 
-    # Legacy configuration - kept as placeholders but not used
-    # These settings are retained for backward compatibility with environment variables
-    # but are no longer used in the application
-    PYDANTICAI_THINKING_BUDGET: int = 15000
-    PYDANTICAI_TEMPERATURE: float = 0.7
-    PYDANTICAI_MAX_TOKENS: int = 8000
+    # No legacy configuration is needed anymore as PydanticAI has been completely removed
 
     # Database - SQLite only
     DATABASE_URL: str = "sqlite:///./resume_app.db"
@@ -78,4 +73,4 @@ class Settings(BaseSettings):
 settings = Settings()
 
 
-# Removed the get_pydanticai_model_config function as it's no longer needed
+# Configuration is now simplified with complete removal of PydanticAI
