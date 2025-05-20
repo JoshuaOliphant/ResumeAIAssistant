@@ -359,8 +359,8 @@ async def customize_resume_async(
 @router.get("/customize-resume/status/{task_id}", response_model=TaskStatusResponse)
 async def get_customize_status(
     task_id: str,
-    include_logs: bool = Query(True),  # Changed default to True - always include logs
-    max_logs: int = Query(50, ge=1, le=1000),  # Limit number of logs
+    include_logs: bool = Query(True),
+    max_logs: int = Query(50, ge=1, le=1000),
     db: Session = Depends(get_db)
 ):
     """
@@ -386,61 +386,24 @@ async def get_customize_status(
     from app.services.claude_code.log_streamer import get_log_streamer
     log_streamer = get_log_streamer()
     
-    # Get all logs or up to max_logs, starting from the most recent if limited
-    full_logs = log_streamer.get_logs(task_id)
-    
-    # If logs are requested, add them to the response
-    if include_logs:
-        # Return last N logs based on max_logs parameter
-        if len(full_logs) > max_logs:
-            logs = full_logs[-max_logs:]
-        else:
-            logs = full_logs
-            
-        # Add logs to the response
-        status_data["logs"] = logs
-        
-        # Add log analysis - find key events in logs
-        status_data["log_analysis"] = {
-            "has_error": any("error" in log.lower() for log in logs),
-            "has_todos": any("todo" in log.lower() for log in logs),
-            "has_output": any("customized resume" in log.lower() for log in logs),
-            "has_completion": any("completed" in log.lower() for log in logs),
-            "total_log_count": len(full_logs)
-        }
-        
-        # Include todo information if available
-        if "todos" in status_data:
-            # Check if the todos were successfully extracted
-            if status_data["todos"]["total"] > 0:
-                # Calculate percent complete based on todos
-                completed = status_data["todos"]["completed"]
-                total = status_data["todos"]["total"]
-                status_data["log_analysis"]["todo_percent_complete"] = int(100 * completed / total) if total > 0 else 0
-                
-                # Show which items are completed
-                status_data["log_analysis"]["completed_items"] = status_data["todos"]["completed_items"]
-                status_data["log_analysis"]["current_item"] = status_data["todos"]["current_item"]
-    
-    # Create a simplified response while keeping needed fields
+    # Get logs if requested
     response_data = {
         "task_id": status_data["task_id"],
         "status": status_data["status"],
-        "progress": status_data["progress"],
         "message": status_data["message"],
         "updated_at": status_data["updated_at"],
-        "created_at": status_data["created_at"],
-        "todos": status_data.get("todos", {})
+        "created_at": status_data["created_at"]
     }
     
-    # Always include error info
+    # Include error info if present
     if status_data.get("error"):
         response_data["error"] = status_data["error"]
     
     # Include logs if requested
     if include_logs:
-        response_data["logs"] = status_data.get("logs", [])
-        response_data["log_analysis"] = status_data.get("log_analysis", {})
+        full_logs = log_streamer.get_logs(task_id)
+        logs = full_logs[-max_logs:] if len(full_logs) > max_logs else full_logs
+        response_data["logs"] = logs
     
     # If task is completed, include the results
     if task.status == "completed" and task.result:

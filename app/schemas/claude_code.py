@@ -133,26 +133,20 @@ class TaskStatusResponse(BaseModel):
     Attributes:
         task_id: Unique identifier for the task
         status: Current status of the task
-        progress: Progress percentage (0-100)
         message: Human-readable status message
         result: Optional task result data (only present when status is "completed")
         error: Optional error message (only present when status is "error")
         logs: Optional list of log messages (only present if include_logs=True)
-        log_analysis: Analysis of log content for key events
-        todos: Information about todo items tracked in logs
     """
     task_id: str = Field(..., description="Unique identifier for the task")
     status: str = Field(
         ..., 
-        description="Current status (initializing, running, completed, error)"
+        description="Current status (initializing, in_progress, completed, error)"
     )
-    progress: int = Field(
+    message: str = Field(
         ..., 
-        description="Progress percentage (0-100)", 
-        ge=0, 
-        le=100
+        description="Human-readable status message"
     )
-    message: str = Field(..., description="Human-readable status message")
     result: Optional[Dict[str, Any]] = Field(
         None, 
         description="Task result data (only present when status is 'completed')"
@@ -172,14 +166,6 @@ class TaskStatusResponse(BaseModel):
     logs: Optional[List[str]] = Field(
         None,
         description="Log messages from the execution (only present if include_logs=True)"
-    )
-    log_analysis: Optional[LogAnalysis] = Field(
-        None,
-        description="Analysis of log content for key events and progress indicators"
-    )
-    todos: Optional[TodoInfo] = Field(
-        None,
-        description="Information about todo items tracked in logs"
     )
 
 
