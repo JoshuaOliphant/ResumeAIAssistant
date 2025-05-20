@@ -236,12 +236,7 @@ async def customize_resume_sync(
             # Return a specific timeout error
             raise HTTPException(status_code=408, detail=f"Claude Code execution timed out: {str(e)}")
         
-        # Check if fallback is enabled
-        if settings.ENABLE_FALLBACK:
-            logger.info("Falling back to legacy customization service")
-            return await fallback_customize_resume(request, db)
-        
-        # Otherwise, raise the error
+        # Raise the error - no fallback available
         raise HTTPException(status_code=500, detail=f"Resume customization failed: {str(e)}")
     
     except Exception as e:
@@ -747,12 +742,7 @@ async def customize_content(
             # Return a specific timeout error
             raise HTTPException(status_code=408, detail=f"Claude Code execution timed out: {str(e)}")
             
-        # Check if fallback is enabled
-        if settings.ENABLE_FALLBACK:
-            logger.info("Falling back to legacy customization service")
-            return await fallback_customize_resume(request, db)
-        
-        # Otherwise, raise the error
+        # Raise the error - no fallback available
         raise HTTPException(status_code=500, detail=f"Resume customization failed: {str(e)}")
     
     except Exception as e:
@@ -769,45 +759,3 @@ async def customize_content(
         except Exception as e:
             logger.warning(f"Error cleaning up temporary files: {str(e)}")
 
-
-async def fallback_customize_resume(
-    request: CustomizeResumeRequest,
-    db: Session
-) -> CustomizedResumeResponse:
-    """
-    Fallback to the legacy customization service if Claude Code fails.
-    
-    Args:
-        request: Resume customization request
-        db: Database session
-        
-    Returns:
-        Customized resume data from legacy service
-    """
-    # Import the legacy service only when needed to avoid circular imports
-    from app.services.customization_service import customize_resume as legacy_customize
-    
-    # Call the legacy service
-    result = await legacy_customize(request.resume_content, request.job_description)
-    
-    # Store in database if user is authenticated
-    customization_id = None
-    if request.user_id:
-        db_customization = Customization(
-            original_resume=request.resume_content,
-            job_description=request.job_description,
-            customized_resume=result["customized_resume"],
-            customization_summary=result["customization_summary"],
-            user_id=request.user_id
-        )
-        db.add(db_customization)
-        db.commit()
-        db.refresh(db_customization)
-        customization_id = db_customization.id
-    
-    return {
-        "customized_resume": result["customized_resume"],
-        "customization_summary": result["customization_summary"],
-        "customization_id": customization_id,
-        "is_fallback": True
-    }

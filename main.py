@@ -48,8 +48,6 @@ try:
         capture_headers=False  # Avoid capturing potentially sensitive headers
     )
     
-    logfire.instrument_pydantic_ai()
-    
     # Set up smart request handling
     if SMART_REQUEST_AVAILABLE:
         try:

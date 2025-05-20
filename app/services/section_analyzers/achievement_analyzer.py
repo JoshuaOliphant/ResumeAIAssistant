@@ -4,6 +4,8 @@ Achievement Quantification Analyzer for resume customization.
 This module analyzes achievements throughout a resume against a job description,
 evaluating the effectiveness of achievement statements, identifying opportunities
 to better quantify results, and providing specific recommendations for improvement.
+
+Note: This analyzer is kept for reference but has been replaced by Claude Code implementation.
 """
 import json
 import time
@@ -12,7 +14,6 @@ from typing import Dict, Any, List, Optional
 import logfire
 
 from pydantic import BaseModel
-from pydantic_ai import Agent
 
 from app.core.config import settings
 from app.schemas.customize import CustomizationLevel
@@ -58,7 +59,7 @@ class AchievementQuantificationAnalyzer(BaseSectionAnalyzer):
         context: Optional[Dict[str, Any]] = None
     ) -> AchievementAnalysisResult:
         """
-        Analyze achievements throughout a resume.
+        Legacy stub implementation - now replaced by Claude Code implementation.
         
         Args:
             resume_content: Full resume content
@@ -67,155 +68,42 @@ class AchievementQuantificationAnalyzer(BaseSectionAnalyzer):
             context: Optional additional context for analysis
             
         Returns:
-            AchievementAnalysisResult with detailed analysis
+            Simple stub AchievementAnalysisResult 
         """
-        start_time = time.time()
-        self.logger.info(
-            "Starting achievement analysis",
-            resume_length=len(resume_content),
-            job_description_length=len(job_description)
+        self.logger.warning(
+            "Achievement analyzer called but has been replaced by Claude Code implementation. Returning stub result."
         )
         
-        # For achievements, we want to analyze both specific achievements sections
-        # AND achievement statements throughout the resume, especially in experience
-        achievements = []
-        
-        # Extract specific achievements section if available
-        if not section_content:
-            section_content = self._get_section_from_resume(resume_content)
-            if section_content:
-                achievements.append(section_content)
-        else:
-            achievements.append(section_content)
-            
-        # Extract experience section to look for achievements there
-        experience_section = self._extract_experience_section(resume_content)
-        if experience_section:
-            achievements.append(experience_section)
-            
-        # If we still don't have any achievement content, use the full resume
-        if not achievements:
-            self.logger.warning("Could not extract achievement or experience sections, using full resume")
-            achievements = [resume_content]
-            
-        # Join the achievement sections
-        achievement_content = "\n\n".join(achievements)
-        
-        # Get the appropriate model based on task
-        model_config = await self.select_model("achievement_analysis", achievement_content)
-        
-        # Define the system prompt for the achievement analyzer
-        system_prompt = self._get_achievement_analyzer_prompt()
-        
-        # Create the agent with the selected model
-        achievement_agent = Agent(
-            model_config["model"],
-            output_type=AchievementAnalysisResult,
-            system_prompt=system_prompt,
-            thinking_config=model_config.get("thinking_config"),
-            temperature=model_config.get("temperature", 0.7)
+        # Return a simple stub result that indicates this analyzer is deprecated
+        return AchievementAnalysisResult(
+            section_type=SectionType.ACHIEVEMENTS,
+            score=50,  # Default middle score
+            quantified_achievements=[],
+            unquantified_achievements=[],
+            impact_assessment={},
+            quantification_opportunities=[],
+            recommendations=[
+                SectionRecommendation(
+                    what="Use Claude Code implementation",
+                    why="This analyzer has been replaced by the Claude Code implementation",
+                    how="Switch to using the Claude Code resume customization endpoint",
+                    priority=10,
+                    before_text=None,
+                    after_text=None
+                )
+            ],
+            issues=[
+                SectionIssue(
+                    issue_type="deprecated",
+                    description="This analyzer has been replaced by Claude Code implementation",
+                    severity=5,
+                    fix_suggestion="Use the Claude Code resume customization endpoint"
+                )
+            ],
+            strengths=[],
+            improvement_suggestions=[],
+            metadata={"deprecated": True}
         )
-        
-        # Apply fallback configuration if available
-        if "fallback_config" in model_config:
-            achievement_agent.fallback_config = model_config["fallback_config"]
-        
-        self.logger.info(
-            "Achievement agent created",
-            model=model_config["model"],
-            temperature=model_config.get("temperature", 0.7)
-        )
-        
-        # Build the input for the agent
-        context_dict = context or {}
-        
-        # Format additional context section conditionally
-        additional_context = ""
-        if context_dict:
-            additional_context = f"# Additional Context\n{json.dumps(context_dict, indent=2)}"
-        
-        # Create the input message using a template
-        input_template = """
-        # Resume Content
-        {resume_content}
-        
-        # Job Description
-        {job_description}
-        
-        # Achievement-Related Content
-        {achievement_content}
-        
-        {additional_context}
-        
-        Analyze the achievements in this resume, including achievements mentioned in work experience sections.
-        Focus on how well achievements are quantified and provide detailed feedback on improving achievement statements.
-        """
-        
-        # Format the template with the needed values
-        input_message = input_template.format(
-            resume_content=resume_content,
-            job_description=job_description,
-            achievement_content=achievement_content,
-            additional_context=additional_context
-        )
-        
-        try:
-            # Run the agent
-            agent_result = await achievement_agent.run(input_message)
-            result = agent_result.output
-            
-            # Log the success and timing
-            elapsed_time = time.time() - start_time
-            self.logger.info(
-                "Achievement analysis completed successfully",
-                elapsed_seconds=round(elapsed_time, 2),
-                score=result.score,
-                quantified_achievements_count=len(result.quantified_achievements),
-                unquantified_achievements_count=len(result.unquantified_achievements),
-                recommendations_count=len(result.recommendations)
-            )
-            
-            return result
-            
-        except Exception as e:
-            # Log the error
-            elapsed_time = time.time() - start_time
-            self.logger.error(
-                "Error in achievement analysis",
-                error=str(e),
-                elapsed_seconds=round(elapsed_time, 2)
-            )
-            
-            # Return a default result with error information
-            return AchievementAnalysisResult(
-                section_type=SectionType.ACHIEVEMENTS,
-                score=50,  # Default middle score
-                quantified_achievements=[],
-                unquantified_achievements=[],
-                impact_assessment={},
-                quantification_opportunities=[],
-                recommendations=[
-                    SectionRecommendation(
-                        what="Retry achievement analysis",
-                        why="Error occurred during analysis",
-                        how=f"Try again with more specific achievement statements",
-                        priority=10,
-                        before_text=None,
-                        after_text=None
-                    )
-                ],
-                issues=[
-                    SectionIssue(
-                        issue_type="error",
-                        description=f"Analysis error: {str(e)}",
-                        severity=8,
-                        fix_suggestion="Try again with more focused achievement statements"
-                    )
-                ],
-                strengths=[],
-                improvement_suggestions=[],
-                metadata={"error": str(e)}
-            )
     
     def _extract_experience_section(self, resume_content: str) -> Optional[str]:
         """
