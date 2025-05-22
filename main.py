@@ -74,7 +74,7 @@ except Exception as e:
 try:
     # Import Base and all models to ensure they're registered
     from app.db.session import Base
-    from app.db.base import *  # This imports all models
+    from app.models import *  # This imports all models
     
     # Create database tables
     Base.metadata.create_all(bind=engine)
