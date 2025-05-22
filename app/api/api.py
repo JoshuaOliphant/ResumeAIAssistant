@@ -15,7 +15,7 @@ from app.api.endpoints import (
     auth, 
     requirements, 
     progress,
-    websockets,  # WebSocket endpoints for progress tracking
+    websockets,  # Progress tracking endpoints
     claude_code  # Main Claude Code endpoints for resume customization
 )
 from app.core.config import settings
@@ -100,7 +100,7 @@ api_router.include_router(progress.router, prefix="/progress", tags=["progress"]
 api_router.include_router(requirements.router, prefix="/requirements", tags=["requirements"])
 
 # Include WebSocket and Claude Code endpoints
-api_router.include_router(websockets.router, tags=["websockets"])  # WebSocket endpoints for progress tracking
+api_router.include_router(websockets.router, prefix="/progress", tags=["progress"])  # Progress tracking endpoints
 api_router.include_router(claude_code.router, tags=["claude-code"])  # Primary resume customization
 
 # Add the API router to the FastAPI application

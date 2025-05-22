@@ -1,176 +1,66 @@
 """
-WebSocket endpoints for real-time progress updates.
+Progress tracking endpoints for simple status checking.
 
-This module provides WebSocket endpoints for tracking the progress
-of long-running resume customization tasks.
+This module provides REST endpoints for checking the status of 
+long-running tasks like resume customization.
 """
 
 import logging
-import asyncio
-from typing import Any, Dict, List, Optional
+from typing import Dict, Any
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.security import get_current_user
 from app.db.session import get_db
-from app.services.claude_code.progress_tracker import progress_tracker
-from app.core.config import settings
+from app.models.user import User
 
 logger = logging.getLogger(__name__)
-
 router = APIRouter()
 
 
-@router.websocket("/ws/customize/{task_id}")
-async def websocket_customize_progress(
-    websocket: WebSocket,
+class TaskStatusResponse(BaseModel):
+    """Response model for task status"""
     task_id: str
+    status: str
+    progress: int
+    message: str
+    result: Dict[str, Any] = None
+    error: str = None
+
+
+@router.get("/{task_id}/status", response_model=TaskStatusResponse)
+async def get_task_status(
+    task_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
 ):
-    """
-    WebSocket endpoint for tracking resume customization progress.
-    
-    Args:
-        websocket: WebSocket connection
-        task_id: ID of the task to track
-    """
-    await websocket.accept()
-    
+    """Get the current status of a task"""
     try:
-        # Retrieve task from progress tracker
+        from app.services.claude_code.progress_tracker import progress_tracker
+        
         task = progress_tracker.get_task(task_id)
-        
         if not task:
-            await websocket.send_json({"error": "Task not found"})
-            await websocket.close()
-            return
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task not found"
+            )
         
-        # Create a queue for receiving updates
-        queue = asyncio.Queue()
+        return TaskStatusResponse(
+            task_id=task.task_id,
+            status=task.status,
+            progress=task.progress,
+            message=task.message or "Processing...",
+            result=task.result,
+            error=task.error
+        )
         
-        # Subscribe to task progress updates
-        task.add_subscriber(queue)
-        
-        # Send initial status with logs
-        initial_data = task.to_dict()
-        await websocket.send_json(initial_data)
-        
-        # Set up ping interval
-        ping_interval = settings.WS_PING_INTERVAL
-        last_ping = asyncio.get_event_loop().time()
-        
-        # Process updates
-        try:
-            while True:
-                # Wait for either a progress update or ping timeout
-                try:
-                    # Wait for a message with a timeout
-                    update_task = asyncio.create_task(queue.get())
-                    
-                    # Set up a timeout task
-                    current_time = asyncio.get_event_loop().time()
-                    time_since_last_ping = current_time - last_ping
-                    timeout = max(0.1, ping_interval - time_since_last_ping)
-                    
-                    timeout_task = asyncio.create_task(asyncio.sleep(timeout))
-                    
-                    # Wait for either task to complete
-                    done, pending = await asyncio.wait(
-                        [update_task, timeout_task],
-                        return_when=asyncio.FIRST_COMPLETED
-                    )
-                    
-                    # Cancel the pending task
-                    for task in pending:
-                        task.cancel()
-                    
-                    # If we got an update, send it (it should already include logs)
-                    if update_task in done:
-                        progress = await update_task
-                        await websocket.send_json(progress)
-                        
-                        # If task is complete or errored, break the loop
-                        if progress["status"] in ["completed", "error"]:
-                            break
-                    
-                    # If we hit the timeout, send a ping
-                    if timeout_task in done:
-                        await websocket.ping()
-                        last_ping = asyncio.get_event_loop().time()
-                
-                except asyncio.CancelledError:
-                    break
-                    
-        except WebSocketDisconnect:
-            logger.info(f"WebSocket disconnected for task {task_id}")
-        except Exception as e:
-            logger.error(f"Error in WebSocket for task {task_id}: {str(e)}")
-            await websocket.send_json({"error": str(e)})
-        finally:
-            # Unsubscribe from updates when connection is closed
-            task.remove_subscriber(queue)
-            
-    except WebSocketDisconnect:
-        logger.info(f"WebSocket disconnected during setup for task {task_id}")
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error in WebSocket setup for task {task_id}: {str(e)}")
-        try:
-            await websocket.send_json({"error": str(e)})
-            await websocket.close()
-        except:
-            pass
-
-
-@router.websocket("/ws/customize/all")
-async def websocket_all_tasks(
-    websocket: WebSocket,
-    status: Optional[str] = None
-):
-    """
-    WebSocket endpoint for tracking all customization tasks.
-    
-    Args:
-        websocket: WebSocket connection
-        status: Optional filter for task status
-    """
-    await websocket.accept()
-    
-    try:
-        # Set up ping interval
-        ping_interval = settings.WS_PING_INTERVAL
-        last_ping = asyncio.get_event_loop().time()
-        
-        # Send initial task list
-        tasks = progress_tracker.list_tasks(status)
-        await websocket.send_json({"type": "tasks", "data": tasks})
-        
-        # Process updates
-        while True:
-            # Wait for ping timeout
-            current_time = asyncio.get_event_loop().time()
-            time_since_last_ping = current_time - last_ping
-            timeout = max(0.1, ping_interval - time_since_last_ping)
-            
-            try:
-                # Wait for timeout
-                await asyncio.sleep(timeout)
-                
-                # Send ping
-                await websocket.ping()
-                last_ping = asyncio.get_event_loop().time()
-                
-                # Send updated task list
-                tasks = progress_tracker.list_tasks(status)
-                await websocket.send_json({"type": "tasks", "data": tasks})
-                
-            except asyncio.CancelledError:
-                break
-                
-    except WebSocketDisconnect:
-        logger.info("WebSocket disconnected for all tasks view")
-    except Exception as e:
-        logger.error(f"Error in WebSocket for all tasks view: {str(e)}")
-        try:
-            await websocket.send_json({"error": str(e)})
-            await websocket.close()
-        except:
-            pass
+        logger.error(f"Error getting task status: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Internal server error"
+        )

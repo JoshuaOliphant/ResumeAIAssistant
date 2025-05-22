@@ -198,49 +198,24 @@ class Task:
             return min(95, self.progress + 2)  # Slow incremental progress, never reach 100 until completion
             
     def notify_subscribers(self):
-        """Notify all subscribers about task updates"""
-        for queue in list(self.subscribers):
-            try:
-                if not queue.full():
-                    queue.put_nowait(self.to_dict())
-            except Exception as e:
-                logger.error(f"Error notifying subscriber for task {self.task_id}: {str(e)}")
+        """Legacy method - no longer needed for simplified progress tracking"""
+        pass
     
-    def add_subscriber(self, queue: asyncio.Queue):
-        """
-        Add a subscriber to receive status updates.
+    def add_subscriber(self, queue):
+        """Legacy method - no longer needed for simplified progress tracking"""
+        pass
         
-        Args:
-            queue: AsyncIO queue to receive updates
-        """
-        self.subscribers.add(queue)
-        queue.put_nowait(self.to_dict())  # Send current status immediately
-        
-    def remove_subscriber(self, queue: asyncio.Queue):
-        """
-        Remove a subscriber from updates.
-        
-        Args:
-            queue: AsyncIO queue to remove
-        """
-        if queue in self.subscribers:
-            self.subscribers.remove(queue)
+    def remove_subscriber(self, queue):
+        """Legacy method - no longer needed for simplified progress tracking"""
+        pass
     
     def to_dict(self) -> Dict[str, Any]:
         """
         Convert task to dictionary representation.
         
         Returns:
-            Dictionary containing detailed task status information including logs
+            Dictionary containing basic task status information
         """
-        # Get logs from log streamer
-        try:
-            from app.services.claude_code.log_streamer import get_log_streamer
-            log_streamer = get_log_streamer()
-            logs = log_streamer.get_logs(self.task_id)
-        except Exception:
-            logs = []
-            
         return {
             "task_id": self.task_id,
             "status": self.status,
@@ -249,8 +224,7 @@ class Task:
             "result": self.result,
             "error": self.error,
             "progress": self.progress,
-            "message": self.message or "This task may take up to 20 minutes to complete. Please wait.",
-            "logs": logs  # Include logs in the status update
+            "message": self.message or "Processing..."
         }
     
     def update_progress(self, progress: int, message: Optional[str] = None):

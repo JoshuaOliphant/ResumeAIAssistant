@@ -73,7 +73,11 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       });
       
       if (!response.ok) {
-        console.error('Failed to initialize progress tracking, falling back to client-side simulation');
+        const errorText = await response.text();
+        console.error('Failed to initialize progress tracking:', response.status, response.statusText, errorText);
+        console.error('API URL attempted:', `${API_BASE_URL}/progress/create`);
+        console.error('Auth token present:', !!localStorage.getItem('auth_token'));
+        console.error('Falling back to client-side simulation');
         setUseRealTimeProgress(false);
         return null;
       }
@@ -86,7 +90,8 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       
       return data.task_id;
     } catch (error) {
-      console.error('Error initializing progress tracking:', error);
+      console.error('Error initializing progress tracking (network/other):', error);
+      console.error('This likely means the progress endpoint is unreachable or there is a network issue');
       setUseRealTimeProgress(false);
       return null;
     }

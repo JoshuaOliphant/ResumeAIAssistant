@@ -201,12 +201,14 @@ async def create_task(
         # Create a new task
         task = progress_tracker.create_task()
         
-        logger.info(f"Created new task {task.task_id} for user {current_user.id}")
+        # Log with more detail for debugging
+        user_id = current_user.id if current_user else "anonymous"
+        logger.info(f"Created new task {task.task_id} for user {user_id}")
         
         return {"task_id": task.task_id}
     except Exception as e:
-        logger.error(f"Error creating task: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to create task")
+        logger.error(f"Error creating task: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create task: {str(e)}")
 
 
 @router.get("/status/{task_id}", response_model=StatusUpdate)

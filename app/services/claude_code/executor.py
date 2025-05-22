@@ -813,6 +813,7 @@ Instead of directly creating files (since you may not have permission), please P
             logger.info(f"Starting Claude Code execution with task ID: {task_id}")
             log_streamer.add_log(task_id, f"Starting Claude Code customization (timeout: {timeout_seconds}s)")
             
+            
             # Prepare files and context
             temp_dir = self._create_temp_workspace()
             log_streamer.add_log(task_id, f"Created temporary workspace at {temp_dir}")
@@ -859,12 +860,9 @@ Instead of directly creating files (since you may not have permission), please P
             ]
             
             # Log the command we're using
-            log_streamer.add_log(
-                task_id, 
-                f"Executing Claude Code command in directory: {temp_dir}",
-                level="info",
-                metadata={"command": " ".join(command)}
-            )
+            log_streamer.add_log(task_id, "Executing Claude Code command...")
+            log_streamer.add_log(task_id, f"Working directory: {temp_dir}")
+            log_streamer.add_log(task_id, "This may take up to 20 minutes, please be patient")
             
             # Create process with pipes for stdout/stderr to enable streaming
             # Prepare environment variables for the subprocess
@@ -900,12 +898,8 @@ Do not create subdirectories for output files.
             stderr_queue = queue.Queue(maxsize=1000)
             
             # Log start of process execution
-            log_streamer.add_log(
-                task_id, 
-                "Starting Claude Code process with customization task", 
-                level="info",
-                metadata={"command": " ".join(command)}
-            )
+            log_streamer.add_log(task_id, "Starting Claude Code process...")
+            log_streamer.add_log(task_id, "Analyzing resume and job description")
             
             # Start streaming threads for stdout and stderr with improved naming
             stdout_thread = log_streamer.start_output_stream(
@@ -938,15 +932,14 @@ Do not create subdirectories for output files.
                     # Check if timeout has been exceeded
                     elapsed = time.time() - start_time
                     
-                    # Just log elapsed time for monitoring, but don't create artificial progress
-                    if time.time() - last_progress_time > 30:  # Reduced frequency to 30 seconds
+                    # Provide progress updates every 30 seconds
+                    if time.time() - last_progress_time > 30:  # Every 30 seconds
                         last_progress_time = time.time()
-                        # Just log elapsed time without updating progress percentage
-                        log_streamer.add_log(
-                            task_id, 
-                            f"Still processing, elapsed time: {int(elapsed)}s",
-                            level="info"
-                        )
+                        minutes = int(elapsed // 60)
+                        if minutes == 0:
+                            log_streamer.add_log(task_id, f"Processing... ({int(elapsed)}s elapsed)")
+                        else:
+                            log_streamer.add_log(task_id, f"Processing... ({minutes}m {int(elapsed % 60)}s elapsed)")
                     
                     # Check for timeout
                     if elapsed > timeout_seconds:

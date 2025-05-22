@@ -538,3 +538,24 @@ Begin by reading the resume, analyzing the job description, and launching your p
      ```
 
 If information cannot be verified through any of these sources, it must not be presented as fact in the optimized resume.
+
+## CRITICAL: File Output Requirements
+
+After completing all phases and verification, you MUST save your output as follows:
+
+1. **Save the customized resume** as a file named `new_customized_resume.md` in the current working directory
+   - This should contain the final, customized resume in Markdown format
+   - Include all sections: header, summary, experience, skills, education, etc.
+
+2. **Save the customization summary** as a file named `customized_resume_output.md` in the current working directory  
+   - This should contain the detailed analysis and changes summary
+   - Include before/after match scores, key changes made, evidence sources, remaining gaps, and interview preparation suggestions
+
+Use the Write tool to create these files:
+
+```
+Write(file_path="new_customized_resume.md", content="[your customized resume content here]")
+Write(file_path="customized_resume_output.md", content="[your detailed customization summary here]")
+```
+
+These files are required for the application to function properly. Do not skip this step.
