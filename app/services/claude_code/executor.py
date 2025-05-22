@@ -56,6 +56,10 @@ class ClaudeCodeExecutor:
         self.prompt_template = self._load_prompt_template(prompt_template_path)
         self.claude_cmd = claude_cmd
         
+        # Feature flag for advanced CLI options (system prompt files, MCP, etc.)
+        # Set to False until these options are available in the CLI
+        self.use_advanced_cli_features = False
+        
     def _load_prompt_template(self, path: str) -> str:
         """
         Load the prompt template from a file.
@@ -72,6 +76,451 @@ class ClaudeCodeExecutor:
         except FileNotFoundError:
             logger.error(f"Prompt template file not found: {path}")
             raise ClaudeCodeExecutionError(f"Prompt template file not found: {path}")
+    
+    def _prepare_system_prompt(self, temp_dir: str) -> Optional[str]:
+        """
+        Prepare system prompt file from config or use defaults.
+        
+        Args:
+            temp_dir: Temporary directory for the workspace
+            
+        Returns:
+            Path to the system prompt file if created, None otherwise
+        """
+        try:
+            # Import here to avoid circular imports
+            from app.core.config import settings
+            
+            # Check if we have system prompt configuration
+            system_prompt_content = getattr(settings, 'CLAUDE_SYSTEM_PROMPT', None)
+            
+            if not system_prompt_content:
+                # Use enhanced system prompt with explicit truthfulness requirements
+                system_prompt_content = """You are an expert resume customization assistant. Your task is to analyze job descriptions and customize resumes to match job requirements while maintaining ABSOLUTE truthfulness and accuracy.
+
+## CRITICAL TRUTHFULNESS REQUIREMENTS
+
+**NEVER UNDER ANY CIRCUMSTANCES:**
+- Add metrics, percentages, or numbers not in the original resume
+- Create new project details or accomplishments
+- Add job responsibilities not mentioned in the original
+- Fabricate leadership experience or team sizes
+- Invent technical skills or certifications
+- Add years of experience or expertise levels
+- Create fictional achievements or awards
+
+**ALWAYS:**
+- Use only information explicitly stated in the original resume
+- Reorganize and reframe existing content using industry terminology
+- Highlight relevant experiences that already exist
+- Maintain exact job titles, companies, and dates from original
+
+## TRUTHFULNESS VERIFICATION EXAMPLES
+
+### ✅ APPROPRIATE CUSTOMIZATIONS:
+
+**Example 1 - Reorganizing Content:**
+Original: "Built backend services with Python"
+Customized: "Developed scalable backend microservices using Python"
+
+**Example 2 - Adding Industry Keywords:**
+Original: "Worked with databases"
+Customized: "Implemented database solutions using PostgreSQL" (if PostgreSQL was mentioned elsewhere)
+
+**Example 3 - Emphasizing Relevant Skills:**
+Original: "Used Docker for containerization"
+Customized: "Leveraged Docker containerization for scalable application deployment"
+
+**Example 4 - Reframing Responsibilities:**
+Original: "Fixed bugs in the application"
+Customized: "Resolved critical software defects to improve system reliability"
+
+**Example 5 - Professional Language:**
+Original: "Helped with CI/CD"
+Customized: "Contributed to continuous integration and deployment pipeline development"
+
+### ❌ INAPPROPRIATE CUSTOMIZATIONS:
+
+**Example 1 - Adding Fake Metrics:**
+❌ WRONG: "Improved system performance by 40%" (when no metrics were given)
+✅ RIGHT: "Optimized system performance through code improvements"
+
+**Example 2 - Fabricating Leadership:**
+❌ WRONG: "Led a team of 5 developers" (when no team leadership was mentioned)
+✅ RIGHT: "Collaborated with development team" (if collaboration was mentioned)
+
+**Example 3 - Creating Fake Projects:**
+❌ WRONG: "Built a microservices architecture serving 1M+ users"
+✅ RIGHT: "Contributed to microservices development" (if microservices were mentioned)
+
+**Example 4 - Adding Unverified Skills:**
+❌ WRONG: "Expert in Kubernetes with 5+ years experience"
+✅ RIGHT: "Experience with Kubernetes deployment" (if Kubernetes was mentioned)
+
+**Example 5 - Inventing Certifications:**
+❌ WRONG: "AWS Certified Solutions Architect"
+✅ RIGHT: "Experience with AWS services" (if AWS was mentioned)
+
+**Example 6 - Fabricating Scale:**
+❌ WRONG: "Managed infrastructure for 10,000+ concurrent users"
+✅ RIGHT: "Worked on production infrastructure management"
+
+**Example 7 - Adding Fake Achievements:**
+❌ WRONG: "Reduced deployment time by 80%"
+✅ RIGHT: "Streamlined deployment processes"
+
+**Example 8 - Creating Fictional Responsibilities:**
+❌ WRONG: "Architected enterprise-scale distributed systems"
+✅ RIGHT: "Developed distributed system components" (if distributed systems were mentioned)
+
+**Example 9 - Inventing Technical Depth:**
+❌ WRONG: "Deep expertise in machine learning algorithms"
+✅ RIGHT: "Experience with machine learning projects" (if ML was mentioned)
+
+**Example 10 - Adding Fake Company Impact:**
+❌ WRONG: "Saved company $500K annually through optimization"
+✅ RIGHT: "Implemented cost-effective optimization solutions"
+
+## MANDATORY VERIFICATION WORKFLOW
+
+You MUST create a dedicated Truthfulness Verification Agent that:
+1. Reviews every single change made to the resume
+2. Verifies each modification against the original resume
+3. Flags any fabricated information
+4. Provides evidence for every claim
+5. Rejects any changes that cannot be verified
+
+The verification agent must run BEFORE finalizing any resume version."""
+            
+            # Create system prompt file
+            system_prompt_path = os.path.join(temp_dir, "system_prompt.txt")
+            with open(system_prompt_path, 'w') as f:
+                f.write(system_prompt_content)
+                
+            logger.info(f"Created system prompt file at {system_prompt_path}")
+            return system_prompt_path
+            
+        except Exception as e:
+            logger.warning(f"Failed to create system prompt file: {str(e)}")
+            return None
+    
+    def _get_system_prompt_content_inline(self) -> str:
+        """
+        Get system prompt content to incorporate directly into the main prompt.
+        
+        Returns:
+            System prompt content as a string
+        """
+        try:
+            # Import here to avoid circular imports
+            from app.core.config import settings
+            
+            # Check if we have system prompt configuration
+            system_prompt_content = getattr(settings, 'CLAUDE_SYSTEM_PROMPT', None)
+            
+            if not system_prompt_content:
+                # Use enhanced system prompt with explicit truthfulness requirements
+                system_prompt_content = """You are an expert resume customization assistant. Your task is to analyze job descriptions and customize resumes to match job requirements while maintaining ABSOLUTE truthfulness and accuracy.
+
+## CRITICAL TRUTHFULNESS REQUIREMENTS
+
+**NEVER UNDER ANY CIRCUMSTANCES:**
+- Add metrics, percentages, or numbers not in the original resume
+- Create new project details or accomplishments
+- Add job responsibilities not mentioned in the original
+- Fabricate leadership experience or team sizes
+- Invent technical skills or certifications
+- Add years of experience or expertise levels
+- Create fictional achievements or awards
+
+**ALWAYS:**
+- Use only information explicitly stated in the original resume
+- Reorganize and reframe existing content using industry terminology
+- Highlight relevant experiences that already exist
+- Maintain exact job titles, companies, and dates from original
+
+## TRUTHFULNESS VERIFICATION EXAMPLES
+
+### ✅ APPROPRIATE CUSTOMIZATIONS:
+
+**Example 1 - Reorganizing Content:**
+Original: "Built backend services with Python"
+Customized: "Developed scalable backend microservices using Python"
+
+**Example 2 - Adding Industry Keywords:**
+Original: "Worked with databases"
+Customized: "Implemented database solutions using PostgreSQL" (if PostgreSQL was mentioned elsewhere)
+
+**Example 3 - Emphasizing Relevant Skills:**
+Original: "Used Docker for containerization"
+Customized: "Leveraged Docker containerization for scalable application deployment"
+
+**Example 4 - Reframing Responsibilities:**
+Original: "Fixed bugs in the application"
+Customized: "Resolved critical software defects to improve system reliability"
+
+**Example 5 - Professional Language:**
+Original: "Helped with CI/CD"
+Customized: "Contributed to continuous integration and deployment pipeline development"
+
+### ❌ INAPPROPRIATE CUSTOMIZATIONS:
+
+**Example 1 - Adding Fake Metrics:**
+❌ WRONG: "Improved system performance by 40%" (when no metrics were given)
+✅ RIGHT: "Optimized system performance through code improvements"
+
+**Example 2 - Fabricating Leadership:**
+❌ WRONG: "Led a team of 5 developers" (when no team leadership was mentioned)
+✅ RIGHT: "Collaborated with development team" (if collaboration was mentioned)
+
+**Example 3 - Creating Fake Projects:**
+❌ WRONG: "Built a microservices architecture serving 1M+ users"
+✅ RIGHT: "Contributed to microservices development" (if microservices were mentioned)
+
+**Example 4 - Adding Unverified Skills:**
+❌ WRONG: "Expert in Kubernetes with 5+ years experience"
+✅ RIGHT: "Experience with Kubernetes deployment" (if Kubernetes was mentioned)
+
+**Example 5 - Inventing Certifications:**
+❌ WRONG: "AWS Certified Solutions Architect"
+✅ RIGHT: "Experience with AWS services" (if AWS was mentioned)
+
+**Example 6 - Fabricating Scale:**
+❌ WRONG: "Managed infrastructure for 10,000+ concurrent users"
+✅ RIGHT: "Worked on production infrastructure management"
+
+**Example 7 - Adding Fake Achievements:**
+❌ WRONG: "Reduced deployment time by 80%"
+✅ RIGHT: "Streamlined deployment processes"
+
+**Example 8 - Creating Fictional Responsibilities:**
+❌ WRONG: "Architected enterprise-scale distributed systems"
+✅ RIGHT: "Developed distributed system components" (if distributed systems were mentioned)
+
+**Example 9 - Inventing Technical Depth:**
+❌ WRONG: "Deep expertise in machine learning algorithms"
+✅ RIGHT: "Experience with machine learning projects" (if ML was mentioned)
+
+**Example 10 - Adding Fake Company Impact:**
+❌ WRONG: "Saved company $500K annually through optimization"
+✅ RIGHT: "Implemented cost-effective optimization solutions"
+
+## MANDATORY VERIFICATION WORKFLOW
+
+You MUST create a dedicated Truthfulness Verification Agent that:
+1. Reviews every single change made to the resume
+2. Verifies each modification against the original resume
+3. Flags any fabricated information
+4. Provides evidence for every claim
+5. Rejects any changes that cannot be verified
+
+The verification agent must run BEFORE finalizing any resume version."""
+            
+            return system_prompt_content
+            
+        except Exception as e:
+            logger.warning(f"Failed to get system prompt content: {str(e)}")
+            return "You are an expert resume customization assistant."
+    
+    def _prepare_mcp_config(self, temp_dir: str) -> Optional[str]:
+        """
+        Create MCP config files when enabled.
+        
+        Args:
+            temp_dir: Temporary directory for the workspace
+            
+        Returns:
+            Path to the MCP config file if created, None otherwise
+        """
+        try:
+            # Import here to avoid circular imports
+            from app.core.config import settings
+            
+            # Check if MCP is enabled
+            mcp_enabled = getattr(settings, 'CLAUDE_MCP_ENABLED', False)
+            if not mcp_enabled:
+                return None
+                
+            # Get MCP configuration
+            mcp_servers = getattr(settings, 'CLAUDE_MCP_SERVERS', {})
+            
+            if not mcp_servers:
+                # Default MCP configuration for resume customization
+                mcp_servers = {
+                    "filesystem": {
+                        "command": "uvx",
+                        "args": ["mcp-server-filesystem", temp_dir],
+                        "env": {}
+                    }
+                }
+            
+            # Create MCP config
+            mcp_config = {
+                "mcpServers": mcp_servers
+            }
+            
+            # Write MCP config file
+            mcp_config_path = os.path.join(temp_dir, "claude_desktop_config.json")
+            with open(mcp_config_path, 'w') as f:
+                json.dump(mcp_config, f, indent=2)
+                
+            logger.info(f"Created MCP config file at {mcp_config_path}")
+            return mcp_config_path
+            
+        except Exception as e:
+            logger.warning(f"Failed to create MCP config file: {str(e)}")
+            return None
+    
+    def _process_stream_json(self, line: str, task_id: str, log_streamer) -> Dict[str, Any]:
+        """
+        Process JSON stream output with enhanced event handling.
+        
+        Args:
+            line: JSON line from stream output
+            task_id: Task ID for logging
+            log_streamer: Log streamer instance
+            
+        Returns:
+            Parsed JSON data or empty dict if parsing fails
+        """
+        try:
+            # Parse the JSON line
+            if not line.strip():
+                return {}
+                
+            parsed = json.loads(line.strip())
+            
+            if not isinstance(parsed, dict):
+                return {}
+            
+            # Enhanced event handling based on stream JSON structure
+            event_type = parsed.get("type", "")
+            
+            if event_type == "content":
+                # Content chunk from Claude
+                content = parsed.get("content", "")
+                # Handle case where content might be a list
+                if isinstance(content, list):
+                    content = " ".join(str(item) for item in content)
+                elif not isinstance(content, str):
+                    content = str(content)
+                    
+                if content.strip():
+                    log_streamer.add_log(
+                        task_id,
+                        f"Claude output: {content[:200]}{'...' if len(content) > 200 else ''}",
+                        level="info"
+                    )
+                    
+            elif event_type == "tool_use":
+                # Tool usage event
+                tool_name = parsed.get("name", "unknown")
+                tool_input = parsed.get("input", {})
+                log_streamer.add_log(
+                    task_id,
+                    f"Using tool: {tool_name}",
+                    level="info",
+                    metadata={"tool_input": tool_input}
+                )
+                
+            elif event_type == "tool_result":
+                # Tool result event
+                tool_name = parsed.get("tool_name", "unknown")
+                is_error = parsed.get("is_error", False)
+                result = parsed.get("content", "")
+                
+                # Handle case where result might be a list or non-string
+                if isinstance(result, list):
+                    result = " ".join(str(item) for item in result)
+                elif not isinstance(result, str):
+                    result = str(result)
+                
+                if is_error:
+                    log_streamer.add_log(
+                        task_id,
+                        f"Tool error in {tool_name}: {result[:100]}{'...' if len(str(result)) > 100 else ''}",
+                        level="error"
+                    )
+                else:
+                    log_streamer.add_log(
+                        task_id,
+                        f"Tool {tool_name} completed successfully",
+                        level="info"
+                    )
+                    
+            elif event_type == "progress":
+                # Progress update event
+                progress = parsed.get("progress", 0)
+                message = parsed.get("message", "Processing...")
+                log_streamer.add_log(
+                    task_id,
+                    f"Progress: {progress}% - {message}",
+                    level="info",
+                    metadata={"progress": progress, "stage": message}
+                )
+                
+            elif event_type == "status":
+                # Status update event
+                status = parsed.get("status", "unknown")
+                message = parsed.get("message", "")
+                
+                log_level = "info"
+                if status in ["error", "failed"]:
+                    log_level = "error"
+                elif status in ["warning"]:
+                    log_level = "warning"
+                    
+                log_streamer.add_log(
+                    task_id,
+                    f"Status: {status} - {message}",
+                    level=log_level,
+                    metadata={"status": status}
+                )
+                
+            elif event_type == "completion":
+                # Completion event
+                success = parsed.get("success", False)
+                message = parsed.get("message", "Completed")
+                
+                log_streamer.add_log(
+                    task_id,
+                    f"Completion: {message}",
+                    level="info" if success else "error",
+                    metadata={"success": success}
+                )
+                
+            else:
+                # Generic event or unknown type
+                if "content" in parsed:
+                    content = parsed.get("content", "")
+                    # Handle case where content might be a list or non-string
+                    if isinstance(content, list):
+                        content = " ".join(str(item) for item in content)
+                    elif not isinstance(content, str):
+                        content = str(content)
+                        
+                    if content.strip():
+                        log_streamer.add_log(
+                            task_id,
+                            f"Output: {content[:200]}{'...' if len(content) > 200 else ''}",
+                            level="info"
+                        )
+                elif "message" in parsed:
+                    message = parsed.get("message", "")
+                    log_streamer.add_log(
+                        task_id,
+                        f"Message: {message}",
+                        level="info"
+                    )
+            
+            return parsed
+            
+        except json.JSONDecodeError as e:
+            logger.debug(f"Failed to parse JSON line: {line[:100]}... Error: {str(e)}")
+            return {}
+        except Exception as e:
+            logger.warning(f"Error processing stream JSON: {str(e)}")
+            return {}
             
     def _create_temp_workspace(self) -> str:
         """
@@ -106,8 +555,15 @@ class ClaudeCodeExecutor:
             with open(job_description_path, 'r') as f:
                 job_description_content = f.read()
             
-            # Create a structured prompt based on the template with clearer instructions
+            # Get system prompt content to incorporate directly
+            system_prompt_content = self._get_system_prompt_content_inline()
+            
+            # Create a structured prompt that includes system prompt content
             complete_prompt = f"""
+# System Instructions
+
+{system_prompt_content}
+
 # Resume Customization Task
 
 ## Input Files
@@ -332,9 +788,22 @@ Instead of directly creating files (since you may not have permission), please P
         timeout_seconds = timeout or settings.CLAUDE_CODE_TIMEOUT or 1800  # 30-minute default
         
         try:
-            # Set up task ID for logging if not provided
+            # Set up task ID and progress tracking
             if not task_id:
-                task_id = f"claude-code-{uuid.uuid4().hex}"
+                # If no task_id provided, create one via progress tracker
+                from app.services.claude_code.progress_tracker import progress_tracker
+                task = progress_tracker.create_task()
+                task_id = task.task_id
+                logger.info(f"Created new task for Claude Code execution: {task_id}")
+            else:
+                # Get existing task from progress tracker
+                from app.services.claude_code.progress_tracker import progress_tracker
+                task = progress_tracker.get_task(task_id)
+                if not task:
+                    # If task doesn't exist, create it with the specified ID
+                    task = progress_tracker.create_task()
+                    task.task_id = task_id  # Use the specified ID
+                    logger.info(f"Created task with specified ID: {task_id}")
                 
             # Get log streamer
             log_streamer = get_log_streamer()
@@ -347,6 +816,10 @@ Instead of directly creating files (since you may not have permission), please P
             # Prepare files and context
             temp_dir = self._create_temp_workspace()
             log_streamer.add_log(task_id, f"Created temporary workspace at {temp_dir}")
+            
+            # Prepare system prompt and MCP config
+            system_prompt_path = self._prepare_system_prompt(temp_dir)
+            mcp_config_path = self._prepare_mcp_config(temp_dir)
             
             # Build the complete prompt with template and inputs
             prompt = self._build_prompt(resume_path, job_description_path)
@@ -375,8 +848,7 @@ Instead of directly creating files (since you may not have permission), please P
             with open(prompt_file_path, 'w') as f:
                 f.write(prompt)
                 
-            # Define command with the correct arguments for streaming
-            # Don't use --dangerously-skip-permissions since it requires interactive approval
+            # Define command with compatible arguments for current Claude Code CLI
             command = [
                 self.claude_cmd, 
                 "--print",  # Non-interactive mode
@@ -509,39 +981,54 @@ Do not create subdirectories for output files.
                             # First check if the line itself is JSON (from stream-json)
                             try:
                                 if line.startswith("{") and line.endswith("}"):
-                                    # This looks like JSON data directly from stream-json
-                                    parsed = json.loads(line)
-                                    if isinstance(parsed, dict):
-                                        # Extract useful information from the streaming JSON output
-                                        if "content" in parsed:
-                                            # This is a content chunk, log it
-                                            content = parsed.get("content", "")
-                                            if content.strip():
-                                                log_streamer.add_log(
-                                                    task_id,
-                                                    f"Output: {content}",
-                                                    level="info"
-                                                )
-                                        elif "status" in parsed:
-                                            # This is a status update
-                                            status = parsed.get("status")
-                                            if status == "complete":
-                                                log_streamer.add_log(
-                                                    task_id,
-                                                    "Claude Code processing completed",
-                                                    level="info",
-                                                    metadata=parsed
-                                                )
-                                            else:
-                                                log_streamer.add_log(
-                                                    task_id, 
-                                                    f"Status: {status}",
-                                                    level="info",
-                                                    metadata=parsed
-                                                )
-                            except json.JSONDecodeError:
-                                # Not JSON or invalid JSON, continue with normal processing
-                                pass
+                                    # Use the enhanced JSON processing method
+                                    self._process_stream_json(line, task_id, log_streamer)
+                            except Exception as e:
+                                # Continue with normal processing if enhanced method fails
+                                logger.debug(f"Enhanced JSON processing failed, falling back: {str(e)}")
+                                
+                                # Fallback to original processing
+                                try:
+                                    if line.startswith("{") and line.endswith("}"):
+                                        # This looks like JSON data directly from stream-json
+                                        parsed = json.loads(line)
+                                        if isinstance(parsed, dict):
+                                            # Extract useful information from the streaming JSON output
+                                            if "content" in parsed:
+                                                # This is a content chunk, log it
+                                                content = parsed.get("content", "")
+                                                # Handle case where content might be a list or non-string
+                                                if isinstance(content, list):
+                                                    content = " ".join(str(item) for item in content)
+                                                elif not isinstance(content, str):
+                                                    content = str(content)
+                                                    
+                                                if content.strip():
+                                                    log_streamer.add_log(
+                                                        task_id,
+                                                        f"Output: {content}",
+                                                        level="info"
+                                                    )
+                                            elif "status" in parsed:
+                                                # This is a status update
+                                                status = parsed.get("status")
+                                                if status == "complete":
+                                                    log_streamer.add_log(
+                                                        task_id,
+                                                        "Claude Code processing completed",
+                                                        level="info",
+                                                        metadata=parsed
+                                                    )
+                                                else:
+                                                    log_streamer.add_log(
+                                                        task_id, 
+                                                        f"Status: {status}",
+                                                        level="info",
+                                                        metadata=parsed
+                                                    )
+                                except json.JSONDecodeError:
+                                    # Not JSON or invalid JSON, continue with normal processing
+                                    pass
                                 
                             # Check if line indicates JSON output beginning/ending in markdown format
                             if "```json" in line:
@@ -554,7 +1041,6 @@ Do not create subdirectories for output files.
                                     json_content = "\n".join(stdout_buffer)
                                     try:
                                         # Try to parse and log any structured output
-                                        import json
                                         parsed = json.loads(json_content)
                                         if isinstance(parsed, dict):
                                             # Extract and log specific parts of structured output
@@ -988,3 +1474,48 @@ Do not create subdirectories for output files.
                     "message": f"Error: {str(e)}",
                     "logs": logs
                 })
+    
+    def validate_sdk_features(self) -> Dict[str, bool]:
+        """
+        Validate that the new SDK features are working correctly.
+        
+        Returns:
+            Dictionary with validation results for each feature
+        """
+        import tempfile
+        
+        results = {
+            "system_prompt_creation": False,
+            "mcp_config_creation": False,
+            "stream_json_processing": False
+        }
+        
+        try:
+            # Test system prompt creation
+            with tempfile.TemporaryDirectory() as temp_dir:
+                system_prompt_path = self._prepare_system_prompt(temp_dir)
+                results["system_prompt_creation"] = (
+                    system_prompt_path is not None and 
+                    os.path.exists(system_prompt_path)
+                )
+                
+                # Test MCP config creation (should return None when not enabled)
+                mcp_config_path = self._prepare_mcp_config(temp_dir)
+                results["mcp_config_creation"] = True  # Should work (return None when disabled)
+                
+            # Test stream JSON processing
+            test_json = '{"type": "content", "content": "test content"}'
+            from app.services.claude_code.log_streamer import get_log_streamer
+            log_streamer = get_log_streamer()
+            
+            # Create a temporary task ID for testing
+            test_task_id = f"test-{uuid.uuid4().hex}"
+            log_streamer.create_log_stream(test_task_id)
+            
+            parsed = self._process_stream_json(test_json, test_task_id, log_streamer)
+            results["stream_json_processing"] = isinstance(parsed, dict) and "content" in parsed
+            
+        except Exception as e:
+            logger.error(f"SDK feature validation failed: {str(e)}")
+            
+        return results

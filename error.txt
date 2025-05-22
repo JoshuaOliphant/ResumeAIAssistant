@@ -1,11 +1,8 @@
-[Claude Code] 0df0a3d7-e3b0-4687-b08b-8b0073b74a5a: "result": "I need your permission to use the Write function to create the customized resume files. Once you grant permission, I'll create both the customized resume and the change summary.",
-[Claude Code] 0df0a3d7-e3b0-4687-b08b-8b0073b74a5a: "session_id": "13c7f83f-0a1b-46ca-83e6-b346255a6be9"
-[Claude Code] 0df0a3d7-e3b0-4687-b08b-8b0073b74a5a: }
-[Claude Code] 0df0a3d7-e3b0-4687-b08b-8b0073b74a5a: ]
-Found JSON-like content but failed to parse it: {
-"role": "user",
-"content": [
-{
-"type": "text",
-"text": "\n# Resume Customization Task\n\n## Input ...
-INFO:     127.0.0.1:60584 - "POST /api/v1/claude-code/customize-resume/ HTTP/1.1" 408 Request Timeout
+INFO:     127.0.0.1:57195 - "GET /api/v1/jobs/62846160-4299-4746-bc5f-ef30d8635dd2 HTTP/1.1" 200 OK
+00:54:40.897 POST /api/v1/claude-code/customize-resume/
+00:54:40.897   FastAPI arguments
+Error building prompt: 'ClaudeCodeExecutor' object has no attribute '_get_system_prompt_content'
+Error executing Claude Code: Error building prompt: 'ClaudeCodeExecutor' object has no attribute '_get_system_prompt_content'
+Claude Code customization error: Error executing Claude Code: Error building prompt: 'ClaudeCodeExecutor' object has no attribute '_get_system_prompt_content'
+[ERROR] Claude Code customization failed: Error executing Claude Code: Error building prompt: 'ClaudeCodeExecutor' object has no attribute '_get_system_prompt_content'
+INFO:     127.0.0.1:57194 - "POST /api/v1/claude-code/customize-resume/ HTTP/1.1" 500 Internal Server Error

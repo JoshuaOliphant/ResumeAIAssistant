@@ -189,6 +189,26 @@ async def websocket_endpoint(
         connection_manager.disconnect(websocket, user_id)
 
 
+@router.post("/create")
+async def create_task(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Create a new task for progress tracking."""
+    try:
+        from app.services.claude_code.progress_tracker import progress_tracker
+        
+        # Create a new task
+        task = progress_tracker.create_task()
+        
+        logger.info(f"Created new task {task.task_id} for user {current_user.id}")
+        
+        return {"task_id": task.task_id}
+    except Exception as e:
+        logger.error(f"Error creating task: {str(e)}")
+        raise HTTPException(status_code=500, detail="Failed to create task")
+
+
 @router.get("/status/{task_id}", response_model=StatusUpdate)
 async def get_status(
     task_id: str,
@@ -196,6 +216,23 @@ async def get_status(
     current_user: User = Depends(get_current_user)
 ):
     """Get the latest status for a specific task."""
+    try:
+        from app.services.claude_code.progress_tracker import progress_tracker
+        
+        # Try to get task from progress tracker first
+        task = progress_tracker.get_task(task_id)
+        if task:
+            task_dict = task.to_dict()
+            return StatusUpdate(
+                task_id=task_dict["task_id"],
+                status=task_dict["status"],
+                message=task_dict["message"],
+                error=task_dict.get("error")
+            )
+    except Exception as e:
+        logger.error(f"Error getting task status: {str(e)}")
+    
+    # Fallback to connection manager
     if task_id in connection_manager.latest_updates:
         return connection_manager.latest_updates[task_id]
     

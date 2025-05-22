@@ -90,11 +90,18 @@ def setup_fastapi_instrumentation(app: FastAPI, exclude_urls: Optional[List[str]
     try:
         # Configure request attributes mapping function
         def request_attributes_mapper(request, response=None):
-            attributes = {
-                "http.url": str(request.url),
-                "http.method": request.method,
-                "http.client_ip": request.client.host if request.client else None,
-            }
+            attributes = {}
+            
+            # Handle WebSocket requests differently
+            if hasattr(request, 'scope') and request.scope.get('type') == 'websocket':
+                attributes["http.url"] = str(request.url)
+                attributes["ws.path"] = request.scope.get('path', '')
+                attributes["http.client_ip"] = request.client.host if hasattr(request, 'client') and request.client else None
+            else:
+                # Regular HTTP request
+                attributes["http.url"] = str(request.url) if hasattr(request, 'url') else None
+                attributes["http.method"] = request.method if hasattr(request, 'method') else None
+                attributes["http.client_ip"] = request.client.host if hasattr(request, 'client') and request.client else None
             
             # Add response attributes if available
             if response:

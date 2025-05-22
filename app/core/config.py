@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     ENABLE_FALLBACK: bool = False  # Disable fallback to legacy customization
     FALLBACK_THRESHOLD: int = int(os.getenv("FALLBACK_THRESHOLD", "3"))  # Number of failures before fallback
 
+    # MCP (Model Context Protocol) settings
+    CLAUDE_USE_MCP: bool = os.getenv("CLAUDE_USE_MCP", "false").lower() == "true"
+    BRAVE_SEARCH_API_KEY: Optional[str] = os.getenv("BRAVE_SEARCH_API_KEY")
+    CLAUDE_SYSTEM_PROMPT: Optional[str] = os.getenv("CLAUDE_SYSTEM_PROMPT")
+
     # No legacy configuration is needed anymore as PydanticAI has been completely removed
 
     # Database - SQLite only

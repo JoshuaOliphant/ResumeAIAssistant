@@ -50,8 +50,9 @@ async def websocket_customize_progress(
         # Subscribe to task progress updates
         task.add_subscriber(queue)
         
-        # Send initial status
-        await websocket.send_json(task.to_dict())
+        # Send initial status with logs
+        initial_data = task.to_dict()
+        await websocket.send_json(initial_data)
         
         # Set up ping interval
         ping_interval = settings.WS_PING_INTERVAL
@@ -82,7 +83,7 @@ async def websocket_customize_progress(
                     for task in pending:
                         task.cancel()
                     
-                    # If we got an update, send it
+                    # If we got an update, send it (it should already include logs)
                     if update_task in done:
                         progress = await update_task
                         await websocket.send_json(progress)

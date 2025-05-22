@@ -164,9 +164,35 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       console.log("Result keys:", Object.keys(result));
       console.log("Content field:", result.customized_resume || result.content);
       
-      // Ensure we have all the needed fields from the result
-      console.log('Claude Code customization complete, received result:', result);
+      // Process the result immediately (don't rely only on WebSocket completion)
+      processCustomizationResult(result);
+    } catch (err) {
+      console.error("Error customizing resume with Claude Code:", err);
+      setError(err instanceof Error ? err.message : "Failed to customize resume");
       
+      // Add error notification
+      addNotification({
+        title: "Customization Error",
+        message: err instanceof Error ? err.message : "Failed to customize resume"
+      });
+      
+      // Call onError callback if provided
+      if (onError && err instanceof Error) {
+        onError(err);
+      }
+    }
+  };
+  
+  // Process the customization result (called either directly or via WebSocket completion)
+  const processCustomizationResult = (result: any) => {
+    if (!result) {
+      console.error('Cannot process null or undefined result');
+      return;
+    }
+    
+    console.log('Processing customization result:', result);
+    
+    try {
       // Create a valid customizedVersion object even if the structure from API is different
       const versionObj = {
         id: result.id || result.customization_id || 'latest',
@@ -187,6 +213,7 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       }
       
       setStage('complete');
+      setLoading(false);
       
       // Add notification
       addNotification({
@@ -204,20 +231,9 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
         console.log('Auto-navigating to results page');
         handleViewResults();
       }, 1500);
-    } catch (err) {
-      console.error("Error customizing resume with Claude Code:", err);
-      setError(err instanceof Error ? err.message : "Failed to customize resume");
-      
-      // Add error notification
-      addNotification({
-        title: "Customization Error",
-        message: err instanceof Error ? err.message : "Failed to customize resume"
-      });
-      
-      // Call onError callback if provided
-      if (onError && err instanceof Error) {
-        onError(err);
-      }
+    } catch (e) {
+      console.error('Error processing customization result:', e);
+      setError(e instanceof Error ? e.message : "Failed to process customization result");
     }
   };
 
@@ -266,12 +282,35 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
             title="Resume Customization Progress"
             description="Track the progress of your resume customization with Claude Code"
             onComplete={(result) => {
-              // When the progress tracker signals completion, we can update the UI
-              if (stage === 'implementation' && customizedVersion) {
+              console.log('ProgressTracker onComplete called with result:', result);
+              
+              // If we have result data, process it directly
+              if (result && (result.result || result.data)) {
+                console.log('Processing result from WebSocket completion');
+                processCustomizationResult(result.result || result.data);
+              } 
+              // Otherwise just update the stage if we already have a customized version
+              else if (stage === 'implementation' && customizedVersion) {
+                console.log('WebSocket completion received, transitioning to complete stage');
                 setStage('complete');
+              }
+              // If we don't have a customized version yet, fetch the resume data
+              else if (stage === 'implementation' && !customizedVersion) {
+                console.log('WebSocket completion received but no customized version, attempting to fetch resume');
+                // This is a fallback - try to get the latest version from the API
+                ResumeService.getResume(resumeId)
+                  .then(resumeData => {
+                    console.log('Fetched resume data:', resumeData);
+                    if (resumeData && resumeData.current_version) {
+                      setCustomizedVersion(resumeData.current_version);
+                      setStage('complete');
+                    }
+                  })
+                  .catch(err => console.error('Error fetching resume after completion:', err));
               }
             }}
             onError={(error) => {
+              console.log('ProgressTracker onError called with error:', error);
               if (!customizedVersion) {
                 setError(error.message);
               }
