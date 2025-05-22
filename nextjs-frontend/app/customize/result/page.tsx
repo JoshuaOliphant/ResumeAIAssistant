@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
-import { CustomizationResult } from "@/components/customization-result"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ChevronLeft, FileCheck } from "lucide-react"
 
 export default function CustomizationResultPage() {
@@ -65,22 +65,39 @@ export default function CustomizationResultPage() {
         </div>
       </div>
       
-      {hasRequiredParams ? (
-        <CustomizationResult
-          resumeId={resumeId as string}
-          versionId={versionId as string}
-        />
-      ) : (
-        <div className="bg-muted p-8 rounded-md text-center">
-          <h2 className="text-xl font-semibold mb-2">Missing Information</h2>
-          <p className="text-muted-foreground mb-4">
-            Resume ID and Version ID are required to view customization results.
-          </p>
-          <Link href="/customize" passHref>
-            <Button>Go to Customize Resume</Button>
-          </Link>
-        </div>
-      )}
+      <Card>
+        <CardHeader>
+          <CardTitle>Customization Results</CardTitle>
+          <CardDescription>
+            Resume customization results will be displayed here.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-8">
+            <p className="text-muted-foreground mb-4">
+              Customization results functionality is being updated for the new Claude Code integration.
+            </p>
+            {resumeId && (
+              <p className="text-sm text-muted-foreground mb-4">
+                Resume ID: {resumeId}
+                {versionId && <><br />Version: {versionId}</>}
+              </p>
+            )}
+            <div className="flex gap-2 justify-center">
+              <Link href="/resumes" passHref>
+                <Button variant="outline">
+                  View Resumes
+                </Button>
+              </Link>
+              <Link href="/customize" passHref>
+                <Button>
+                  Start New Customization
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
