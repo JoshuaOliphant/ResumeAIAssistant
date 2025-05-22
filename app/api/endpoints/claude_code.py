@@ -207,21 +207,9 @@ async def customize_resume_sync(
         summary_path = os.path.join(output_dir, "customized_resume_output.md")
         customization_summary = read_file(summary_path)
 
-        # Store results in database if user is authenticated
-        if request.user_id:
-            db_customization = Customization(
-                original_resume=request.resume_content,
-                job_description=request.job_description,
-                customized_resume=customized_resume,
-                customization_summary=customization_summary,
-                user_id=request.user_id,
-            )
-            db.add(db_customization)
-            db.commit()
-            db.refresh(db_customization)
-            customization_id = db_customization.id
-        else:
-            customization_id = None
+        # Results are stored in the output directory for now
+        # Future: Consider storing customization metadata in a simplified model
+        customization_id = None
 
         # Mark task as completed
         task.status = "completed"
@@ -654,26 +642,9 @@ async def get_customize_result(task_id: str, db: Session = Depends(get_db)):
             summary_path = os.path.join(output_dir, "customized_resume_output.md")
             customization_summary = read_file(summary_path)
 
-            # Store in database if user is authenticated
+            # Results are stored in the output directory for now
+            # Future: Consider storing customization metadata in a simplified model
             customization_id = None
-            if user_id:
-                resume_path = context.get("resume_path")
-                job_description_path = context.get("job_description_path")
-
-                original_resume = read_file(resume_path)
-                job_description = read_file(job_description_path)
-
-                db_customization = Customization(
-                    original_resume=original_resume,
-                    job_description=job_description,
-                    customized_resume=customized_resume,
-                    customization_summary=customization_summary,
-                    user_id=user_id,
-                )
-                db.add(db_customization)
-                db.commit()
-                db.refresh(db_customization)
-                customization_id = db_customization.id
 
             task.result = {
                 "customized_resume": customized_resume,
