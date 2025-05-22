@@ -2,8 +2,8 @@
 // This file provides a mock authentication mechanism for development only
 
 // Set to true to enable development mode authentication (bypasses backend auth)
-// Set to false to use the real backend API
-export const AUTH_DEV_MODE = false;
+// Set to false to use the real backend API  
+export const AUTH_DEV_MODE = true;
 
 // Mock user data for development
 export const MOCK_USER = {
