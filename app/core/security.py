@@ -1,9 +1,8 @@
-import os
 from datetime import datetime, timedelta
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer, APIKeyHeader
+from fastapi.security import APIKeyHeader, OAuth2PasswordBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
@@ -20,7 +19,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 # OAuth2 token setup
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login",
-    auto_error=False  # Don't auto-raise exceptions for unauthorized
+    auto_error=False,  # Don't auto-raise exceptions for unauthorized
 )
 
 # Token expiration settings
@@ -46,15 +45,16 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     Create a JWT token
     """
     to_encode = data.copy()
-    expire = datetime.utcnow() + (expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES))
+    expire = datetime.utcnow() + (
+        expires_delta or timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm="HS256")
     return encoded_jwt
 
 
 def get_current_user(
-    db: Session = Depends(get_db),
-    token: str = Depends(oauth2_scheme)
+    db: Session = Depends(get_db), token: str = Depends(oauth2_scheme)
 ) -> Optional[Any]:
     """
     Get the current authenticated user from token
@@ -68,21 +68,21 @@ def get_current_user(
         user_id: str = payload.get("user_id")
         if email is None or user_id is None:
             return None
-        
+
         # Import here to avoid circular imports
         from app.models.user import User
-        
+
         user = db.query(User).filter(User.id == user_id).first()
         if user is None or not user.is_active:
             return None
-        
+
         return user
     except JWTError:
         return None
 
 
 def get_optional_current_user(
-    current_user: Optional[Any] = Depends(get_current_user)
+    current_user: Optional[Any] = Depends(get_current_user),
 ) -> Optional[Any]:
     """
     Get the current user if authenticated, None otherwise
@@ -92,7 +92,7 @@ def get_optional_current_user(
 
 
 def get_current_user_required(
-    current_user: Optional[Any] = Depends(get_current_user)
+    current_user: Optional[Any] = Depends(get_current_user),
 ) -> Any:
     """
     Get the current user, raising an exception if not authenticated
@@ -108,7 +108,7 @@ def get_current_user_required(
 
 
 def get_current_active_superuser(
-    current_user: Any = Depends(get_current_user_required)
+    current_user: Any = Depends(get_current_user_required),
 ) -> Any:
     """
     Get the current user, raising an exception if not a superuser
