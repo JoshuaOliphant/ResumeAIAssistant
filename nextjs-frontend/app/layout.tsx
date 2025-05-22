@@ -2,10 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import { Inter, JetBrains_Mono } from 'next/font/google'
 import './globals.css'
 import { ThemeProvider } from '@/components/theme-provider'
-import Header from '@/components/header'
-import Footer from '@/components/footer'
-import { AuthProvider } from '@/lib/auth'
-import { ProtectedRoute } from '@/components/protected-route'
+import ClientLayout from '@/components/client-layout'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -73,17 +70,9 @@ export default function RootLayout({
           enableSystem
           disableTransitionOnChange
         >
-          <AuthProvider>
-            <ProtectedRoute>
-              <div className="flex min-h-screen flex-col bg-background text-foreground">
-                <Header />
-                <main className="flex-1 container mx-auto px-4 py-8">
-                  {children}
-                </main>
-                <Footer />
-              </div>
-            </ProtectedRoute>
-          </AuthProvider>
+          <ClientLayout>
+            {children}
+          </ClientLayout>
         </ThemeProvider>
       </body>
     </html>

@@ -1,28 +1,24 @@
-import uuid
-from datetime import datetime
-
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, String, Text
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 
 from app.db.session import Base
 
 
 class JobDescription(Base):
-    """Model for storing job description information"""
-
     __tablename__ = "job_descriptions"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    title = Column(String(255), nullable=False)
-    company = Column(String(255), nullable=True)
-    source_url = Column(String(512), nullable=True)
+    id = Column(String, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    company = Column(String, nullable=True)
     description = Column(Text, nullable=False)
-    is_from_url = Column(Boolean, default=False)
-    user_id = Column(
-        String(36), ForeignKey("users.id"), nullable=True
-    )  # Allow null for existing data
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-
+    source_url = Column(String, nullable=True)
+    is_from_url = Column(Boolean, default=False, nullable=False)
+    user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now(), onupdate=func.now())
+    
     # Relationships
     user = relationship("User", back_populates="job_descriptions")
+    resume_versions = relationship("ResumeVersion", back_populates="job_description")
+    customization_plans = relationship("CustomizationPlan", back_populates="job_description", cascade="all, delete-orphan")

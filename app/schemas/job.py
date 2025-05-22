@@ -26,12 +26,13 @@ class JobDescription(JobDescriptionBase):
     """Schema for a job description"""
     id: str
     source_url: Optional[str] = None
-    is_from_url: bool
-    created_at: datetime
-    updated_at: datetime
+    is_from_url: Optional[bool] = False
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
-    class Config:
-        orm_mode = True
+    model_config = {
+        "from_attributes": True
+    }
 
 
 class JobDescriptionUpdate(BaseModel):

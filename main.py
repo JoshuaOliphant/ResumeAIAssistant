@@ -21,7 +21,7 @@ except ImportError:
 configure_logging(
     service_name="resume-ai-assistant",
     environment=os.getenv("ENVIRONMENT", "development"),
-    log_level=os.getenv("LOG_LEVEL", "INFO"),
+    log_level=os.getenv("LOG_LEVEL", "DEBUG"),
     capture_headers=False,  # Set to True to capture headers (be careful with sensitive data)
     enable_system_metrics=True
 )

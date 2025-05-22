@@ -1,6 +1,7 @@
 import time
 import uuid
 from typing import List
+from datetime import datetime
 
 import logfire
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -42,9 +43,12 @@ def create_job_description(
         title=job.title,
         company=job.company,
         description=job.description,
-        is_from_url=False,
         user_id=current_user.id if current_user else None,
+        created_at=datetime.now(),
+        updated_at=datetime.now()
     )
+    
+    db_job.is_from_url = False
     db.add(db_job)
     db.commit()
     db.refresh(db_job)
@@ -144,10 +148,13 @@ async def create_job_description_from_url(
                 title=title,
                 company=company,
                 description=description,
-                source_url=job.url,
-                is_from_url=True,
                 user_id=current_user.id if current_user else None,
+                created_at=datetime.now(),
+                updated_at=datetime.now()
             )
+            
+            db_job.source_url = job.url
+            db_job.is_from_url = True
             db.add(db_job)
             db.commit()
             db.refresh(db_job)

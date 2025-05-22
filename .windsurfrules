@@ -1,0 +1,4 @@
+1. Use `uv` for Python dependency management. For example, use `uv add <package_name>` to add a package.
+2. Use `uv run uvicorn main:app --host 0.0.0.0 --port 5000 --reload` to run the server.
+3. This is not a package so do not use `pip install .`
+4. Use `npm install` for JavaScript dependencies.

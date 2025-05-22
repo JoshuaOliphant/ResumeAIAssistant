@@ -45,24 +45,6 @@ class RecommendationItem(BaseModel):
     description: str = Field(description="Detailed explanation of the recommendation")
 
 
-class CustomizationPlanRequest(BaseModel):
-    """Schema for requesting a customization plan"""
-    resume_id: str
-    job_description_id: str
-    customization_strength: CustomizationLevel = Field(
-        default=CustomizationLevel.BALANCED, 
-        description="Strength of customization: 1=conservative, 2=balanced, 3=extensive"
-    )
-    industry: Optional[str] = Field(
-        default=None,
-        description="Optional industry name for industry-specific optimization guidance"
-    )
-    ats_analysis: Optional[Dict] = Field(
-        default=None,
-        description="Optional ATS analysis results to use as input for the plan"
-    )
-
-
 class CustomizationPlan(BaseModel):
     """Schema for a resume customization plan"""
     summary: str = Field(description="Overall assessment of the resume's alignment with the job")

@@ -300,6 +300,10 @@ def get_available_models() -> Dict[str, Dict]:
     if settings.GEMINI_API_KEY:
         providers.append(ModelProvider.GOOGLE)
 
+    # If no API keys are set, expose all models for testing purposes
+    if not providers:
+        providers = [ModelProvider.ANTHROPIC]
+
     # Filter models to only those from available providers
     for model_name, config in MODEL_REGISTRY.items():
         if config["provider"] in providers:
@@ -703,11 +707,14 @@ def get_model_config_for_task(
     fallbacks = get_fallback_chain(primary_model=model_name, task_name=task_name)
 
     # Get model provider
-    model_provider = model_config["provider"].value
+    if hasattr(model_config["provider"], 'value'):
+        model_provider = model_config["provider"].value
+    else:
+        model_provider = model_config["provider"]
 
-    # Generate thinking configuration if supported
+    # Generate thinking configuration if supported and enabled
     thinking_config = None
-    if model_config["supports_thinking"]:
+    if model_config["supports_thinking"] and settings.PYDANTICAI_ENABLE_THINKING:
         thinking_config = get_thinking_config_for_task(
             task_name=task_name,
             model_provider=model_provider,
@@ -728,48 +735,54 @@ def get_model_config_for_task(
     if thinking_config:
         complete_config["thinking_config"] = thinking_config
         
-    # Try to use the model optimizer for more advanced tiered processing
-    try:
-        from app.services.model_optimizer import select_optimized_model
-        
-        # If model_optimizer is available, use it to get optimized settings
-        optimized_config = select_optimized_model(
-            task_name=task_name,
-            content=content,
-            job_description=job_description,
-            industry=industry,
-            preferred_provider=preferred_provider,
-            user_override={
-                "cost_sensitivity": cost_sensitivity
-            }
-        )
-        
-        # Use the optimized config instead, but retain fallbacks
-        fallbacks_copy = complete_config["fallback_config"]
-        complete_config = optimized_config
-        
-        # Ensure fallbacks are properly maintained
-        if "fallback_config" not in complete_config or not complete_config["fallback_config"]:
-            complete_config["fallback_config"] = fallbacks_copy
-        
-        logfire.info(
-            "Using optimized model configuration",
-            task=task_name,
-            model=complete_config["model"],
-            optimized=True,
-            optimization_metadata=complete_config.get("optimization_metadata", {})
-        )
-    except (ImportError, Exception) as e:
-        # model_optimizer might not be available or has an error,
-        # continue with standard approach
-        logfire.info(
-            "Generated complete model configuration (standard)",
-            task=task_name,
-            model=model_name,
-            provider=model_provider,
-            has_thinking=thinking_config is not None,
-            fallback_count=len(fallbacks),
-            optimization_error=str(e) if isinstance(e, Exception) and not isinstance(e, ImportError) else None
-        )
+    # Check if we're being called from the model optimizer to avoid circular references
+    import inspect
+    caller_frames = inspect.stack()
+    from_optimizer = any('model_optimizer.py' in frame.filename for frame in caller_frames)
+
+    # Only use the model optimizer if we're not already being called from it
+    if not from_optimizer:
+        try:
+            from app.services.model_optimizer import select_optimized_model
+            
+            # If model_optimizer is available, use it to get optimized settings
+            optimized_config = select_optimized_model(
+                task_name=task_name,
+                content=content,
+                job_description=job_description,
+                industry=industry,
+                preferred_provider=preferred_provider,
+                user_override={
+                    "cost_sensitivity": cost_sensitivity
+                }
+            )
+            
+            # Use the optimized config instead, but retain fallbacks
+            fallbacks_copy = complete_config["fallback_config"]
+            complete_config = optimized_config
+            
+            # Ensure fallbacks are properly maintained
+            if "fallback_config" not in complete_config or not complete_config["fallback_config"]:
+                complete_config["fallback_config"] = fallbacks_copy
+            
+            logfire.info(
+                "Using optimized model configuration",
+                task=task_name,
+                model=complete_config["model"],
+                optimized=True,
+                optimization_metadata=complete_config.get("optimization_metadata", {})
+            )
+        except (ImportError, Exception) as e:
+            # model_optimizer might not be available or has an error,
+            # continue with standard approach
+            logfire.info(
+                "Generated complete model configuration (standard)",
+                task=task_name,
+                model=model_name,
+                provider=model_provider,
+                has_thinking=thinking_config is not None,
+                fallback_count=len(fallbacks),
+                optimization_error=str(e) if isinstance(e, Exception) and not isinstance(e, ImportError) else None
+            )
 
     return complete_config
