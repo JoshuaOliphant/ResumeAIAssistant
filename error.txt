@@ -1,8 +1,0 @@
-INFO:     127.0.0.1:57195 - "GET /api/v1/jobs/62846160-4299-4746-bc5f-ef30d8635dd2 HTTP/1.1" 200 OK
-00:54:40.897 POST /api/v1/claude-code/customize-resume/
-00:54:40.897   FastAPI arguments
-Error building prompt: 'ClaudeCodeExecutor' object has no attribute '_get_system_prompt_content'
-Error executing Claude Code: Error building prompt: 'ClaudeCodeExecutor' object has no attribute '_get_system_prompt_content'
-Claude Code customization error: Error executing Claude Code: Error building prompt: 'ClaudeCodeExecutor' object has no attribute '_get_system_prompt_content'
-[ERROR] Claude Code customization failed: Error executing Claude Code: Error building prompt: 'ClaudeCodeExecutor' object has no attribute '_get_system_prompt_content'
-INFO:     127.0.0.1:57194 - "POST /api/v1/claude-code/customize-resume/ HTTP/1.1" 500 Internal Server Error
