@@ -88,10 +88,7 @@ export default function HomeClient() {
             </CardHeader>
             <CardContent>
               <p>
-                <Link href="/ats" className="text-primary hover:underline">
-                  Analyze and optimize
-                </Link>{" "}
-                your resume for Applicant Tracking Systems with detailed keyword matching and formatting checks.
+                Optimize your resume for Applicant Tracking Systems with detailed keyword matching and formatting checks.
               </p>
             </CardContent>
           </Card>
@@ -149,7 +146,7 @@ export default function HomeClient() {
               <Link href="/resumes/new">Get Started Now</Link>
             </Button>
             <Button size="lg" asChild variant="outline" className="text-lg px-8 py-6 h-auto hover:bg-secondary/50 transition-all">
-              <Link href="/ats">Analyze Your Resume</Link>
+              <Link href="/resumes/new">Analyze Your Resume</Link>
             </Button>
           </div>
         </div>

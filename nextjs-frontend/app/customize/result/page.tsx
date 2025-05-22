@@ -36,13 +36,6 @@ export default function CustomizationResultPage() {
               Back
             </Button>
           </Link>
-          
-          <Link href="/analyze" passHref>
-            <Button>
-              <FileCheck className="mr-2 h-4 w-4" />
-              Analyze ATS Match
-            </Button>
-          </Link>
         </div>
       </div>
       

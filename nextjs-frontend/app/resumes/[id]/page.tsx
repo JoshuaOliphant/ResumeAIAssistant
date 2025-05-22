@@ -131,9 +131,7 @@ export default function ResumePage({ params }: { params: { id: string } }) {
                 Version {resume.current_version.version_number}
               </div>
               <Button variant="outline" asChild>
-                <Link href={`/analyze?resumeId=${resume.id}`}>
-                  Use for Job Application
-                </Link>
+                <Link href={`/customize?resumeId=${resume.id}`}>Customize Resume</Link>
               </Button>
             </CardFooter>
           </Card>

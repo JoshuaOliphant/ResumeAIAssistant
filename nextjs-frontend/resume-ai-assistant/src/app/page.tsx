@@ -22,7 +22,7 @@ export default function Home() {
             </p>
             <div className="flex flex-wrap justify-center gap-4 animate-fade-in-up animation-delay-200">
               <Button asChild size="lg" className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 transition-all duration-300 shadow-lg hover:shadow-xl">
-                <Link href="/analyze">Get Started</Link>
+                <Link href="/resumes/new">Get Started</Link>
               </Button>
               <Button asChild variant="outline" size="lg" className="border-2 hover:bg-gray-100/10 transition-all duration-300">
                 <Link href="/how-it-works">Learn More</Link>
@@ -189,7 +189,7 @@ export default function Home() {
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to Land Your Dream Job?</h2>
             <p className="text-lg md:text-xl mb-8 opacity-90">Start optimizing your resume today and increase your chances of getting interviews.</p>
             <Button asChild size="lg" className="bg-white text-blue-600 hover:bg-gray-100 transition-all duration-300 shadow-lg hover:shadow-xl">
-              <Link href="/analyze">Analyze Your Resume Now</Link>
+              <Link href="/resumes/new">Customize Your Resume Now</Link>
             </Button>
           </div>
         </div>
