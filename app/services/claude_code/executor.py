@@ -931,7 +931,7 @@ Do not create subdirectories for output files.
                 while process.poll() is None:
                     # Check if timeout has been exceeded
                     elapsed = time.time() - start_time
-                    
+        
                     # Provide progress updates every 30 seconds
                     if time.time() - last_progress_time > 30:  # Every 30 seconds
                         last_progress_time = time.time()
@@ -940,7 +940,7 @@ Do not create subdirectories for output files.
                             log_streamer.add_log(task_id, f"Processing... ({int(elapsed)}s elapsed)")
                         else:
                             log_streamer.add_log(task_id, f"Processing... ({minutes}m {int(elapsed % 60)}s elapsed)")
-                    
+        
                     # Check for timeout
                     if elapsed > timeout_seconds:
                         log_streamer.add_log(
@@ -954,7 +954,13 @@ Do not create subdirectories for output files.
                         except subprocess.TimeoutExpired:
                             process.kill()  # Force kill if it doesn't terminate
                             log_streamer.add_log(task_id, "Process did not terminate, force killing", level="error")
-                        
+            
+                        # Clean up threads before raising exception
+                        stdout_queue.put(None)  # Signal threads to terminate
+                        stderr_queue.put(None)
+                        stdout_thread.join(timeout=2)
+                        stderr_thread.join(timeout=2)
+            
                         raise subprocess.TimeoutExpired(command, timeout_seconds)
                     
                     # Get any available stdout
