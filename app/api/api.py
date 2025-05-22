@@ -8,17 +8,15 @@ import logfire
 from fastapi.responses import JSONResponse
 
 from app.api.endpoints import (
-    resumes,
-    jobs,
-    customize,
-    cover_letter,
-    export,
-    auth,
-    requirements,
-    enhance_customize,
+    resumes, 
+    jobs, 
+    customize, 
+    export, 
+    auth, 
+    requirements, 
     progress,
-    resume_customizer,
-    templates as template_endpoints,
+    websockets,  # Progress tracking endpoints
+    claude_code  # Main Claude Code endpoints for resume customization
 )
 from app.core.config import settings
 from app.db.session import Base, engine
@@ -64,6 +62,9 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
+    # Increased timeout limits to support longer customization operations (30 minutes)
+    default_response_class=JSONResponse,
+    # Add more parameters for timeout handling
 )
 
 # Set up templates
@@ -94,27 +95,16 @@ api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 api_router.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
 api_router.include_router(customize.router, prefix="/customize", tags=["customize"])
-api_router.include_router(enhance_customize.router, prefix="/enhance-customize", tags=["enhanced-customize"])
-api_router.include_router(cover_letter.router, prefix="/cover-letter", tags=["cover-letter"])
 api_router.include_router(export.router, prefix="/export", tags=["export"])
 api_router.include_router(progress.router, prefix="/progress", tags=["progress"])
 api_router.include_router(requirements.router, prefix="/requirements", tags=["requirements"])
-api_router.include_router(template_endpoints.router, prefix="/templates", tags=["templates"])
-api_router.include_router(
-    resume_customizer.router, prefix="/resume-customizer", tags=["resume-customizer"]
-)
+
+# Include WebSocket and Claude Code endpoints
+api_router.include_router(websockets.router, prefix="/progress", tags=["progress"])  # Progress tracking endpoints
+api_router.include_router(claude_code.router, tags=["claude-code"])  # Primary resume customization
 
 # Add the API router to the FastAPI application
 app.include_router(api_router, prefix=settings.API_V1_STR)
-
-# Debug log all registered routes
-for route in app.routes:
-    logfire.debug(
-        "Registered route",
-        path=route.path,
-        name=getattr(route, "name", None),
-        methods=[method for method in getattr(route, "methods", [])],
-    )
 
 # Exception handler for global error logging
 @app.exception_handler(Exception)

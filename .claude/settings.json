@@ -1,0 +1,15 @@
+{
+  "allowedTools": [
+    "Bash", 
+    "Glob", 
+    "Grep", 
+    "LS", 
+    "Read", 
+    "Edit", 
+    "Write", 
+    "WebFetch",
+    "Task",
+    "Batch"
+  ],
+  "ignorePatterns": []
+}

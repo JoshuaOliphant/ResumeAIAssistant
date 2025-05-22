@@ -1,25 +1,23 @@
 import os
-import traceback
-from functools import wraps
-from typing import Callable, List, Optional
-
-import httpx
 import logfire
+import traceback
 from fastapi import FastAPI
 from sqlalchemy import Engine
-from app.core.pydantic_ai_compat import PydanticAIContext
-
+from typing import Optional, Callable, List
+import httpx
+from app.core.config import settings
+from functools import wraps
 
 def configure_logging(
-    service_name: str = "resume-ai-assistant",
+    service_name: str = "resume-ai-assistant", 
     environment: Optional[str] = None,
     log_level: str = "INFO",
     capture_headers: bool = False,
-    enable_system_metrics: bool = True,
+    enable_system_metrics: bool = True
 ) -> None:
     """
     Configure Logfire for the application
-
+    
     Args:
         service_name: Name of the service
         environment: Optional environment name (dev, prod, etc.)
@@ -29,33 +27,33 @@ def configure_logging(
     """
     # Get environment from env var or default to development
     env = environment or os.getenv("ENVIRONMENT", "development")
-
+    
     # Check if Logfire is enabled (allow disabling via env var)
     enabled = os.getenv("LOGFIRE_ENABLED", "true").lower() in ("true", "1", "yes")
     if not enabled:
         print("Logfire is disabled via LOGFIRE_ENABLED environment variable")
         return None
-
+    
     # Configure Logfire
     console_options = {
         "colors": "auto",
         "span_style": "show-parents",
         "include_timestamps": True,
         "verbose": log_level.lower() == "debug",
-        "min_log_level": log_level.lower(),
+        "min_log_level": log_level.lower()
     }
-
+    
     logfire.configure(
         service_name=service_name,
         environment=env,
         token=os.getenv("LOGFIRE_API_KEY"),
-        console=console_options,
+        console=console_options
     )
-
+    
     # Log configuration details
     if log_level.lower() == "debug":
         logfire.info("Debug logging enabled", level=log_level)
-
+    
     # Enable system metrics if requested
     if enable_system_metrics:
         try:
@@ -63,31 +61,28 @@ def configure_logging(
             logfire.info("System metrics instrumentation enabled")
         except Exception as e:
             logfire.warning(
-                "Failed to enable system metrics instrumentation",
+                "Failed to enable system metrics instrumentation", 
                 error=str(e),
-                error_type=type(e).__name__,
+                error_type=type(e).__name__
             )
-
+    
     # Log initial configuration
     logfire.info(
-        "Logfire initialized",
-        service_name=service_name,
+        "Logfire initialized", 
+        service_name=service_name, 
         environment=env,
         log_level=log_level,
         capture_headers=capture_headers,
-        system_metrics_enabled=enable_system_metrics,
+        system_metrics_enabled=enable_system_metrics
     )
-
+    
     # Return the configured logger
     return logfire
 
-
-def setup_fastapi_instrumentation(
-    app: FastAPI, exclude_urls: Optional[List[str]] = None
-) -> None:
+def setup_fastapi_instrumentation(app: FastAPI, exclude_urls: Optional[List[str]] = None) -> None:
     """
     Set up FastAPI instrumentation with Logfire
-
+    
     Args:
         app: FastAPI application instance
         exclude_urls: Optional list of URL patterns to exclude from instrumentation
@@ -95,81 +90,76 @@ def setup_fastapi_instrumentation(
     try:
         # Configure request attributes mapping function
         def request_attributes_mapper(request, response=None):
-            attributes = {
-                "http.url": str(request.url),
-                "http.method": request.method,
-                "http.client_ip": request.client.host if request.client else None,
-            }
-
+            attributes = {}
+            
+            # Handle WebSocket requests differently
+            if hasattr(request, 'scope') and request.scope.get('type') == 'websocket':
+                attributes["http.url"] = str(request.url)
+                attributes["ws.path"] = request.scope.get('path', '')
+                attributes["http.client_ip"] = request.client.host if hasattr(request, 'client') and request.client else None
+            else:
+                # Regular HTTP request
+                attributes["http.url"] = str(request.url) if hasattr(request, 'url') else None
+                attributes["http.method"] = request.method if hasattr(request, 'method') else None
+                attributes["http.client_ip"] = request.client.host if hasattr(request, 'client') and request.client else None
+            
             # Add response attributes if available
             if response:
                 # Handle both response object and dictionary cases
                 if isinstance(response, dict):
                     # If response is a dictionary, access attributes as dictionary keys
                     attributes["http.status_code"] = response.get("status_code")
-                    attributes["http.content_length"] = response.get(
-                        "content_length", 0
-                    )
+                    attributes["http.content_length"] = response.get("content_length", 0)
                 else:
                     # If response is an object, access attributes as properties
-                    attributes["http.status_code"] = getattr(
-                        response, "status_code", None
-                    )
-                    attributes["http.content_length"] = (
-                        response.headers.get("content-length", 0)
-                        if hasattr(response, "headers")
-                        else 0
-                    )
-
+                    attributes["http.status_code"] = getattr(response, "status_code", None)
+                    attributes["http.content_length"] = response.headers.get("content-length", 0) if hasattr(response, "headers") else 0
+            
             return attributes
-
+        
         # Instrument FastAPI
         logfire.instrument_fastapi(
-            app,
+            app, 
             request_attributes_mapper=request_attributes_mapper,
-            excluded_urls=exclude_urls or [],
+            excluded_urls=exclude_urls or []
         )
-
+        
         logfire.info("FastAPI instrumentation set up successfully")
     except Exception as e:
         logfire.error(
             "Failed to set up FastAPI instrumentation",
             error=str(e),
             error_type=type(e).__name__,
-            traceback=traceback.format_exception(type(e), e, e.__traceback__),
+            traceback=traceback.format_exception(type(e), e, e.__traceback__)
         )
-
 
 def setup_sqlalchemy_instrumentation(engine: Engine) -> None:
     """
     Set up SQLAlchemy instrumentation with Logfire
-
+    
     Args:
         engine: SQLAlchemy engine instance
     """
     try:
         logfire.instrument_sqlalchemy(engine=engine)
-        logfire.info(
-            "SQLAlchemy instrumentation set up successfully", engine_url=str(engine.url)
-        )
+        logfire.info("SQLAlchemy instrumentation set up successfully", engine_url=str(engine.url))
     except Exception as e:
         logfire.error(
             "Failed to set up SQLAlchemy instrumentation",
             error=str(e),
             error_type=type(e).__name__,
-            traceback=traceback.format_exception(type(e), e, e.__traceback__),
+            traceback=traceback.format_exception(type(e), e, e.__traceback__)
         )
 
-
 def setup_httpx_instrumentation(
-    client: Optional[httpx.Client] = None,
+    client: Optional[httpx.Client] = None, 
     capture_headers: bool = False,
     request_hook: Optional[Callable] = None,
-    response_hook: Optional[Callable] = None,
+    response_hook: Optional[Callable] = None
 ) -> None:
     """
     Set up HTTPX instrumentation with Logfire
-
+    
     Args:
         client: Optional HTTPX client instance (if None, instrument all clients)
         capture_headers: Whether to capture HTTP headers
@@ -179,110 +169,98 @@ def setup_httpx_instrumentation(
     try:
         # Define default hooks if not provided
         if capture_headers and not request_hook:
-
             def default_request_hook(span, request):
                 try:
                     # Get headers but exclude potential sensitive information
                     safe_headers = {
-                        k: v
-                        for k, v in request.headers.items()
+                        k: v for k, v in request.headers.items() 
                         if k.lower() not in ("authorization", "cookie", "x-api-key")
                     }
                     span.set_attribute("http.request.headers", str(safe_headers))
                 except Exception:
                     # If we can't set the attribute, just continue without it
                     pass
-
+            
             request_hook = default_request_hook
-
+        
         if capture_headers and not response_hook:
-
             def default_response_hook(span, request, response):
                 try:
                     # Get response headers
                     safe_headers = {
-                        k: v
-                        for k, v in response.headers.items()
+                        k: v for k, v in response.headers.items()
                         if k.lower() not in ("set-cookie", "authorization", "x-api-key")
                     }
                     span.set_attribute("http.response.headers", str(safe_headers))
-
+                    
                     if hasattr(response, "content"):
                         span.set_attribute("http.response.size", len(response.content))
                 except Exception:
                     # If we can't set the attribute, just continue without it
                     pass
-
+            
             response_hook = default_response_hook
-
+        
         # Instrument HTTPX
         logfire.instrument_httpx(
-            client=client, request_hook=request_hook, response_hook=response_hook
+            client=client,
+            request_hook=request_hook,
+            response_hook=response_hook
         )
-
+        
         logfire.info(
             "HTTPX instrumentation set up successfully",
             global_instrumentation=client is None,
-            capture_headers=capture_headers,
+            capture_headers=capture_headers
         )
     except Exception as e:
         logfire.error(
             "Failed to set up HTTPX instrumentation",
             error=str(e),
             error_type=type(e).__name__,
-            traceback=traceback.format_exception(type(e), e, e.__traceback__),
+            traceback=traceback.format_exception(type(e), e, e.__traceback__)
         )
-
 
 def log_function_call(func):
     """
     Decorator to log function calls with input arguments and return values
-
+    
     Args:
         func: Function to decorate
     """
-
     @wraps(func)
     def wrapper(*args, **kwargs):
         # Prepare args for logging - avoid logging huge objects
         try:
-            safe_args = [
-                f"<{type(arg).__name__}>"
-                if isinstance(arg, (dict, list)) and len(str(arg)) > 100
-                else arg
-                for arg in args
-            ]
-            safe_kwargs = {
-                k: f"<{type(v).__name__}>"
-                if isinstance(v, (dict, list)) and len(str(v)) > 100
-                else v
-                for k, v in kwargs.items()
-            }
+            safe_args = [f"<{type(arg).__name__}>" if isinstance(arg, (dict, list)) and len(str(arg)) > 100 
+                         else arg for arg in args]
+            safe_kwargs = {k: f"<{type(v).__name__}>" if isinstance(v, (dict, list)) and len(str(v)) > 100 
+                           else v for k, v in kwargs.items()}
         except:
             # If we can't serialize args/kwargs, use generic placeholders
             safe_args = [f"<{type(arg).__name__}>" for arg in args]
             safe_kwargs = {k: f"<{type(v).__name__}>" for k, v in kwargs.items()}
-
+        
         # Create a span for this function call
         try:
             with logfire.span(f"function.{func.__name__}") as span:
                 try:
                     span.set_attribute("function.name", func.__name__)
                     span.set_attribute("function.module", func.__module__)
-
+                    
                     # Set span attributes for arguments (safely)
                     for i, arg in enumerate(safe_args):
-                        if i == 0 and arg == "self":
+                        if i == 0 and arg == 'self':
                             continue  # Skip 'self' for methods
                         try:
                             span.set_attribute(f"function.arg.{i}", str(arg))
                         except:
                             # Skip if we can't set this attribute
                             pass
-
+                    
                     # Set span attributes for keyword arguments (safely)
                     for k, v in safe_kwargs.items():
-                        if k in ("self", "cls"):
+                        if k in ('self', 'cls'):
                             continue  # Skip 'self'/'cls' for methods
                         try:
                             span.set_attribute(f"function.kwarg.{k}", str(v))
@@ -292,7 +270,7 @@ def log_function_call(func):
                 except:
                     # Continue even if we can't set some span attributes
                     pass
-
+                
                 try:
                     # Log function entry
                     logfire.info(
@@ -301,33 +279,28 @@ def log_function_call(func):
                         module=func.__module__,
                         args=safe_args,
                         kwargs=safe_kwargs,
-                        event="function_entry",
+                        event="function_entry"
                     )
                 except:
                     # Continue even if we can't log the function entry
                     pass
-
+                
                 try:
                     # Call the function
                     result = func(*args, **kwargs)
-
+                    
                     # Prepare result for logging
                     try:
-                        safe_result = (
-                            f"<{type(result).__name__}>"
-                            if isinstance(result, (dict, list))
-                            and len(str(result)) > 100
-                            else result
-                        )
-
+                        safe_result = f"<{type(result).__name__}>" if isinstance(result, (dict, list)) and len(str(result)) > 100 else result
+                        
                         # Log function exit
                         logfire.info(
                             f"Function return: {func.__name__}",
                             function=func.__name__,
                             result=safe_result,
-                            event="function_exit",
+                            event="function_exit"
                         )
-
+                        
                         # Set result attribute on span
                         try:
                             span.set_attribute("function.result", str(safe_result))
@@ -337,7 +310,7 @@ def log_function_call(func):
                     except:
                         # If we can't log the result, just continue
                         pass
-
+                    
                     return result
                 except Exception as e:
                     # Log exception
@@ -347,9 +320,9 @@ def log_function_call(func):
                             function=func.__name__,
                             exception_type=type(e).__name__,
                             exception=str(e),
-                            event="function_exception",
+                            event="function_exception"
                         )
-
+                        
                         # Set exception attributes on span
                         span.set_attribute("error", True)
                         span.set_attribute("error.type", type(e).__name__)
@@ -357,7 +330,7 @@ def log_function_call(func):
                     except:
                         # If logging fails, just continue
                         pass
-
+                    
                     raise
         except Exception as span_error:
             # If setting up the span fails for any reason, still execute the function
@@ -366,184 +339,21 @@ def log_function_call(func):
                 logfire.warning(
                     f"Failed to create span for {func.__name__}",
                     function=func.__name__,
-                    error=str(span_error),
+                    error=str(span_error)
                 )
             except:
                 # If logging fails, just continue
                 pass
-
+            
             # Call the function without logging
             return func(*args, **kwargs)
-
+    
     return wrapper
-
-
-def setup_pydanticai_instrumentation(
-    log_agents: bool = True,
-    log_prompts: bool = True,
-    log_llm_responses: bool = True,
-    log_completions: bool = True,
-) -> None:
-    """
-    Set up PydanticAI instrumentation with Logfire
-
-    Args:
-        log_agents: Whether to log PydanticAI agent events
-        log_prompts: Whether to log prompts sent to LLMs
-        log_llm_responses: Whether to log raw responses from LLMs
-        log_completions: Whether to log completions from LLMs
-    """
-    try:
-        # Import RunContext from pydantic_ai if available
-        try:
-            from pydantic_ai import RunContext
-            from app.core.pydantic_ai_compat import adapt_run_context_to_pydanticai_context
-        except ImportError:
-            logfire.warning("Could not import RunContext from pydantic_ai")
-        
-        # Define a PydanticAI event handler for Logfire
-        def pydanticai_event_handler(context):
-            # Convert RunContext to PydanticAIContext if needed
-            if not isinstance(context, PydanticAIContext):
-                try:
-                    context = adapt_run_context_to_pydanticai_context(context)
-                except Exception as e:
-                    logfire.warning(f"Failed to adapt RunContext: {e}")
-            
-            # Extract relevant information from the context
-            event_type = getattr(context, "event_type", "unknown")
-            agent_id = getattr(context, "agent_id", None)
-            model = getattr(context, "model", None)
-            prompt = getattr(context, "prompt", None)
-            response = getattr(context, "response", None)
-            
-            # Create a span for this PydanticAI event
-            with logfire.span(f"pydanticai.{event_type}") as span:
-                # Set common attributes
-                span.set_attribute("pydanticai.event_type", event_type)
-                
-                if agent_id:
-                    span.set_attribute("pydanticai.agent_id", agent_id)
-                
-                if model:
-                    span.set_attribute("pydanticai.model", model)
-                
-                # Set event-specific attributes and log
-                if event_type == "agent_created":
-                    logfire.info(
-                        "PydanticAI agent created", 
-                        agent_id=agent_id,
-                        agent_name=getattr(context, "agent_name", None),
-                        agent_type=getattr(context, "agent_type", None),
-                    )
-                
-                elif event_type == "agent_completed":
-                    logfire.info(
-                        "PydanticAI agent completed", 
-                        agent_id=agent_id,
-                        agent_name=getattr(context, "agent_name", None),
-                        duration_ms=getattr(context, "duration_ms", None),
-                    )
-                
-                elif event_type == "prompt_created":
-                    # Truncate prompt if too long for logging
-                    safe_prompt = prompt
-                    if prompt and len(prompt) > 500:
-                        safe_prompt = prompt[:500] + "... [truncated]"
-                    
-                    logfire.info(
-                        "PydanticAI prompt created", 
-                        agent_id=agent_id,
-                        model=model,
-                        prompt_length=len(prompt) if prompt else 0,
-                        prompt=safe_prompt if log_prompts else None,
-                    )
-                
-                elif event_type == "llm_response":
-                    # Truncate response if too long for logging
-                    safe_response = response
-                    if response and isinstance(response, str) and len(response) > 500:
-                        safe_response = response[:500] + "... [truncated]"
-                    
-                    logfire.info(
-                        "PydanticAI LLM response received", 
-                        agent_id=agent_id,
-                        model=model,
-                        response_length=len(response) if isinstance(response, str) else None,
-                        content=safe_response if log_llm_responses else None,
-                    )
-                
-                elif event_type == "completion":
-                    completion = getattr(context, "completion", None)
-                    # Truncate completion if too long for logging
-                    safe_completion = completion
-                    if completion and isinstance(completion, str) and len(completion) > 500:
-                        safe_completion = completion[:500] + "... [truncated]"
-                    
-                    logfire.info(
-                        "PydanticAI completion", 
-                        agent_id=agent_id,
-                        completion_length=len(completion) if isinstance(completion, str) else None,
-                        completion=safe_completion if log_completions else None,
-                    )
-                
-                elif event_type == "error":
-                    error = getattr(context, "error", None)
-                    error_message = str(error) if error else "Unknown error"
-                    
-                    logfire.error(
-                        "PydanticAI error", 
-                        agent_id=agent_id,
-                        error_type=type(error).__name__ if error else None,
-                        error_message=error_message,
-                    )
-                    
-                    # Mark span as error
-                    span.set_attribute("error", True)
-                    if error:
-                        span.set_attribute("error.type", type(error).__name__)
-                        span.set_attribute("error.message", error_message)
-                
-                else:
-                    # Generic logging for other event types
-                    logfire.info(f"PydanticAI {event_type} event", agent_id=agent_id)
-        
-        # Register the event handler with logfire
-        # Handle the case where the API has changed
-        try:
-            # Try new API first
-            logfire.instrument_pydantic_ai(event_handler=pydanticai_event_handler)
-            logfire.info("PydanticAI instrumentation set up with new API")
-        except (AttributeError, TypeError):
-            try:
-                # Fall back to old API
-                logfire.instrument_pydanticai(event_handler=pydanticai_event_handler)
-                logfire.info("PydanticAI instrumentation set up with legacy API")
-            except (AttributeError, TypeError):
-                logfire.warning(
-                    "Could not set up PydanticAI instrumentation - logfire.instrument_pydantic_ai not available"
-                )
-        
-        logfire.info(
-            "PydanticAI instrumentation completed",
-            log_agents=log_agents,
-            log_prompts=log_prompts,
-            log_llm_responses=log_llm_responses,
-            log_completions=log_completions,
-        )
-    except Exception as e:
-        logfire.error(
-            "Failed to set up PydanticAI instrumentation",
-            error=str(e),
-            error_type=type(e).__name__,
-            traceback=traceback.format_exception(type(e), e, e.__traceback__),
-        )
-
 
 def get_logger(name: str):
     """
     Get a logger for a specific module
-
+    
     Args:
         name: Name to use for the logger, typically __name__
     """

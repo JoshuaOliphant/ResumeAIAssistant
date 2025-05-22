@@ -8,7 +8,6 @@ from app.core.logging import (
     setup_fastapi_instrumentation,
     setup_sqlalchemy_instrumentation,
     setup_httpx_instrumentation,
-    setup_pydanticai_instrumentation,
 )
 
 # Import smart request handler setup function
@@ -47,14 +46,6 @@ try:
     setup_httpx_instrumentation(
         client=None,  # Instrument all clients
         capture_headers=False  # Avoid capturing potentially sensitive headers
-    )
-    
-    # Set up PydanticAI instrumentation with advanced settings
-    setup_pydanticai_instrumentation(
-        log_agents=True,
-        log_prompts=True,  # Set to True to see the actual prompts
-        log_llm_responses=True,  # Set to True to see raw responses from LLMs
-        log_completions=True  # Set to True to see parsed completions
     )
     
     # Set up smart request handling

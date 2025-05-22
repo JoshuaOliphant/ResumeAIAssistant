@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
-import { CustomizationService, TemplateService, JobService, ResumeService, Template, CustomizationResponse, CustomizationResult } from "@/lib/client"
+import { JobService, ResumeService, ResumeVersion, ClaudeCodeService } from "@/lib/client"
 import { API_BASE_URL } from "@/lib/api-config"
 import { Loader2, FileCheck, RefreshCw, AlertCircle, Check, ChevronRight, Sparkles, Brain } from "lucide-react"
 import { Label } from "@/components/ui/label"
@@ -16,63 +16,28 @@ import { addNotification } from "./notification-badge"
 export interface CustomizeResumeProps {
   resumeId: string
   jobId: string
-  onSuccess?: () => void
+  onSuccess?: (customizedVersion: ResumeVersion) => void
   onError?: (error: Error) => void
 }
 
 // Define customization stages
-type CustomizationStage = 'evaluation' | 'planning' | 'implementation' | 'verification' | 'complete';
+type CustomizationStage = 'preparation' | 'implementation' | 'complete';
 
 // Define customization level type
 type CustomizationLevel = 'conservative' | 'balanced' | 'extensive';
-
-// Define KeywordMatch interface to match the backend schema
-interface KeywordMatch {
-  keyword: string;
-  count_in_resume?: number;
-  count_in_job?: number;
-  is_match?: boolean;
-}
-
-// Define customization plan interface
-interface CustomizationPlan {
-  summary: string;
-  job_analysis: string;
-  keywords_to_add: string[];
-  formatting_suggestions: string[];
-  recommendations: {
-    section: string;
-    what: string;
-    why: string;
-    before_text: string;
-    after_text: string;
-    description: string;
-  }[];
-}
 
 export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: CustomizeResumeProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [stage, setStage] = useState<CustomizationStage>('evaluation')
+  const [stage, setStage] = useState<CustomizationStage>('preparation')
   const [customizationLevel, setCustomizationLevel] = useState<CustomizationLevel>('balanced')
-  const [customizationPlan, setCustomizationPlan] = useState<CustomizationPlan | null>(null)
-  const [customizationResult, setCustomizationResult] = useState<CustomizationResult | null>(null)
-  const [templates, setTemplates] = useState<Template[]>([])
-  const [selectedTemplate, setSelectedTemplate] = useState<string | null>(null)
-  const [customizationId, setCustomizationId] = useState<string | null>(null)
-  const [overallProgress, setOverallProgress] = useState<number>(0)
-  const [statusMessage, setStatusMessage] = useState<string>('')
-  const [currentStage, setCurrentStage] = useState<CustomizationStage>('evaluation')
+  const [customizedVersion, setCustomizedVersion] = useState<ResumeVersion | null>(null)
   const [resume, setResume] = useState<string | null>(null)
   const [jobDescription, setJobDescription] = useState<string | null>(null)
-  
-  // Debug trace customization_id
-  useEffect(() => {
-    if (customizationId) {
-      console.log('Customization ID set:', customizationId);
-    }
-  }, [customizationId]);
+  const [operationId, setOperationId] = useState<string | null>(null)
+  const [useRealTimeProgress, setUseRealTimeProgress] = useState(true)
+  const [customizationSummary, setCustomizationSummary] = useState<string | null>(null)
 
   // Load resume and job description
   useEffect(() => {
@@ -95,169 +60,194 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
     }
   }, [resumeId, jobId]);
 
-  // Fetch available templates
-  useEffect(() => {
-    const fetchTemplates = async () => {
-      try {
-        const data = await TemplateService.getTemplates();
-        setTemplates(data);
-        if (data.length > 0) {
-          setSelectedTemplate(data[0].id);
-        }
-      } catch (err) {
-        console.error('Error loading templates:', err);
-      }
-    };
-    fetchTemplates();
-  }, []);
-
-  const startCustomizationProcess = async () => {
-    if (!resumeId || !jobId) return;
+  // Initialize operation ID for progress tracking
+  const initializeOperation = async () => {
     try {
+      // Make a POST request to create a new progress tracker
+      const response = await fetch(`${API_BASE_URL}/progress/create`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('Failed to initialize progress tracking:', response.status, response.statusText, errorText);
+        console.error('API URL attempted:', `${API_BASE_URL}/progress/create`);
+        console.error('Auth token present:', !!localStorage.getItem('auth_token'));
+        console.error('Falling back to client-side simulation');
+        setUseRealTimeProgress(false);
+        return null;
+      }
+      
+      const data = await response.json();
+      console.log('Progress tracking initialized with ID:', data.task_id);
+      
+      // Wait a short delay to ensure the task is registered before we start polling
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      return data.task_id;
+    } catch (error) {
+      console.error('Error initializing progress tracking (network/other):', error);
+      console.error('This likely means the progress endpoint is unreachable or there is a network issue');
+      setUseRealTimeProgress(false);
+      return null;
+    }
+  };
+
+  // Function to prepare for resume customization with Claude Code
+  const prepareCustomization = async () => {
+    if (!resume || !jobDescription) {
+      setError("Resume and job description data is missing");
+      return;
+    }
+    
+    try {
+      // Initialize progress tracking
+      const taskId = await initializeOperation();
+      setOperationId(taskId);
+      
       setLoading(true);
-      setStage('evaluation');
-      console.log('Starting customization process with:', { resumeId, jobId, selectedTemplate: selectedTemplate || 'default' });
+      setStage('preparation');
+      setError(null);
       
-      let customizationResponse: CustomizationResponse;
-      try {
-        console.log('Before calling CustomizationService.startCustomization');
-        customizationResponse = await CustomizationService.startCustomization(
-          resumeId,
-          jobId,
-          selectedTemplate || 'default-template'
-        );
-        console.log('Customization response:', customizationResponse);
-        setCustomizationId(customizationResponse.customization_id);
-      } catch (error) {
-        console.error('Failed to start customization:', error);
-        setError(error instanceof Error ? error.message : 'Failed to start customization');
-        setLoading(false);
-        return;
-      }
-
-      // Get the latest token in case it was refreshed
-      // Get the latest token and keep refreshing it
-      const token = localStorage.getItem('auth_token') || '';
-      // Refresh token now before establishing websocket to ensure it's fresh
-      try {
-        // Try to refresh the token through the auth context for long-running processes
-        const authContext = (window as any).__auth_context;
-        if (authContext && typeof authContext.refreshToken === 'function') {
-          await authContext.refreshToken();
-          console.log('Token refreshed before establishing WebSocket connection');
-        }
-      } catch (e) {
-        console.warn('Failed to refresh token before WebSocket connection:', e);
-      }
+      // Skip analysis phase and move directly to implementation
+      console.log("Preparing to customize resume with Claude Code...");
+      console.log(`Using resume ID: ${resumeId}, job ID: ${jobId}, operation ID: ${taskId}`);
       
-      // Now create the WebSocket with the latest token
-      const freshToken = localStorage.getItem('auth_token') || token;
-      const ws = CustomizationService.createProgressWebSocket(customizationResponse.customization_id, freshToken);
-
-      ws.onmessage = async (event) => {
-        const data = JSON.parse(event.data);
-        setCurrentStage(data.stage);
-        setStatusMessage(data.message);
-        setOverallProgress(data.overall_progress);
-        if (data.stage === 'verification' && data.percentage === 100) {
-          ws.close();
-          try {
-            const result: CustomizationResult = await CustomizationService.getCustomizationResult(customizationResponse.customization_id);
-            setCustomizationResult(result);
-            if (result.plan) {
-              setCustomizationPlan(result.plan as CustomizationPlan);
-            }
-          } catch (e) {
-            console.error('Error fetching result:', e);
-          }
-          setStage('complete');
-          setLoading(false);
-        }
-      };
-
-      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        // Don't set error or loading state here - let the process continue
-        // The backend should still be processing even if the websocket fails
-        console.log('WebSocket error occurred, but customization is still running in the background');
-        
-        // After a few seconds, try to get the result directly instead of using websocket
-        setTimeout(async () => {
-          try {
-            if (customizationResponse.customization_id) {
-              console.log('Attempting to fetch customization result directly');
-              // Attempt to get the result by direct API call
-              const result = await CustomizationService.getCustomizationResult(customizationResponse.customization_id);
-              if (result) {
-                setCustomizationResult(result);
-                if (result.plan) {
-                  setCustomizationPlan(result.plan as CustomizationPlan);
-                }
-                setStage('complete');
-                setLoading(false);
-              }
-            }
-          } catch (e) {
-            console.error('Error fetching result after websocket error:', e);
-          }
-        }, 10000); // Wait 10 seconds
-      };
-      
-      ws.onclose = (event) => {
-        console.log('WebSocket closed:', event);
-        // Only handle unexpected closes as potential issues
-        if (!event.wasClean) {
-          console.log('WebSocket connection closed unexpectedly, but customization may still be running');
-          
-          // Similar to onerror, try to fetch the result directly
-          setTimeout(async () => {
-            try {
-              if (customizationResponse.customization_id) {
-                console.log('Attempting to fetch customization result after websocket close');
-                const result = await CustomizationService.getCustomizationResult(customizationResponse.customization_id);
-                if (result) {
-                  setCustomizationResult(result);
-                  if (result.plan) {
-                    setCustomizationPlan(result.plan as CustomizationPlan);
-                  }
-                  setStage('complete');
-                  setLoading(false);
-                }
-              }
-            } catch (e) {
-              console.error('Error fetching result after websocket close:', e);
-              // Now we can set an error if direct fetching also fails
-              setError('Unable to get customization status. Please check the Results page to see if customization completed.');
-              setLoading(false);
-            }
-          }, 15000); // Wait 15 seconds
-        }
-      };
+      // Proceed to implementation directly
+      setStage('implementation');
+      implementCustomization();
     } catch (err) {
-      console.error('Error starting customization:', err);
-      setError(err instanceof Error ? err.message : 'Failed to start customization');
+      console.error("Error preparing customization:", err);
+      setError(err instanceof Error ? err.message : "Failed to prepare customization");
       setLoading(false);
     }
   };
 
+  // Function to implement customization with Claude Code
+  const implementCustomization = async () => {
+    if (!resumeId || !jobId) {
+      setError("Resume ID and Job ID are required");
+      return;
+    }
+    
+    try {
+      // Make sure we have an operation ID for tracking
+      if (!operationId) {
+        const taskId = await initializeOperation();
+        setOperationId(taskId);
+      }
+      
+      setLoading(true);
+      setStage('implementation');
+      setError(null);
+      
+      // Add the level-specific prompt additions
+      const levelPrompt = getCustomizationLevelPrompt(customizationLevel);
+      console.log("Using customization level:", customizationLevel, levelPrompt);
+      
+      // Call the Claude Code API to customize resume
+      console.log("Starting Claude Code resume customization:", resumeId, jobId, "with level:", customizationLevel);
+      
+      // Pass the customization level to the API with the operation ID header and a longer timeout
+      const result = await ClaudeCodeService.customizeResume(
+        resumeId,
+        jobId,
+        customizationLevel,
+        operationId ? { 
+          headers: { 'X-Operation-ID': operationId },
+          timeout: 1800  // Use 30-minute timeout (1800 seconds)
+        } : { timeout: 1800 }
+      );
+      
+      // Log the raw result for debugging
+      console.log("Claude Code customization raw result:", result);
+      console.log("Result type:", typeof result);
+      console.log("Result keys:", Object.keys(result));
+      console.log("Content field:", result.customized_resume || result.content);
+      
+      // Process the result immediately (don't rely only on WebSocket completion)
+      processCustomizationResult(result);
+    } catch (err) {
+      console.error("Error customizing resume with Claude Code:", err);
+      setError(err instanceof Error ? err.message : "Failed to customize resume");
+      
+      // Add error notification
+      addNotification({
+        title: "Customization Error",
+        message: err instanceof Error ? err.message : "Failed to customize resume"
+      });
+      
+      // Call onError callback if provided
+      if (onError && err instanceof Error) {
+        onError(err);
+      }
+    }
+  };
+  
+  // Process the customization result (called either directly or via WebSocket completion)
+  const processCustomizationResult = (result: any) => {
+    if (!result) {
+      console.error('Cannot process null or undefined result');
+      return;
+    }
+    
+    console.log('Processing customization result:', result);
+    
+    try {
+      // Create a valid customizedVersion object even if the structure from API is different
+      const versionObj = {
+        id: result.id || result.customization_id || 'latest',
+        resume_id: resumeId,
+        content: result.customized_resume || result.content,
+        version_number: 1,
+        is_customized: true,
+        job_description_id: jobId,
+        created_at: new Date().toISOString()
+      };
+      
+      console.log('Created version object:', versionObj);
+      setCustomizedVersion(versionObj);
+      
+      // Store customization summary if available 
+      if (result.customization_summary) {
+        setCustomizationSummary(result.customization_summary);
+      }
+      
+      setStage('complete');
+      setLoading(false);
+      
+      // Add notification
+      addNotification({
+        title: "Resume Customization Complete",
+        message: "Your resume has been successfully customized for this job using Claude Code."
+      });
+      
+      // Call onSuccess callback if provided
+      if (onSuccess) {
+        onSuccess(versionObj);
+      }
+      
+      // Automatically navigate to results page after a short delay
+      setTimeout(() => {
+        console.log('Auto-navigating to results page');
+        handleViewResults();
+      }, 1500);
+    } catch (e) {
+      console.error('Error processing customization result:', e);
+      setError(e instanceof Error ? e.message : "Failed to process customization result");
+    }
+  };
 
   // Start customization process when component mounts and data is loaded
   useEffect(() => {
-    if (resumeId && jobId && resume && jobDescription && !customizationId && !loading && !error) {
-      // Add a small delay to ensure we have all data loaded before starting
-      const timer = setTimeout(() => {
-        console.log('Starting customization with data:', {
-          resumeId,
-          jobId,
-          resumeLength: resume?.length,
-          jobDescriptionLength: jobDescription?.length
-        });
-        startCustomizationProcess();
-      }, 500);
-      
-      return () => clearTimeout(timer);
+    if (resumeId && jobId && resume && jobDescription && !customizedVersion && !loading && !error) {
+      prepareCustomization();
     }
-  }, [resumeId, jobId, resume, jobDescription, customizationId, loading, error]);
+  }, [resumeId, jobId, resume, jobDescription, customizedVersion, loading, error]);
 
   // Format time in MM:SS format
   const formatTime = (seconds: number): string => {
@@ -268,33 +258,104 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
 
   // Handle retry
   const handleRetry = () => {
-    setCustomizationPlan(null);
-    setCustomizationId(null);
-    setOverallProgress(0);
-    setStatusMessage('');
-    setStage('evaluation');
-    console.log('Called handleRetry, starting customization process...');
-    startCustomizationProcess();
+    setCustomizedVersion(null);
+    setCustomizationSummary(null);
+    setStage('preparation');
+    prepareCustomization();
   };
 
   // Handle view results (direct to customization result page)
   const handleViewResults = () => {
-    if (customizationId) {
-      router.push(`/customize/result?customizationId=${customizationId}`);
+    if (customizedVersion) {
+      // Check if we have a valid version ID, if not use a fallback approach
+      const versionId = customizedVersion.id || 'latest';
+      console.log('Navigating to results page with params:', { resumeId, jobId, versionId });
+      router.push(`/customize/result?resumeId=${resumeId}&jobId=${jobId}&versionId=${versionId}`);
+    } else {
+      console.error('Cannot navigate to results: customizedVersion is null or undefined');
     }
   };
   
   // Render stage-specific content
   const renderStageContent = () => {
     if (loading) {
+      // Use real-time progress tracker if available
+      if (operationId && useRealTimeProgress) {
+        return (
+          <ProgressTracker 
+            taskId={operationId}
+            title="Resume Customization Progress"
+            description="Track the progress of your resume customization with Claude Code"
+            onComplete={(result) => {
+              console.log('ProgressTracker onComplete called with result:', result);
+              
+              // If we have result data, process it directly
+              if (result && (result.result || result.data)) {
+                console.log('Processing result from WebSocket completion');
+                processCustomizationResult(result.result || result.data);
+              } 
+              // Otherwise just update the stage if we already have a customized version
+              else if (stage === 'implementation' && customizedVersion) {
+                console.log('WebSocket completion received, transitioning to complete stage');
+                setStage('complete');
+              }
+              // If we don't have a customized version yet, fetch the resume data
+              else if (stage === 'implementation' && !customizedVersion) {
+                console.log('WebSocket completion received but no customized version, attempting to fetch resume');
+                // This is a fallback - try to get the latest version from the API
+                ResumeService.getResume(resumeId)
+                  .then(resumeData => {
+                    console.log('Fetched resume data:', resumeData);
+                    if (resumeData && resumeData.current_version) {
+                      setCustomizedVersion(resumeData.current_version);
+                      setStage('complete');
+                    }
+                  })
+                  .catch(err => console.error('Error fetching resume after completion:', err));
+              }
+            }}
+            onError={(error) => {
+              console.log('ProgressTracker onError called with error:', error);
+              if (!customizedVersion) {
+                setError(error.message);
+              }
+            }}
+            showNotifications={true}
+          />
+        );
+      }
+      
+      // Fallback to static progress display if real-time tracking isn't available
       return (
         <div className="space-y-4">
           <div className="flex items-center space-x-2">
             <Loader2 className="h-5 w-5 animate-spin text-primary" />
-            <span className="text-lg font-medium">{statusMessage}</span>
+            <span className="text-lg font-medium">
+              {stage === 'preparation' && "Preparing to customize your resume..."}
+              {stage === 'implementation' && "Customizing your resume with Claude Code..."}
+            </span>
           </div>
-          <div className="w-full h-2 bg-muted rounded">
-            <div className="h-2 bg-primary rounded" style={{ width: `${overallProgress}%` }}></div>
+          
+          <div className="space-y-2 rounded-lg bg-muted p-4 text-sm">
+            <p className="font-medium">What&apos;s happening:</p>
+            <ul className="space-y-1 list-disc list-inside text-muted-foreground">
+              {stage === 'preparation' && (
+                <>
+                  <li>Loading your resume content</li>
+                  <li>Preparing job description</li>
+                  <li>Initializing Claude Code</li>
+                </>
+              )}
+              {stage === 'implementation' && (
+                <>
+                  <li>Using Claude Code to customize your resume</li>
+                  <li>Optimizing content for job relevance</li>
+                  <li>Enhancing sections to highlight your qualifications</li>
+                  <li>Maintaining authentic representation</li>
+                  <li>Finalizing improvements</li>
+                </>
+              )}
+            </ul>
           </div>
         </div>
       );
@@ -318,144 +379,86 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       );
     }
     
-    if (customizationPlan && stage === 'planning') {
+    if (stage === 'preparation') {
       return (
         <div className="space-y-6">
           <div className="space-y-4 rounded-lg border p-4">
             <div className="space-y-2">
-              <h3 className="text-lg font-medium">Customization Plan</h3>
-              <p className="text-sm text-muted-foreground">{customizationPlan.summary}</p>
-            </div>
-            
-            <div className="space-y-2">
-              <h4 className="text-md font-medium">Job Analysis</h4>
+              <h3 className="text-lg font-medium">Customize Your Resume with Claude Code</h3>
               <p className="text-sm text-muted-foreground">
-                {typeof customizationPlan.job_analysis === 'string' 
-                  ? customizationPlan.job_analysis 
-                  : 'The job requires skills related to relevant technologies and experience.'}
+                Claude Code will analyze your resume and the job description to create a tailored version of your resume that highlights your relevant skills and experience.
               </p>
             </div>
             
-            <div className="space-y-2">
-              <h4 className="text-md font-medium">Keywords to Add</h4>
-              <div className="flex flex-wrap gap-2">
-                {Array.isArray(customizationPlan.keywords_to_add) && customizationPlan.keywords_to_add.map((keyword, index) => (
-                  <span 
-                    key={index} 
-                    className="px-2 py-1 text-xs bg-primary/10 rounded-full text-primary-foreground"
-                  >
-                    {typeof keyword === 'string' ? keyword : String(keyword)}
-                  </span>
-                ))}
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <h4 className="text-md font-medium">Formatting Suggestions</h4>
-              <ul className="space-y-1 list-disc list-inside text-sm text-muted-foreground">
-                {Array.isArray(customizationPlan.formatting_suggestions) && customizationPlan.formatting_suggestions.map((suggestion, index) => (
-                  <li key={index}>{typeof suggestion === 'string' ? suggestion : String(suggestion)}</li>
-                ))}
-              </ul>
-            </div>
-            
-            <div className="space-y-2">
-              <h4 className="text-md font-medium">Recommended Changes</h4>
-              <div className="space-y-4">
-                {Array.isArray(customizationPlan.recommendations) && customizationPlan.recommendations.map((rec, index) => (
-                  <div key={index} className="border rounded-md p-3 space-y-2">
-                    <div className="flex justify-between items-start">
-                      <span className="font-medium text-sm">{typeof rec.section === 'string' ? rec.section : 'General'}</span>
-                      <span className="text-xs bg-primary/20 px-2 py-0.5 rounded-full">
-                        {typeof rec.what === 'string' ? rec.what : 'Improvement'}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">{typeof rec.why === 'string' ? rec.why : 'Suggested improvement'}</p>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
-                      <div className="bg-muted/50 p-2 rounded text-xs">
-                        <div className="text-muted-foreground mb-1">Before:</div>
-                        <div>{typeof rec.before_text === 'string' ? rec.before_text : 'Original content'}</div>
-                      </div>
-                      <div className="bg-primary/5 p-2 rounded text-xs">
-                        <div className="text-primary mb-1">After:</div>
-                        <div>{typeof rec.after_text === 'string' ? rec.after_text : 'Improved content'}</div>
-                      </div>
-                    </div>
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-lg font-medium mb-2">Customization Level</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Choose how extensively you want to customize your resume. All changes will maintain authenticity.
+                </p>
+                
+                <RadioGroup 
+                  value={customizationLevel} 
+                  onValueChange={(value) => setCustomizationLevel(value as CustomizationLevel)}
+                  className="space-y-3"
+                >
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="conservative" id="conservative" />
+                    <Label htmlFor="conservative" className="font-medium">Conservative</Label>
+                    <p className="text-sm text-muted-foreground ml-2">
+                      Minimal changes focusing only on essential keywords and formatting
+                    </p>
                   </div>
-                ))}
+                  
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="balanced" id="balanced" />
+                    <Label htmlFor="balanced" className="font-medium">Balanced</Label>
+                    <p className="text-sm text-muted-foreground ml-2">
+                      Moderate customization with targeted improvements for good job relevance
+                    </p>
+                  </div>
+                  
+                  <div className="flex items-center space-x-2">
+                    <RadioGroupItem value="extensive" id="extensive" />
+                    <Label htmlFor="extensive" className="font-medium">Extensive</Label>
+                    <p className="text-sm text-muted-foreground ml-2">
+                      Maximum optimization with comprehensive improvements for ideal job matching
+                    </p>
+                  </div>
+                </RadioGroup>
               </div>
-            </div>
-          </div>
-          
-          <div className="space-y-4">
-            <div>
-              <h3 className="text-lg font-medium mb-2">Customization Level</h3>
-              <p className="text-sm text-muted-foreground mb-4">
-                Choose how extensively you want to customize your resume. All changes will maintain authenticity.
-              </p>
               
-              <RadioGroup 
-                value={customizationLevel} 
-                onValueChange={(value) => setCustomizationLevel(value as CustomizationLevel)}
-                className="space-y-3"
-              >
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="conservative" id="conservative" />
-                  <Label htmlFor="conservative" className="font-medium">Conservative</Label>
-                  <p className="text-sm text-muted-foreground ml-2">
-                    Minimal changes focusing only on essential keywords and formatting
-                  </p>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="balanced" id="balanced" />
-                  <Label htmlFor="balanced" className="font-medium">Balanced</Label>
-                  <p className="text-sm text-muted-foreground ml-2">
-                    Moderate customization with targeted improvements for good ATS optimization
-                  </p>
-                </div>
-                
-                <div className="flex items-center space-x-2">
-                  <RadioGroupItem value="extensive" id="extensive" />
-                  <Label htmlFor="extensive" className="font-medium">Extensive</Label>
-                  <p className="text-sm text-muted-foreground ml-2">
-                    Maximum optimization with comprehensive improvements for ideal ATS performance
-                  </p>
-                </div>
-              </RadioGroup>
-            </div>
-            
-            <div className="flex justify-end space-x-3">
-              <Button 
-                variant="outline" 
-                onClick={handleRetry}
-              >
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Start Over
-              </Button>
-              
-              <Button
-                onClick={startCustomizationProcess}
-                disabled={loading}
-              >
-                <Sparkles className="mr-2 h-4 w-4" />
-                Apply Customizations
-              </Button>
+              <div className="flex justify-end space-x-3">
+                <Button 
+                  onClick={implementCustomization}
+                  disabled={loading}
+                >
+                  <Sparkles className="mr-2 h-4 w-4" />
+                  Customize with Claude Code
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       );
     }
     
-    if (stage === 'complete') {
+    if (customizedVersion && stage === 'complete') {
       return (
         <div className="flex flex-col items-center justify-center py-8 space-y-4">
           <FileCheck className="h-12 w-12 text-primary" />
           <div className="text-center space-y-2">
             <h3 className="text-lg font-medium">Resume Customized!</h3>
             <p className="text-sm text-muted-foreground max-w-md mx-auto">
-              Your resume has been successfully customized for the selected job description using the {customizationLevel} optimization level.
+              Your resume has been successfully customized for the selected job description using Claude Code with {customizationLevel} optimization level.
             </p>
+            
+            {customizationSummary && (
+              <div className="mt-4 p-4 bg-muted rounded-lg text-left">
+                <h4 className="font-medium mb-2">Customization Summary</h4>
+                <p className="text-sm">{customizationSummary}</p>
+              </div>
+            )}
           </div>
         </div>
       );
@@ -480,19 +483,15 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
     return (
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center w-full">
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['evaluation','planning','implementation','verification','complete'].indexOf(stage) >= 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}> 
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${stage === 'preparation' || stage === 'implementation' || stage === 'complete' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
             <Brain className="h-4 w-4" />
           </div>
-          <div className={`h-1 flex-1 ${['planning','implementation','verification','complete'].indexOf(stage) >= 0 ? 'bg-primary' : 'bg-muted'}`}></div>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['planning','implementation','verification','complete'].indexOf(stage) >= 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}> 
+          <div className={`h-1 flex-1 ${stage === 'implementation' || stage === 'complete' ? 'bg-primary' : 'bg-muted'}`}></div>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${stage === 'implementation' || stage === 'complete' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
             <Sparkles className="h-4 w-4" />
           </div>
-          <div className={`h-1 flex-1 ${['implementation','verification','complete'].indexOf(stage) >= 0 ? 'bg-primary' : 'bg-muted'}`}></div>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['implementation','verification','complete'].indexOf(stage) >= 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
-            <FileCheck className="h-4 w-4" />
-          </div>
-          <div className={`h-1 flex-1 ${['verification','complete'].indexOf(stage) >= 0 ? 'bg-primary' : 'bg-muted'}`}></div>
-          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${['verification','complete'].indexOf(stage) >= 0 ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}> 
+          <div className={`h-1 flex-1 ${stage === 'complete' ? 'bg-primary' : 'bg-muted'}`}></div>
+          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${stage === 'complete' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
             <Check className="h-4 w-4" />
           </div>
         </div>
@@ -510,7 +509,7 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
         {renderProgressSteps()}
         {renderStageContent()}
       </CardContent>
-      {stage === 'complete' && customizationId && (
+      {customizedVersion && (
         <CardFooter className="flex justify-center">
           <Button onClick={handleViewResults} className="w-full sm:w-auto">
             View Customized Resume
