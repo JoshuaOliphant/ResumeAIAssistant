@@ -11,8 +11,9 @@ from app.services.export_service import (
 )
 
 
-def test_convert_markdown_to_pdf_returns_bytes():
-    result = asyncio.run(convert_markdown_to_pdf("# Title\n\nSome content"))
+@pytest.mark.asyncio
+async def test_convert_markdown_to_pdf_returns_bytes():
+    result = await convert_markdown_to_pdf("# Title\n\nSome content")
     assert isinstance(result, bytes)
     assert result
 
