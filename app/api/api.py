@@ -65,6 +65,7 @@ templates = Jinja2Templates(directory="templates")
 
 # Set up CORS
 if settings.BACKEND_CORS_ORIGINS:
+    print(f"Setting up CORS with origins: {settings.BACKEND_CORS_ORIGINS}")
     logfire.info(
         "Setting up CORS middleware",
         origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
@@ -75,7 +76,10 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["*"],
     )
+else:
+    print("WARNING: No CORS origins configured!")
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")

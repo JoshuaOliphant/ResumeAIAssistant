@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Loader2, Pencil, ArrowLeft, Trash } from "lucide-react"
 import { format } from "date-fns"
 
-export default function JobViewPage({ params }: { params: { id: string } }) {
+export default function JobViewPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const [job, setJob] = useState<JobDescription | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -18,7 +18,8 @@ export default function JobViewPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     async function loadJob() {
       try {
-        const jobData = await JobService.getJob(params.id)
+        const resolvedParams = await params
+        const jobData = await JobService.getJob(resolvedParams.id)
         setJob(jobData)
       } catch (err) {
         console.error("Error loading job:", err)
@@ -29,7 +30,7 @@ export default function JobViewPage({ params }: { params: { id: string } }) {
     }
 
     loadJob()
-  }, [params.id])
+  }, [params])
 
   const handleDelete = async () => {
     if (!job) return

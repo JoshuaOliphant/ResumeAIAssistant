@@ -5,99 +5,203 @@ import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ChevronLeft, FileCheck } from "lucide-react"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ChevronLeft, Download, FileText, Eye, Loader2 } from "lucide-react"
+
+interface TaskResult {
+  customized_resume?: string;
+  customization_summary?: string;
+  [key: string]: any;
+}
 
 export default function CustomizationResultPage() {
   const searchParams = useSearchParams()
+  const taskId = searchParams.get('taskId')
   const resumeId = searchParams.get('resumeId')
   const jobId = searchParams.get('jobId')
-  const versionId = searchParams.get('versionId')
   
-  // Enhanced debug logging for navigation parameters
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<TaskResult | null>(null)
+  
   useEffect(() => {
-    console.log("Result page loaded with params:", { 
-      resumeId, 
-      jobId, 
-      versionId,
-      hasAllParams: Boolean(resumeId && versionId),
-      fullUrl: typeof window !== 'undefined' ? window.location.href : 'N/A'
-    });
-    
-    // Track parameter changes
-    if (!resumeId) {
-      console.warn("Missing resumeId parameter in result page");
+    if (!taskId) {
+      setError("No task ID provided")
+      setLoading(false)
+      return
     }
     
-    if (!versionId) {
-      console.warn("Missing versionId parameter in result page");
-    }
-    
-    if (!jobId) {
-      console.warn("Missing jobId parameter in result page (not critical)");
-    }
-  }, [resumeId, jobId, versionId]);
-  
-  // Check if all required params are present
-  const hasRequiredParams = Boolean(resumeId && versionId)
-  
-  return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-3xl font-bold">Customized Resume</h1>
-          <p className="text-muted-foreground">Review and download your customized resume</p>
-        </div>
+    const fetchResult = async () => {
+      try {
+        const response = await fetch(`/api/v1/progress/${taskId}/status`)
+        if (!response.ok) {
+          throw new Error("Failed to fetch task status")
+        }
         
+        const data = await response.json()
+        
+        if (data.status === 'completed' && data.result) {
+          setResult(data.result)
+        } else if (data.status === 'error') {
+          setError(data.error || "Task failed")
+        } else {
+          setError("Task is not completed yet")
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Failed to load results")
+      } finally {
+        setLoading(false)
+      }
+    }
+    
+    fetchResult()
+  }, [taskId])
+  
+  const handleDownload = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+  
+  if (loading) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <Card>
+          <CardContent className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            <span className="ml-2 text-muted-foreground">Loading results...</span>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+  
+  if (error) {
+    return (
+      <div className="max-w-4xl mx-auto space-y-6">
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
         <div className="flex gap-2">
-          <Link href={`/customize?resumeId=${resumeId}&jobId=${jobId}`} passHref>
+          <Link href="/customize" passHref>
             <Button variant="outline">
               <ChevronLeft className="mr-2 h-4 w-4" />
-              Back
-            </Button>
-          </Link>
-          
-          <Link href="/analyze" passHref>
-            <Button>
-              <FileCheck className="mr-2 h-4 w-4" />
-              Analyze ATS Match
+              Back to Customize
             </Button>
           </Link>
         </div>
       </div>
+    )
+  }
+  
+  return (
+    <div className="max-w-6xl mx-auto space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold">Customization Complete</h1>
+          <p className="text-muted-foreground">Your resume has been customized for the job</p>
+        </div>
+        
+        <Link href="/customize" passHref>
+          <Button variant="outline">
+            <ChevronLeft className="mr-2 h-4 w-4" />
+            Back
+          </Button>
+        </Link>
+      </div>
       
-      <Card>
-        <CardHeader>
-          <CardTitle>Customization Results</CardTitle>
-          <CardDescription>
-            Resume customization results will be displayed here.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-8">
-            <p className="text-muted-foreground mb-4">
-              Customization results functionality is being updated for the new Claude Code integration.
-            </p>
-            {resumeId && (
-              <p className="text-sm text-muted-foreground mb-4">
-                Resume ID: {resumeId}
-                {versionId && <><br />Version: {versionId}</>}
-              </p>
-            )}
-            <div className="flex gap-2 justify-center">
-              <Link href="/resumes" passHref>
-                <Button variant="outline">
-                  View Resumes
+      <Tabs defaultValue="resume" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="resume">
+            <FileText className="mr-2 h-4 w-4" />
+            Customized Resume
+          </TabsTrigger>
+          <TabsTrigger value="summary">
+            <Eye className="mr-2 h-4 w-4" />
+            Summary Report
+          </TabsTrigger>
+        </TabsList>
+        
+        <TabsContent value="resume" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Your Customized Resume</CardTitle>
+                <Button 
+                  onClick={() => handleDownload(
+                    result?.customized_resume || '', 
+                    'customized_resume.md'
+                  )}
+                  size="sm"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
                 </Button>
-              </Link>
-              <Link href="/customize" passHref>
-                <Button>
-                  Start New Customization
+              </div>
+              <CardDescription>
+                This resume has been optimized for the job requirements
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <pre className="whitespace-pre-wrap font-sans text-sm">
+                  {result?.customized_resume || "No resume content available"}
+                </pre>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+        
+        <TabsContent value="summary" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle>Customization Summary</CardTitle>
+                <Button 
+                  onClick={() => handleDownload(
+                    result?.customization_summary || '', 
+                    'customization_summary.md'
+                  )}
+                  size="sm"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download
                 </Button>
-              </Link>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+              </div>
+              <CardDescription>
+                Detailed report of changes and recommendations
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="prose prose-sm dark:prose-invert max-w-none">
+                <pre className="whitespace-pre-wrap font-sans text-sm">
+                  {result?.customization_summary || "No summary available"}
+                </pre>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
+      
+      <div className="flex gap-2 justify-center">
+        <Link href="/resumes" passHref>
+          <Button variant="outline">
+            View All Resumes
+          </Button>
+        </Link>
+        <Link href="/customize" passHref>
+          <Button>
+            Customize Another Resume
+          </Button>
+        </Link>
+      </div>
     </div>
   )
 }

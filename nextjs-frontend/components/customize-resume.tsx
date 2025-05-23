@@ -6,13 +6,13 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { ProgressTracker } from "@/components/progress-tracker"
-import { ResumeService, JobService, Resume, JobDescription, ResumeVersion } from "@/lib/client"
+import { ResumeService, JobService, Resume, JobDescription, ResumeVersion, ClaudeCodeService } from "@/lib/client"
 import { Play, AlertCircle, CheckCircle } from "lucide-react"
 
 export interface CustomizeResumeProps {
   resumeId: string
   jobId: string
-  onSuccess?: (version: ResumeVersion) => void
+  onSuccess?: (taskId: string) => void
   onError?: (error: string) => void
 }
 
@@ -29,7 +29,7 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       try {
         const [resumeData, jobData] = await Promise.all([
           ResumeService.getResume(resumeId),
-          JobService.getJobDescription(jobId)
+          JobService.getJob(jobId)
         ])
         setResume(resumeData)
         setJob(jobData)
@@ -56,22 +56,13 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
       setError(null)
 
       // Call the Claude Code API to start customization
-      const response = await fetch('/api/v1/claude-code/customize-resume', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          resume_id: resumeId,
-          job_id: jobId,
-        }),
-      })
-
-      if (!response.ok) {
-        throw new Error(`Customization failed: ${response.statusText}`)
-      }
-
-      const result = await response.json()
+      const result = await ClaudeCodeService.customizeResume(
+        resume.id,
+        job.id,
+        'balanced',
+        { timeout: 1800 }
+      )
+      
       setCurrentTaskId(result.task_id)
 
     } catch (err) {
@@ -84,20 +75,10 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
 
   const handleCustomizationComplete = (result: any) => {
     setIsCustomizing(false)
-    setCurrentTaskId(null)
     
-    // The result should contain the customized resume version
-    if (result && result.version) {
-      onSuccess?.(result.version)
-    } else {
-      // If no version in result, we need to refresh the resume to get the latest version
-      ResumeService.getResume(resumeId).then((updatedResume) => {
-        onSuccess?.(updatedResume.current_version)
-      }).catch((err) => {
-        const errorMessage = err instanceof Error ? err.message : "Failed to get updated resume"
-        setError(errorMessage)
-        onError?.(errorMessage)
-      })
+    // Pass the task ID to the parent component
+    if (currentTaskId) {
+      onSuccess?.(currentTaskId)
     }
   }
 
@@ -136,7 +117,7 @@ export function CustomizeResume({ resumeId, jobId, onSuccess, onError }: Customi
             <CardTitle className="text-lg">Resume</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="font-medium">{resume.filename}</p>
+            <p className="font-medium">{resume.title}</p>
             <p className="text-sm text-muted-foreground">
               Current version: {resume.current_version?.version_number || 1}
             </p>

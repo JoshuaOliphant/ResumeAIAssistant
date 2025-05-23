@@ -805,7 +805,7 @@ export const ClaudeCodeService = {
     jobDescriptionId: string,
     customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced',
     options?: { headers?: Record<string, string>, timeout?: number }
-  ): Promise<ResumeVersion> {
+  ): Promise<{ task_id: string; status: string }> {
     console.log('ClaudeCodeService.customizeResume - input params:', { 
       resumeId, 
       jobDescriptionId, 
@@ -833,9 +833,11 @@ export const ClaudeCodeService = {
     console.log('Successfully fetched content, calling Claude Code endpoint');
     
     const requestBody = JSON.stringify({
+      resume_id: resumeId,
+      job_id: jobDescriptionId,
+      user_id: null, // Optional, will be set by backend if authenticated
       resume_content: resumeContent,
-      job_description: jobDescriptionContent,
-      customization_level: customizationLevel
+      job_description: jobDescriptionContent
     });
     
     // Bypass NextJS API routes and go directly to the backend
@@ -854,7 +856,12 @@ export const ClaudeCodeService = {
     const timeoutId = setTimeout(() => controller.abort(), fetchTimeout);
     
     try {
-      const response = await fetch(`${BACKEND_API_URL}/api/v1/claude-code/customize-resume/`, {
+      const url = `${BACKEND_API_URL}/api/v1/customize-resume/async/`;
+      console.log('Making request to:', url);
+      console.log('Request headers:', headers);
+      console.log('Request body:', requestBody);
+      
+      const response = await fetch(url, {
         method: 'POST',
         headers,
         body: requestBody,
@@ -881,7 +888,7 @@ export const ClaudeCodeService = {
       return data;
     } catch (error) {
       clearTimeout(timeoutId);
-      if (error.name === 'AbortError') {
+      if (error instanceof Error && error.name === 'AbortError') {
         throw new ApiError(
           408,
           'Request timed out - Claude Code execution is taking too long',
@@ -908,7 +915,7 @@ export const ClaudeCodeService = {
     };
     
     try {
-      const result = await fetchWithAuth('/claude-code/customize-resume/content', {
+      const result = await fetchWithAuth('/customize-resume/content', {
         method: 'POST',
         body: JSON.stringify({
           resume_content: resumeContent,
@@ -928,13 +935,13 @@ export const ClaudeCodeService = {
   
   // Get logs for a task
   async getLogs(taskId: string): Promise<string[]> {
-    const response = await fetchWithAuth(`/claude-code/customize-resume/logs/${taskId}`);
+    const response = await fetchWithAuth(`/customize-resume/logs/${taskId}`);
     return response.logs || [];
   },
   
   // Get task status with logs
   async getStatus(taskId: string, includeLogs: boolean = false): Promise<ClaudeCodeTaskStatusResponse> {
-    return fetchWithAuth(`/claude-code/customize-resume/status/${taskId}?include_logs=${includeLogs}`);
+    return fetchWithAuth(`/customize-resume/status/${taskId}?include_logs=${includeLogs}`);
   },
   
   // Stream logs in real-time
@@ -942,7 +949,7 @@ export const ClaudeCodeService = {
     const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     
     // Create EventSource for SSE
-    const url = `${BACKEND_API_URL}/api/v1/claude-code/customize-resume/logs/${taskId}/stream`;
+    const url = `${BACKEND_API_URL}/api/v1/customize-resume/logs/${taskId}/stream`;
     console.log(`Streaming logs from: ${url}`);
     
     // Configure EventSource for streaming

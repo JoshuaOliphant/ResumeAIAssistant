@@ -143,7 +143,7 @@ export function JobsTable({ jobs, onChange, onSelect }: JobsTableProps) {
     if (currentPage > 3) {
       items.push(
         <PaginationItem key="ellipsis-1">
-          <PaginationLink disabled>...</PaginationLink>
+          <span className="flex h-9 w-9 items-center justify-center">...</span>
         </PaginationItem>
       )
     }
@@ -167,7 +167,7 @@ export function JobsTable({ jobs, onChange, onSelect }: JobsTableProps) {
     if (currentPage < totalPages - 2 && totalPages > 3) {
       items.push(
         <PaginationItem key="ellipsis-2">
-          <PaginationLink disabled>...</PaginationLink>
+          <span className="flex h-9 w-9 items-center justify-center">...</span>
         </PaginationItem>
       )
     }
