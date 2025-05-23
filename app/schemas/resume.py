@@ -97,3 +97,9 @@ class ResumeUpdate(BaseModel):
 
     title: Optional[str] = None
     content: Optional[str] = None
+
+
+class HtmlDiffResponse(BaseModel):
+    """HTML diff response payload."""
+
+    diff_html: str

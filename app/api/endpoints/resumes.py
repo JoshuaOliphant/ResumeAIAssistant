@@ -15,9 +15,14 @@ from app.schemas.resume import (
     ResumeDiffResponse,
     ResumeUpdate,
     ResumeVersionCreate,
+    HtmlDiffResponse,
 )
 from app.schemas.resume import ResumeVersion as ResumeVersionSchema
-from app.services.diff_service import generate_resume_diff, get_diff_statistics
+from app.services.diff_service import (
+    generate_resume_diff,
+    get_diff_statistics,
+    DiffGenerator,
+)
 
 router = APIRouter()
 
@@ -506,3 +511,39 @@ def get_resume_version_diff(
         section_analysis=section_analysis,
         is_diff_view=True,
     )
+
+
+@router.get("/{resume_id}/diff", response_model=HtmlDiffResponse)
+def compare_resume_versions(
+    resume_id: str,
+    source_version_id: str,
+    target_version_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_optional_current_user),
+):
+    """Return an HTML diff between two resume versions."""
+    resume = db.query(Resume).filter(Resume.id == resume_id).first()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    if current_user and resume.user_id and resume.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Not authorized to access this resume")
+
+    source_version = (
+        db.query(ResumeVersion)
+        .filter(ResumeVersion.resume_id == resume_id, ResumeVersion.id == source_version_id)
+        .first()
+    )
+    target_version = (
+        db.query(ResumeVersion)
+        .filter(ResumeVersion.resume_id == resume_id, ResumeVersion.id == target_version_id)
+        .first()
+    )
+
+    if not source_version or not target_version:
+        raise HTTPException(status_code=404, detail="Resume version not found")
+
+    diff_html = DiffGenerator().html_diff_view(
+        source_version.content, target_version.content
+    )
+    return HtmlDiffResponse(diff_html=diff_html)
