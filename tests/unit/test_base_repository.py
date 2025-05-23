@@ -40,11 +40,12 @@ def test_create_and_get(repo: BaseRepository) -> None:
 
 
 def test_get_multi(repo: BaseRepository) -> None:
-    repo.create(obj_in={"name": "A"})
-    repo.create(obj_in={"name": "B"})
+    item_a = repo.create(obj_in={"name": "A"})
+    item_b = repo.create(obj_in={"name": "B"})
 
     all_items = repo.get_multi()
     assert len(all_items) == 2
+    assert {item.name for item in all_items} == {"A", "B"}
 
     filtered = repo.get_multi(name="A")
     assert len(filtered) == 1
