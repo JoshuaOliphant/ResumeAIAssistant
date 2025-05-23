@@ -247,7 +247,11 @@ def get_diff_statistics(original_text: str, customized_text: str) -> Dict[str, i
     Returns:
         Dictionary with statistics about additions, deletions, and modifications
     """
-    matcher = SequenceMatcher(None, original_text, customized_text)
+    original_lines = original_text.splitlines()
+    customized_lines = customized_text.splitlines()
+    
+    # Use SequenceMatcher for line-by-line comparison
+    matcher = SequenceMatcher(None, original_lines, customized_lines)
     
     stats = {
         "additions": 0,
