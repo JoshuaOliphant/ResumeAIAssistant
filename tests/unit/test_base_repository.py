@@ -22,6 +22,7 @@ def db_session() -> Session:
     try:
         yield db
     finally:
+        db.rollback()
         db.close()
 
 
