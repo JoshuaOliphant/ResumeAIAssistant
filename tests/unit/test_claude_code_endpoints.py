@@ -47,7 +47,7 @@ def test_customize_resume_timeout_error(mock_schema, mock_get_executor, sample_r
 
     resp = client.post("/api/v1/customize-resume", json=_build_request(sample_resume, sample_job_description))
     assert resp.status_code == 408
-    assert "timed out" in resp.json()["detail"].lower()
+    assert "timeout" in resp.json()["detail"].lower()
 
 
 @patch("app.api.endpoints.claude_code.get_claude_code_executor")
