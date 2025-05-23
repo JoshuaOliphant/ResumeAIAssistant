@@ -67,6 +67,7 @@ def test_create_version(in_memory_session):
     new_version = repo.create_version(resume.id, ResumeVersionCreate(content="v2"))
 
     assert new_version.version_number == 2
+    assert uuid.UUID(new_version.id, version=4)  # Verify UUID was generated
 
     updated = repo.get_with_current_version(resume.id)
     assert updated.current_version.id == new_version.id
