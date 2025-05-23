@@ -49,10 +49,10 @@ def test_get_diff_statistics_counts():
     cust = "A\nC\nD\n"
     stats = get_diff_statistics(orig, cust)
     assert stats == {
-        "additions": 2,
-        "deletions": 2,
+        "additions": 1,
+        "deletions": 1,
         "modifications": 0,
-        "unchanged": 4,
+        "unchanged": 2,
     }
 
 
