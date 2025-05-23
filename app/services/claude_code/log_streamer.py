@@ -299,28 +299,32 @@ class ClaudeCodeLogStreamer:
             buffer = []
             is_error_stream = stream_type == "stderr"
             default_level = "warning" if is_error_stream else "info"
-            
+    
             try:
                 # Different reading approach based on stream type
                 if is_error_stream:
                     # For stderr, we treat all output as potential errors/warnings
-                    for line in iter(process_output.readline, ''):
+                    for line in iter(process_output.readline, b''):
                         if not line:
                             continue
-                            
+                    
+                        # Convert bytes to string if needed
+                        if isinstance(line, bytes):
+                            line = line.decode('utf-8', errors='replace')
+                    
                         line = line.strip()
                         if not line:
                             continue
-                            
+                    
                         # Determine log level based on content
                         log_level = "warning"
                         if "error" in line.lower() or "exception" in line.lower():
                             log_level = "error"
-                            
+                    
                         # Add to logs and queue
                         self.add_log(task_id, line, level=log_level)
                         output_queue.put(line)
-                        
+                
                     # Signal end of stream
                     output_queue.put(None)
                     return
