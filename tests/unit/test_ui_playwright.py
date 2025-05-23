@@ -17,3 +17,4 @@ def test_index_page_renders():
             assert "Resume Customization App" in page.content()
         finally:
             browser.close()
+

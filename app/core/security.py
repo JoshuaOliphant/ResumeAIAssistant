@@ -127,3 +127,4 @@ def get_optional_api_key(api_key: str = Depends(API_KEY_HEADER)) -> Optional[str
     Optional API key validation for backward compatibility
     """
     return api_key
+

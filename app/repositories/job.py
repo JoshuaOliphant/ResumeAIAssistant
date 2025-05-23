@@ -91,3 +91,4 @@ class JobRepository(BaseRepository[JobDescription, JobDescriptionCreate, JobDesc
         
         # User-owned jobs are only accessible to that user
         return str(job.user_id) == user_id
+

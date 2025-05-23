@@ -200,3 +200,4 @@ class ClaudeCodeError(BaseModel):
     error: str = Field(..., description="Error message")
     error_type: str = Field(..., description="Type of error")
     status_code: int = Field(..., description="HTTP status code")
+
