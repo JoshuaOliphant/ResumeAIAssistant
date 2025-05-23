@@ -19,7 +19,7 @@ def test_create_access_token_encodes_payload_and_expiration():
     time_before = datetime.utcnow()
     token = create_access_token(data, expires_delta=delta)
 
-    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+    payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"], options={"verify_signature": True})
 
     assert payload["sub"] == data["sub"]
     assert payload["user_id"] == data["user_id"]
