@@ -44,3 +44,4 @@ class JobDescriptionUpdate(BaseModel):
     title: Optional[str] = None
     company: Optional[str] = None
     description: Optional[str] = None
+

@@ -97,3 +97,4 @@ class ResumeUpdate(BaseModel):
 
     title: Optional[str] = None
     content: Optional[str] = None
+
