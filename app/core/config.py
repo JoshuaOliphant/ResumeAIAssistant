@@ -85,3 +85,4 @@ settings = Settings()
 
 
 # Configuration is now simplified with complete removal of PydanticAI
+

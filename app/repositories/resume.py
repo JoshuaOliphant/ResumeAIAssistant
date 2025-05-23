@@ -150,3 +150,4 @@ class ResumeRepository(BaseRepository[Resume, ResumeCreate, ResumeUpdate]):
             )
             .first()
         )
+

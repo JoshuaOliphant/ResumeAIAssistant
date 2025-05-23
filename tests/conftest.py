@@ -83,6 +83,7 @@ def sample_job_description() -> str:
     """Provide a simple job description for tests."""
     return "Looking for a Python engineer with SQL experience"
 
+
 @pytest.fixture
 def client():
     """Provide a TestClient with in-memory database."""
@@ -123,4 +124,3 @@ def client():
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
-

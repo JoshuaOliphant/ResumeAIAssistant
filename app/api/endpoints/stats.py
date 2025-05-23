@@ -530,3 +530,4 @@ async def get_health_metrics() -> Dict[str, Any]:
         }
     except Exception as e:
         return {"status": "degraded", "error": str(e), "timestamp": time.time()}
+

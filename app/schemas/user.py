@@ -72,3 +72,4 @@ class TokenData(BaseModel):
 
     email: Optional[str] = None
     user_id: Optional[str] = None
+
