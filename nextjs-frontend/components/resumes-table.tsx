@@ -135,7 +135,7 @@ export function ResumesTable({ resumes, onChange, onSelect }: ResumesTableProps)
     if (currentPage > 3) {
       items.push(
         <PaginationItem key="ellipsis-1">
-          <PaginationLink disabled>...</PaginationLink>
+          <span className="flex h-9 w-9 items-center justify-center">...</span>
         </PaginationItem>
       )
     }
@@ -159,7 +159,7 @@ export function ResumesTable({ resumes, onChange, onSelect }: ResumesTableProps)
     if (currentPage < totalPages - 2 && totalPages > 3) {
       items.push(
         <PaginationItem key="ellipsis-2">
-          <PaginationLink disabled>...</PaginationLink>
+          <span className="flex h-9 w-9 items-center justify-center">...</span>
         </PaginationItem>
       )
     }

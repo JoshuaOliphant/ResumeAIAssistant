@@ -79,7 +79,7 @@ export default function ResumesPage() {
             <FileText className="w-16 h-16 text-muted-foreground mb-4" />
             <h2 className="text-xl font-medium mb-2">No Resumes Found</h2>
             <p className="text-muted-foreground mb-6">
-              You haven't created any resumes yet. Create your first resume to get started.
+              You haven&apos;t created any resumes yet. Create your first resume to get started.
             </p>
             <Button asChild>
               <Link href="/resumes/new">

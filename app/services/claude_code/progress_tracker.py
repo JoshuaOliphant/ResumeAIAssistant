@@ -144,7 +144,9 @@ class Task:
                 return
         
         # Check for completion
-        elif "execution completed successfully" in log_message.lower() or "completed successfully" in log_message.lower():
+        elif ("execution completed successfully" in log_message.lower() or 
+              "completed successfully" in log_message.lower() or
+              "claude code execution completed" in log_message.lower()):
             self.status = "completed"
             self.progress = 100
             self.message = "Resume customization completed successfully"

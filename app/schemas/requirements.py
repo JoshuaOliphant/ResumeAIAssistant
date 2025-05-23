@@ -1,48 +1,48 @@
-from typing import Dict, List, Optional
-from pydantic import BaseModel, Field
+"""
+Pydantic schemas for requirements extraction functionality.
+"""
+
+from typing import List, Optional
+from pydantic import BaseModel
+from enum import Enum
+
+
+class RequirementCategory(str, Enum):
+    """Categories for job requirements."""
+    TECHNICAL_SKILLS = "technical_skills"
+    SOFT_SKILLS = "soft_skills" 
+    EXPERIENCE = "experience"
+    EDUCATION = "education"
+    CERTIFICATIONS = "certifications"
+    TOOLS = "tools"
+    DOMAIN_KNOWLEDGE = "domain_knowledge"
 
 
 class Requirement(BaseModel):
-    """Schema for an individual job requirement"""
+    """Individual job requirement."""
     text: str
-    priority: int = Field(1, ge=1, le=5, description="Priority level 1-5, with 1 being highest")
-    category: Optional[str] = None
-    is_required: bool = True
-
-
-class RequirementCategory(BaseModel):
-    """Schema for a category of requirements"""
-    category: str
-    requirements: List[Requirement]
-    weight: float = Field(1.0, ge=0.0, le=2.0, description="Category weight for scoring")
+    category: RequirementCategory
+    importance: str  # "required", "preferred", "nice_to_have"
+    confidence: float = 1.0
 
 
 class KeyRequirements(BaseModel):
-    """Schema for key requirements extracted from a job description"""
-    job_id: Optional[str] = None
-    job_title: Optional[str] = None
-    company: Optional[str] = None
-    job_type: str = Field("default", description="Job type categorization")
-    categories: List[RequirementCategory]
-    keywords: Dict[str, float] = Field(default_factory=dict, description="Keywords with importance weights")
-    
-    # Metadata
-    confidence: float = Field(0.0, ge=0.0, le=1.0, description="Confidence level of extraction")
-    total_requirements_count: int = 0
+    """Extracted key requirements from a job description."""
+    requirements: List[Requirement]
+    summary: Optional[str] = None
 
 
 class KeyRequirementsRequest(BaseModel):
-    """Schema for requesting key requirements extraction"""
-    job_description_id: str
+    """Request to extract requirements from a job description ID."""
+    job_id: int
 
 
 class KeyRequirementsContentRequest(BaseModel):
-    """Schema for requesting key requirements extraction from content"""
-    job_description_content: str
-    job_title: Optional[str] = None
-    company: Optional[str] = None
+    """Request to extract requirements from job description content."""
+    content: str
 
 
-class KeyRequirementsResponse(KeyRequirements):
-    """Schema for key requirements extraction response"""
-    job_description_id: str
+class KeyRequirementsResponse(BaseModel):
+    """Response containing extracted requirements."""
+    requirements: KeyRequirements
+    job_id: Optional[int] = None

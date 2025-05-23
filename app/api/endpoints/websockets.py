@@ -6,7 +6,7 @@ long-running tasks like resume customization.
 """
 
 import logging
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -26,8 +26,8 @@ class TaskStatusResponse(BaseModel):
     status: str
     progress: int
     message: str
-    result: Dict[str, Any] = None
-    error: str = None
+    result: Optional[Dict[str, Any]] = None
+    error: Optional[str] = None
 
 
 @router.get("/{task_id}/status", response_model=TaskStatusResponse)
@@ -46,6 +46,9 @@ async def get_task_status(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Task not found"
             )
+        
+        # Log the task status for debugging
+        logger.info(f"Task {task_id} status: {task.status}, progress: {task.progress}, has_result: {task.result is not None}")
         
         return TaskStatusResponse(
             task_id=task.task_id,

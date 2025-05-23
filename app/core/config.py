@@ -1,6 +1,6 @@
 import os
 import secrets
-from typing import Any, Dict, List, Optional, Union
+from typing import List, Optional, Union
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings
@@ -19,7 +19,7 @@ class Settings(BaseSettings):
         "http://localhost:3000",  # Next.js frontend
         "http://127.0.0.1:3000",  # Alternative localhost
         "http://localhost:5001",  # Backend itself
-        "http://127.0.0.1:5001"   # Alternative for backend
+        "http://127.0.0.1:5001",  # Alternative for backend
     ]
 
     @field_validator("BACKEND_CORS_ORIGINS", mode="before")
@@ -49,10 +49,16 @@ class Settings(BaseSettings):
     # Claude Code settings
     CLAUDE_CODE_CMD: str = os.getenv("CLAUDE_CODE_CMD", "claude")
     CLAUDE_CODE_WORKING_DIR: Optional[str] = os.getenv("CLAUDE_CODE_WORKING_DIR")
-    CLAUDE_CODE_TIMEOUT: int = int(os.getenv("CLAUDE_CODE_TIMEOUT", "1800"))  # 30 minutes
-    CLAUDE_CODE_MAX_TIMEOUT: int = int(os.getenv("CLAUDE_CODE_MAX_TIMEOUT", "3600"))  # 60 minutes max
+    CLAUDE_CODE_TIMEOUT: int = int(
+        os.getenv("CLAUDE_CODE_TIMEOUT", "1800")
+    )  # 30 minutes
+    CLAUDE_CODE_MAX_TIMEOUT: int = int(
+        os.getenv("CLAUDE_CODE_MAX_TIMEOUT", "3600")
+    )  # 60 minutes max
     ENABLE_FALLBACK: bool = False  # Disable fallback to legacy customization
-    FALLBACK_THRESHOLD: int = int(os.getenv("FALLBACK_THRESHOLD", "3"))  # Number of failures before fallback
+    FALLBACK_THRESHOLD: int = int(
+        os.getenv("FALLBACK_THRESHOLD", "3")
+    )  # Number of failures before fallback
 
     # MCP (Model Context Protocol) settings
     CLAUDE_USE_MCP: bool = os.getenv("CLAUDE_USE_MCP", "false").lower() == "true"

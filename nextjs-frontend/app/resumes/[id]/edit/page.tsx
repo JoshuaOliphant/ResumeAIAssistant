@@ -8,16 +8,19 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { AlertCircle, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
-export default function EditResumePage({ params }: { params: { id: string } }) {
+export default function EditResumePage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const [resume, setResume] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [resumeId, setResumeId] = useState<string | null>(null)
   
   useEffect(() => {
     async function loadResume() {
       try {
-        const data = await ResumeService.getResume(params.id)
+        const resolvedParams = await params
+        setResumeId(resolvedParams.id)
+        const data = await ResumeService.getResume(resolvedParams.id)
         setResume({
           id: data.id,
           title: data.title,
@@ -32,11 +35,13 @@ export default function EditResumePage({ params }: { params: { id: string } }) {
     }
     
     loadResume()
-  }, [params.id])
+  }, [params])
   
   const handleSuccess = () => {
     // Navigate back to the resume detail page
-    router.push(`/resumes/${params.id}`)
+    if (resumeId) {
+      router.push(`/resumes/${resumeId}`)
+    }
   }
   
   if (isLoading) {

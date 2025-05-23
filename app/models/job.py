@@ -21,4 +21,3 @@ class JobDescription(Base):
     # Relationships
     user = relationship("User", back_populates="job_descriptions")
     resume_versions = relationship("ResumeVersion", back_populates="job_description")
-    customization_plans = relationship("CustomizationPlan", back_populates="job_description", cascade="all, delete-orphan")

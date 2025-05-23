@@ -8,7 +8,7 @@ import { JobDescriptionForm } from "@/components/job-description-form"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft, Loader2 } from "lucide-react"
 
-export default function JobEditPage({ params }: { params: { id: string } }) {
+export default function JobEditPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const [job, setJob] = useState<JobDescription | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -17,7 +17,8 @@ export default function JobEditPage({ params }: { params: { id: string } }) {
   useEffect(() => {
     async function loadJob() {
       try {
-        const jobData = await JobService.getJob(params.id)
+        const resolvedParams = await params
+        const jobData = await JobService.getJob(resolvedParams.id)
         setJob(jobData)
       } catch (err) {
         console.error("Error loading job:", err)
@@ -28,7 +29,7 @@ export default function JobEditPage({ params }: { params: { id: string } }) {
     }
 
     loadJob()
-  }, [params.id])
+  }, [params])
 
   // Handle successful job update
   const handleSuccess = (updatedJob: JobDescription) => {

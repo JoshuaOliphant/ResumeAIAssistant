@@ -28,7 +28,11 @@ export function ProgressTracker({ taskId, onComplete, onError }: ProgressTracker
     // Check for completion every 10 seconds
     const checkCompletion = async () => {
       try {
-        const response = await fetch(`/api/v1/progress/${taskId}/status`);
+        const response = await fetch(`/api/v1/progress/${taskId}/status`, {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('auth_token') || ''}`,
+          },
+        });
         if (response.ok) {
           const data = await response.json();
           setStatus(data.status);

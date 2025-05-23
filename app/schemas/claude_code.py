@@ -10,6 +10,40 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
+class ClaudeCodeCustomizeRequest(BaseModel):
+    """
+    Request model for Claude Code resume customization.
+    
+    Attributes:
+        resume_id: ID of the resume to customize
+        job_id: ID of the job to customize for
+        user_id: Optional ID of the authenticated user
+        resume_content: Full content of the resume
+        job_description: Full job description text
+    """
+    
+    resume_id: str = Field(..., description="ID of the resume to customize")
+    job_id: str = Field(..., description="ID of the job to customize for")
+    user_id: Optional[str] = Field(None, description="Optional user ID")
+    resume_content: str = Field(..., description="Resume content")
+    job_description: str = Field(..., description="Job description text")
+
+
+class ClaudeCodeCustomizeResponse(BaseModel):
+    """
+    Response model for Claude Code customized resume.
+    
+    Attributes:
+        customized_resume: The customized resume content
+        customization_summary: Summary of changes and explanations
+        customization_id: Optional ID of the stored customization
+    """
+    
+    customized_resume: str = Field(..., description="Customized resume content")
+    customization_summary: str = Field(..., description="Summary of changes")
+    customization_id: Optional[str] = Field(None, description="ID of customization")
+
+
 class CustomizeResumeRequest(BaseModel):
     """
     Request model for resume customization.
