@@ -111,7 +111,6 @@ def client():
         finally:
             db.close()
 
-    app = FastAPI()
     app.dependency_overrides[get_db] = override_get_db
     api_prefix = "/api/v1"
     app.include_router(auth.router, prefix=f"{api_prefix}/auth")
@@ -121,6 +120,9 @@ def client():
     app.include_router(requirements.router, prefix=f"{api_prefix}/requirements")
     app.include_router(websockets.router, prefix=f"{api_prefix}/progress")
 
-    with TestClient(app) as c:
-        yield c
+    try:
+        with TestClient(app) as c:
+            yield c
+    finally:
+        app.dependency_overrides.clear()
     app.dependency_overrides.clear()
