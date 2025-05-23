@@ -33,6 +33,7 @@ def test_create_from_url(db_session):
     }
 
     created = repo.create_from_url(data, user_id="user123")
+    db_session.commit()  # Ensure data is committed
 
     assert created.id == "job1"
     assert created.title == "Engineer"
