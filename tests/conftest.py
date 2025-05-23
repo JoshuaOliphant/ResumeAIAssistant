@@ -19,7 +19,6 @@ def configure_logfire():
     # Use a custom override to prevent any real logging during tests
     original_info = logfire.info
     original_error = logfire.error
-    original_warning = logfire.warning
     original_debug = logfire.debug
     original_span = logfire.span
     
@@ -29,8 +28,8 @@ def configure_logfire():
     
     logfire.info = noop_log
     logfire.error = noop_log
-    logfire.warning = noop_log
     logfire.debug = noop_log
+    
     class DummySpan:
         def __enter__(self):
             return self
@@ -48,7 +47,6 @@ def configure_logfire():
     # Restore original methods after the test
     logfire.info = original_info
     logfire.error = original_error
-    logfire.warning = original_warning
     logfire.debug = original_debug
     logfire.span = original_span
 

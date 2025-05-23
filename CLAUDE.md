@@ -1,4 +1,4 @@
-# CLAUDE.md - Guidelines for ResumeAIAssistant
+# CLAUDE.md - Guidelines for ResumeAI Assistant
 
 ## Backend Development
 - Setup: `uv sync` (installs from pyproject.toml)
@@ -10,103 +10,147 @@
 - Use uv to start the application with `uv run uvicorn main:app --host 0.0.0.0 --port 5001 --reload`
 - Always source the virtual environment and use `uv sync` to install existing dependencies in pyproject.toml. If you need to install a new dependency, use `uv add`, never use pip.
 
-## Project Architecture
+## Resume Customization Workflow
 
-### Core Components
-- **PydanticAI Architecture**: Model-agnostic AI system using the evaluator-optimizer pattern
-- **Multi-Model Support**: Integration with Anthropic Claude, Google Gemini, and OpenAI
-- **Holistic Processing**: End-to-end resume analysis and optimization
-- **Dynamic Thinking Budget**: Resource allocation system for AI processing
+This document defines guidelines for Claude Code when customizing resumes for the ResumeAI Assistant application.
 
-### Key Services
-- **ResumeCustomizer**: End-to-end resume customization service
-- **EvidenceTracker**: Ensures truthfulness in resume customizations
-- **ProgressReporter**: Provides real-time updates via WebSockets
-- **Agent Factory**: Creates specialized AI agents for each customization stage
+### Architecture Principles
 
-## Frontend Development (Next.js)
-- Location: `/nextjs-frontend` directory
-- Setup: `cd nextjs-frontend && npm install`
-- Run development server: `npm run dev` (runs on port 3000)
-- Build for production: `npm run build`
-- Start production server: `npm run start`
-- Lint code: `npm run lint`
+1. Follow the evaluator-optimizer workflow pattern:
+   - First evaluate the match between resume and job description
+   - Then optimize the resume based on evaluation findings
+   - Verify that optimizations maintain truthfulness
 
-### Frontend Tech Stack
-- **Next.js 14**: React framework with App Router
-- **TypeScript**: For type safety and better developer experience
-- **Tailwind CSS**: For styling
-- **shadcn/ui**: Component library for consistent UI (Button, Card, Form, etc.)
-- **React Hook Form**: Form validation with Zod
-- **next-themes**: Theme management (light/dark mode)
-- **WebSockets**: For real-time progress updates
+2. Use parallelization through resume section decomposition:
+   - Process different resume sections independently
+   - Coordinate results through centralized evidence tracking
 
-### Frontend Structure
-- `/app`: Next.js App Router pages
-- `/components`: Reusable React components
-  - `/ui`: shadcn UI components
-- `/lib`: Utility functions and API client
-  - `client.ts`: API client for FastAPI backend (port 5000)
-  - `utils.ts`: Helper functions
+3. Use strict verification protocols:
+   - Never fabricate experiences, skills, or achievements
+   - Only reorganize and reframe existing content
+   - Track all changes with evidence from original resume
 
-### UI Components
-- **ResumeDiffView**: Enhanced diff visualization with side-by-side comparison
-- **Progress Tracking**: Real-time updates for long-running processes
-- **Section Analysis**: Expandable sections showing what changed and why
-- **ATS Improvement Metrics**: Shows score improvement for resume sections
+### File Outputs
 
-### API Integration
-- Backend connection configured in `lib/client.ts`
-- API calls use fetch with proper error handling
-- All API endpoints from FastAPI backend are implemented
-- Authentication via JWT tokens stored in localStorage
-- WebSocket connection for real-time progress updates
+When running resume customization, generate and output these files:
 
-## Claude Prompts
-- Location: `/claude_prompts` directory
-- Purpose: Specialized prompts for Claude Code instances
-- Available templates:
-  - `backend_issue_prompt.md`: Backend development tasks
-  - `frontend_issue_prompt.md`: Frontend development tasks
-  - `ai_model_issue_prompt.md`: AI model integration tasks
-  - `pr_review_feedback_prompt.md`: PR feedback implementation
+1. `new_customized_resume.md`: The final customized resume in Markdown format
+2. `customized_resume_output.md`: A detailed change summary including:
+   - Before/after match scores
+   - Key changes made with evidence sources
+   - Remaining gaps between resume and job requirements
+   - Interview preparation suggestions
 
-## Git Conventions
-- Write concise, descriptive commit messages
-- Use present tense in commit messages
-- Prefix commits with type: "Fix:", "Feature:", "Refactor:", etc.
-- DO NOT include "Generated with Claude" footer in commits
+3. Intermediate analysis files:
+   - `job_analysis.json`: Structured analysis of job requirements
+   - `resume_parsed.json`: Structured extraction of resume content
+   - `evidence_tracker.json`: Database of verified information
+   - `match_evaluation.json`: Analysis of resume-job fit with scores
+   - `enhancement_plan.md`: Prioritized plan for resume improvements
+   - `verification_results.json`: Verification of final customization
 
-## Environment Variables
-- `ANTHROPIC_API_KEY`: Required for Claude AI integration
-- `SECRET_KEY`: JWT secret key (auto-generated if not provided)
-- `PORT`: Port for the application (default: 5000)
+### Verification Rules
 
-## Database
-- SQLite database at `./resume_app.db`
-- Created automatically on application startup
-- No migrations needed - schema created with `Base.metadata.create_all()`
-- Data models in `app/models/` (SQLAlchemy ORM)
-- For deployment to fly.io, can use LiteFS for distributed SQLite
+Follow these strict rules for truthfulness verification:
 
-## Code Style
-- Imports: 1) stdlib 2) third-party 3) local (with blank lines between groups)
-- Typing: Use type hints for all function parameters and return values
-- Docstrings: Triple quotes with Args/Returns sections using Google docstring format
-- Error handling: Use try/except with specific exceptions, log errors properly
-- Naming: snake_case for variables/functions, PascalCase for classes
-- Formatting: 4-space indentation, 100 char line limit
-- API endpoints: Group by resource in app/api/endpoints/
-- Services: Business logic in app/services/, data access in app/models/
-- Exception handling: Catch at service level, propagate appropriate responses
-- Pydantic: Use for all schema validation and data transfer
-- Async/await: Use for all API endpoints and service functions
+1. **Acceptable Without Verification**:
+   - Reorganizing existing content
+   - Rephrasing for clarity/impact
+   - Highlighting relevant parts of verified experience
 
-## Testing
-- Test files named test_*.py
-- Each endpoint should have at least one test case
-- Mock external services (Claude API) when testing
-- Use pprint() for debugging API responses
+2. **Requiring Explicit Verification**:
+   - Any quantitative metrics or percentages
+   - Specific technical skills not in original resume
+   - Project details not in original resume
+   - Leadership roles or responsibilities
+
+3. **Verification Sources**:
+   - Original resume (primary source)
+   - LinkedIn profile (if provided)
+   - GitHub repositories (if provided)
+   - Personal website (if provided)
+   - Company websites describing work (if provided)
+
+4. **Never Permitted**:
+   - Fabricating experiences or achievements
+   - Adding unverified skills
+   - Exaggerating metrics or impact
+   - Creating fictional projects
+
+### Implementation Guidelines
+
+1. For job_analysis.json schema:
+   ```json
+   {
+     "required_skills": [
+       {"skill": "Python", "confidence": 0.9},
+       {"skill": "Leadership", "confidence": 0.7}
+     ],
+     "preferred_skills": [
+       {"skill": "Machine Learning", "confidence": 0.8}
+     ],
+     "company_values": ["Innovation", "Collaboration"],
+     "industry_terminology": ["AI", "Machine Learning"],
+     "technologies_mentioned": ["Python", "TensorFlow"],
+     "key_responsibilities": ["Build APIs", "Lead team"]
+   }
+   ```
+
+2. For evidence_tracker.json schema:
+   ```json
+   {
+     "verified_skills": [
+       {"skill": "Python", "source": "Original resume", "confidence": 1.0}
+     ],
+     "verified_experiences": [
+       {"company": "Example Corp", "achievements": [
+         {"achievement": "Led team of 5 developers", "source": "Original resume"}
+       ]}
+     ],
+     "verified_projects": [...],
+     "job_requirements": [
+       {"requirement": "Python experience", "matched": true, "source": "Original resume"}
+     ]
+   }
+   ```
+
+3. For match_evaluation.json schema:
+   ```json
+   {
+     "match_score": 75,
+     "skills_match": {
+       "score": 80,
+       "strong_matches": ["Python", "Leadership"],
+       "weak_matches": ["Data Science"],
+       "gaps": ["Machine Learning"]
+     },
+     "experience_match": {
+       "score": 70,
+       "strong_points": ["5+ years experience", "Team leadership"],
+       "improvement_areas": ["Domain-specific experience"]
+     },
+     "enhancement_opportunities": [
+       {
+         "area": "Skills Section",
+         "recommendation": "Highlight Python expertise",
+         "priority": "High"
+       }
+     ]
+   }
+   ```
+
+### Code Style and Format
+
+1. Output files should follow these guidelines:
+   - JSON files should be properly formatted with indentation
+   - Markdown files should use standard Markdown syntax
+   - Use consistent formatting throughout all outputs
+
+2. Customized resume should:
+   - Maintain professional formatting
+   - Use clear section headers
+   - Include all expected resume sections
+   - Be optimized for ATS compatibility
 
 ## Project Planning
 - Project planning is documented in `planning_scratchpad.md`

@@ -97,9 +97,27 @@ class CircuitBreaker:
             return False
         
         return True
+    
+    def reset(self, provider: Optional[str] = None):
+        """
+        Reset the circuit breaker for a specific provider or all providers.
+        
+        Args:
+            provider: Provider to reset, or None to reset all providers
+        """
+        if provider:
+            if provider in self.failure_counts:
+                del self.failure_counts[provider]
+            if provider in self.circuit_open_until:
+                del self.circuit_open_until[provider]
+            logfire.info(f"Circuit breaker reset for provider: {provider}")
+        else:
+            self.failure_counts = {}
+            self.circuit_open_until = {}
+            logfire.info("All circuit breakers reset")
 
 # Create circuit breaker instance with thread safety
-optimizer_circuit_breaker = CircuitBreaker()
+optimizer_circuit_breaker = CircuitBreaker(failure_threshold=5, recovery_time_seconds=300)
 optimizer_circuit_breaker_lock = threading.Lock()
 
 # Cost tracking data store
@@ -372,6 +390,12 @@ def classify_task(
     
     return base_complexity, base_importance
 
+# Cache to prevent repeated model selection for the same task
+# This helps reduce excessive log entries for "Optimized model selected"
+_model_selection_cache = {}
+_model_selection_cache_lock = threading.Lock()
+_model_selection_cache_ttl = 300  # seconds
+
 def select_optimized_model(
     task_name: str,
     content: Optional[str] = None,
@@ -394,6 +418,27 @@ def select_optimized_model(
     Returns:
         Complete model configuration dictionary
     """
+    # Create a cache key - include only the elements that would affect model selection
+    # Don't include full content/job description to keep the key small
+    cache_key_parts = [
+        task_name,
+        preferred_provider or "none",
+        str(hash(content[:100] if content else "none")),
+        str(hash(job_description[:100] if job_description else "none")),
+        industry or "none",
+        str(user_override) if user_override else "none"
+    ]
+    cache_key = "|".join(cache_key_parts)
+    
+    # Check if we have a cached result
+    with _model_selection_cache_lock:
+        if cache_key in _model_selection_cache:
+            cached_result, timestamp = _model_selection_cache[cache_key]
+            # Check if cache is still valid
+            if time.time() - timestamp < _model_selection_cache_ttl:
+                # Use cached result but don't log "Optimized model selected" again
+                return cached_result.copy()
+    
     # Start tracking this request for cost analysis
     request_id = f"{task_name}_{int(time.time())}"
     
@@ -591,22 +636,57 @@ def select_optimized_model(
         }
     )
     
-    # Log the optimized model selection
-    logfire.info(
-        "Optimized model selected",
-        task_name=task_name,
-        model=model_config["model"],
-        complexity=task_complexity.value,
-        importance=task_importance.value,
-        tier=model_tier.value,
-        cost_sensitivity=cost_sensitivity,
-        temperature=model_config.get("temperature"),
-        max_tokens=model_config.get("max_tokens"),
-        has_thinking_config="thinking_config" in model_config,
-        request_id=request_id
-    )
+    # Log the optimized model selection - only log once per unique task
+    # Don't log repeatedly for parallel processing of multiple sections
+    do_log = True
+    with _model_selection_cache_lock:
+        # Check if we've logged this exact configuration recently
+        if cache_key in _model_selection_cache:
+            # Don't log if we've seen this exact model selection in the last minute
+            last_time = _model_selection_cache[cache_key][1]
+            if time.time() - last_time < 60:  # Only reduce logging frequency if seen in last minute
+                do_log = False
+    
+    if do_log:
+        # More detailed logging of selected model
+        provider = model_config["model"].split(':')[0] if ':' in model_config["model"] else model_config["model"]
+        model_name = model_config["model"].split(':')[1] if ':' in model_config["model"] else model_config["model"]
+        
+        logfire.info(
+            f"Selected model {provider}:{model_name} for {task_name} (complexity: {task_complexity.value})",
+            task_name=task_name,
+            model=model_config["model"],
+            provider=provider,
+            model_name=model_name,
+            complexity=task_complexity.value,
+            importance=task_importance.value,
+            tier=model_tier.value,
+            cost_sensitivity=cost_sensitivity,
+            temperature=model_config.get("temperature"),
+            max_tokens=model_config.get("max_tokens"),
+            has_thinking_config="thinking_config" in model_config,
+            request_id=request_id
+        )
+    
+    # Cache the result to prevent repeated selections and logging
+    with _model_selection_cache_lock:
+        _model_selection_cache[cache_key] = (model_config.copy(), time.time())
+        # Prune old cache entries
+        _prune_model_selection_cache()
     
     return model_config
+
+def _prune_model_selection_cache():
+    """Remove old entries from the model selection cache"""
+    current_time = time.time()
+    keys_to_remove = []
+    
+    for key, (_, timestamp) in _model_selection_cache.items():
+        if current_time - timestamp > _model_selection_cache_ttl:
+            keys_to_remove.append(key)
+    
+    for key in keys_to_remove:
+        del _model_selection_cache[key]
 
 def track_token_usage(
     model: str,
@@ -793,6 +873,61 @@ def record_model_failure(
     # Record in circuit breaker
     with optimizer_circuit_breaker_lock:
         optimizer_circuit_breaker.record_failure(provider)
+
+def reset_circuit_breaker(provider: Optional[str] = None) -> Dict[str, Any]:
+    """
+    Reset the circuit breaker state for a provider or all providers.
+    
+    Args:
+        provider: Optional provider name to reset, or None to reset all
+        
+    Returns:
+        Dictionary with reset status
+    """
+    with optimizer_circuit_breaker_lock:
+        optimizer_circuit_breaker.reset(provider)
+    
+    # Return reset status
+    if provider:
+        return {
+            "status": "success",
+            "message": f"Circuit breaker reset for provider: {provider}",
+            "provider": provider
+        }
+    else:
+        return {
+            "status": "success",
+            "message": "All circuit breakers reset"
+        }
+
+def get_circuit_breaker_status() -> Dict[str, Any]:
+    """
+    Get the current status of all circuit breakers.
+    
+    Returns:
+        Dictionary with circuit breaker status for all providers
+    """
+    with optimizer_circuit_breaker_lock:
+        # Create a copy of the data to avoid thread safety issues
+        failure_counts = optimizer_circuit_breaker.failure_counts.copy()
+        circuit_open_until = {
+            provider: until.isoformat() 
+            for provider, until in optimizer_circuit_breaker.circuit_open_until.items()
+        }
+        
+        # Check which circuits are currently open
+        open_circuits = {}
+        for provider in set(list(failure_counts.keys()) + list(circuit_open_until.keys())):
+            open_circuits[provider] = optimizer_circuit_breaker.is_circuit_open(provider)
+    
+    return {
+        "failure_counts": failure_counts,
+        "circuit_open_until": circuit_open_until,
+        "open_circuits": open_circuits,
+        "failure_threshold": optimizer_circuit_breaker.failure_threshold,
+        "recovery_time_seconds": optimizer_circuit_breaker.recovery_time.total_seconds(),
+        "timestamp": datetime.now().isoformat()
+    }
 
 def get_cost_report() -> Dict[str, Any]:
     """

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation"
 import { useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { JobService, ResumeService, JobDescription, Resume, ResumeVersion } from "@/lib/client"
+import { JobDescription, Resume, ResumeVersion } from "@/lib/client"
 import { SelectResume } from "@/components/select-resume"
 import { SelectJob } from "@/components/select-job"
 import { CustomizeResume } from "@/components/customize-resume"
@@ -57,12 +57,11 @@ export default function CustomizePage() {
   }
   
   // Handle customization success
-  const handleCustomizationSuccess = (version: ResumeVersion) => {
-    console.log("Customization success, received version:", version);
-    setCustomizedVersion(version)
+  const handleCustomizationSuccess = (taskId: string) => {
+    console.log("Customization success, received taskId:", taskId);
     
-    // Redirect to result page
-    const redirectUrl = `/customize/result?resumeId=${selectedResumeId}&jobId=${selectedJobId}&versionId=${version.id}`;
+    // Redirect to result page with task ID
+    const redirectUrl = `/customize/result?taskId=${taskId}&resumeId=${selectedResumeId}&jobId=${selectedJobId}`;
     console.log("Redirecting to:", redirectUrl);
     router.push(redirectUrl)
   }

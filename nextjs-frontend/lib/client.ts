@@ -91,31 +91,6 @@ export type ResumeDiff = {
   is_diff_view: boolean;
 };
 
-export type Template = {
-  id: string;
-  name: string;
-  description: string;
-  preview_url: string;
-};
-
-export type CustomizationResponse = {
-  customization_id: string;
-  status: string;
-  message: string;
-};
-
-export type CustomizationResult = {
-  customization_id: string;
-  status: string;
-  original_resume_url: string;
-  customized_resume_url?: string;
-  diff_url?: string;
-  analysis?: ATSAnalysisResult;
-  plan?: any;
-  verification?: any;
-  error_message?: string;
-};
-
 // Authentication types
 export type LoginCredentials = {
   username: string;
@@ -133,24 +108,28 @@ export class ApiError extends Error {
   public data: any;
 
   constructor(status: number, message: string, data?: any) {
-    super(message);
+    // Format the message to include data details if available
+    let formattedMessage = 'An unknown error occurred';
+    
+    if (data?.detail) {
+      if (typeof data.detail === 'string') {
+        formattedMessage = data.detail;
+      } else if (typeof data.detail === 'object') {
+        try {
+          formattedMessage = JSON.stringify(data.detail);
+        } catch (e) {
+          formattedMessage = 'Validation error occurred';
+        }
+      }
+    } else if (typeof message === 'string') {
+      formattedMessage = message;
+    }
+    
+    super(formattedMessage);
     this.status = status;
     this.data = data;
     this.name = 'ApiError';
   }
-}
-
-// Track the last token refresh attempt to prevent infinite loops
-let lastTokenRefreshAttempt = 0;
-const TOKEN_REFRESH_COOLDOWN = 5000; // 5 seconds
-
-// Get auth context for token refresh (avoiding circular imports)
-function getAuthContext() {
-  if (typeof window === 'undefined') return null;
-  
-  // This accesses the auth context from window if available
-  // The auth context will be stored on window by auth.tsx
-  return (window as any).__auth_context || null;
 }
 
 // Helper function for fetch requests
@@ -189,44 +168,7 @@ async function fetchWithAuth(
     
     console.log(`Response data:`, data);
 
-    // Handle auth errors - try to refresh token
-    if (response.status === 401) {
-      // Avoid infinite refresh loops
-      const now = Date.now();
-      if (now - lastTokenRefreshAttempt < TOKEN_REFRESH_COOLDOWN) {
-        throw new ApiError(
-          response.status,
-          'Authentication failed. Please log in again.',
-          data
-        );
-      }
-      
-      // Try to refresh token by triggering auth context refresh
-      lastTokenRefreshAttempt = now;
-      const authContext = getAuthContext();
-      
-      if (authContext && typeof window !== 'undefined') {
-        const refreshSuccess = await authContext.refreshToken();
-        
-        if (refreshSuccess) {
-          // Retry the request with the new token
-          return fetchWithAuth(endpoint, options);
-        }
-      }
-
-      // If we get here, token refresh failed or not possible
-      // But don't redirect to login page during websocket data flow or long-running processes
-      // Instead, just throw an auth error and let the calling code handle it as needed
-      // This prevents redirect loops during customizations
-      console.warn('Token refresh failed, but not redirecting to login during API call');
-      throw new ApiError(
-        401,
-        'Authentication failed but not redirecting',
-        data
-      );
-    }
-
-    // Check if the request was successful for non-auth errors
+    // Check if the request was successful
     if (!response.ok) {
       throw new ApiError(
         response.status,
@@ -409,6 +351,14 @@ export const ResumeService = {
     versionId: string,
     originalVersionId?: string
   ): Promise<ResumeDiff> {
+    // Handle 'latest' as a special case for Claude Code results
+    if (versionId === 'latest') {
+      console.log('Using latest version for diff');
+      const resume = await this.getResume(resumeId);
+      versionId = resume.current_version.id;
+      console.log('Resolved latest version ID:', versionId);
+    }
+    
     const endpoint = originalVersionId
       ? `/resumes/${resumeId}/versions/${versionId}/diff?original_version_id=${originalVersionId}`
       : `/resumes/${resumeId}/versions/${versionId}/diff`;
@@ -488,12 +438,173 @@ export const JobService = {
   },
 };
 
-// Note: Standalone ATS Analysis service has been removed as this functionality
-// is now integrated directly into the resume customization flow.
+// ATS Analysis
+export const ATSService = {
+  async analyzeResume(
+    resumeId: string,
+    jobDescriptionId: string,
+    options?: { headers?: Record<string, string> }
+  ): Promise<ATSAnalysisResult> {
+    try {
+      console.log('ATSService.analyzeResume - input params:', { resumeId, jobDescriptionId });
+      
+      // Due to smart_request decorator issues, use the analyze-content endpoint instead
+      // which accepts direct content input and doesn't have the same query parameter requirements
+      
+      // First, we need to fetch the resume and job description content
+      console.log('Fetching resume and job description content...');
+      
+      // Get the resume content
+      const resumeResponse = await fetchWithAuth(`/resumes/${resumeId}`);
+      if (!resumeResponse || !resumeResponse.current_version || !resumeResponse.current_version.content) {
+        throw new ApiError(404, 'Resume content not found', null);
+      }
+      const resumeContent = resumeResponse.current_version.content;
+      
+      // Get the job description content
+      const jobResponse = await fetchWithAuth(`/jobs/${jobDescriptionId}`);
+      if (!jobResponse || !jobResponse.description) {
+        throw new ApiError(404, 'Job description content not found', null);
+      }
+      const jobDescriptionContent = jobResponse.description;
+      
+      console.log('Successfully fetched content, calling analyze-content endpoint');
+      
+      // Now use the analyze-content endpoint which should not have the same issues
+      const requestBody = JSON.stringify({
+        resume_content: resumeContent,
+        job_description_content: jobDescriptionContent,
+      });
+      
+      // Bypass NextJS API routes and go directly to the backend
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+      const headers = {
+        'Content-Type': 'application/json',
+        ...(token && { Authorization: `Bearer ${token}` }),
+        ...(options?.headers || {})
+      };
+      
+      console.log(`Sending request to: ${BACKEND_API_URL}/api/v1/ats/analyze-content`);
+      const response = await fetch(`${BACKEND_API_URL}/api/v1/ats/analyze-content`, {
+        method: 'POST',
+        headers,
+        body: requestBody,
+      });
+      
+      console.log(`Response status: ${response.status} ${response.statusText}`);
+      
+      // Important: Check if response is present before trying to parse JSON
+      if (!response) {
+        throw new ApiError(0, 'Network request failed: No response received', null);
+      }
+      
+      const data = await response.json().catch((err) => {
+        console.error(`Error parsing JSON: ${err.message}`);
+        throw new ApiError(response.status, `Failed to parse response: ${err.message}`, err);
+      });
+      
+      if (!response.ok) {
+        // Improved error handling
+        let errorMessage = 'An error occurred';
+        
+        // Try to extract a human-readable error message
+        if (data) {
+          if (typeof data.detail === 'string') {
+            errorMessage = data.detail;
+          } else if (data.detail && typeof data.detail === 'object') {
+            // For validation errors which might be nested
+            errorMessage = JSON.stringify(data.detail);
+          }
+        }
+        
+        throw new ApiError(
+          response.status,
+          errorMessage,
+          data
+        );
+      }
+      
+      // Verify we have valid data
+      if (!data) {
+        throw new ApiError(response.status, 'Response contained no data', null);
+      }
+      
+      // For the analyze-content endpoint, we need to format the response to match the expected ATSAnalysisResult structure
+      if (response.url.includes('/analyze-content')) {
+        // Add resume_id and job_description_id fields that would be included in normal analyze endpoint
+        return {
+          ...data,
+          resume_id: resumeId,
+          job_description_id: jobDescriptionId,
+          id: `analysis-${Date.now()}`  // Generate a temporary ID for the analysis
+        };
+      }
+      
+      return data;
+    } catch (error) {
+      console.error('Error in analyzeResume:', error);
+      
+      // If it's already an ApiError, just rethrow it
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      
+      // Convert any other errors to ApiError with a more helpful message
+      if (error instanceof Error) {
+        throw new ApiError(0, `Network or connection error: ${error.message}`, error);
+      }
+      
+      // Fallback for unknown errors
+      throw new ApiError(0, 'Unknown error during analysis request', error);
+    }
+  },
 
-export const TemplateService = {
-  async getTemplates(): Promise<Template[]> {
-    return fetchWithAuth('/templates/');
+  // Direct content analysis (without saving)
+  async analyzeContent(
+    resumeContent: string,
+    jobDescriptionContent: string
+  ): Promise<ATSAnalysisResult> {
+    return fetchWithAuth('/ats/analyze-content', {
+      method: 'POST',
+      body: JSON.stringify({
+        resume_content: resumeContent,
+        job_description_content: jobDescriptionContent,
+      }),
+    });
+  },
+  
+  // Advanced AI-driven analysis for creating better customization plans
+  async analyzeAndPlan(
+    resumeId: string,
+    jobDescriptionId: string,
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced'
+  ): Promise<any> {
+    return fetchWithAuth('/ats/analyze-and-plan', {
+      method: 'POST',
+      body: JSON.stringify({
+        resume_id: resumeId,
+        job_description_id: jobDescriptionId,
+        customization_level: customizationLevel === 'conservative' ? 1 : 
+                            customizationLevel === 'balanced' ? 2 : 3,
+      }),
+    });
+  },
+  
+  // Direct content advanced analysis (without saving)
+  async analyzeContentAndPlan(
+    resumeContent: string,
+    jobDescriptionContent: string,
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced'
+  ): Promise<any> {
+    return fetchWithAuth('/ats/analyze-content-and-plan', {
+      method: 'POST',
+      body: JSON.stringify({
+        resume_content: resumeContent,
+        job_description_content: jobDescriptionContent,
+        customization_level: customizationLevel === 'conservative' ? 1 : 
+                            customizationLevel === 'balanced' ? 2 : 3,
+      }),
+    });
   },
 };
 
@@ -529,12 +640,7 @@ export const CustomizationService = {
       ...(options?.headers || {})
     };
     
-    const customizeUrl = `${BACKEND_API_URL}${API_VERSION}/customize/`;
-    console.log('Making customize request to URL:', customizeUrl);
-    console.log('With request body:', requestBody);
-    console.log('With headers:', headers);
-    
-    const response = await fetch(customizeUrl, {
+    const response = await fetch(`${BACKEND_API_URL}/api/v1/customize/`, {
       method: 'POST',
       headers,
       body: requestBody,
@@ -630,87 +736,6 @@ export const CustomizationService = {
     
     return data;
   },
-
-  async startCustomization(
-    resumeId: string,
-    jobDescriptionId: string,
-    templateId: string
-  ): Promise<CustomizationResponse> {
-    console.log('Starting customization:', { resumeId, jobDescriptionId, templateId });
-    
-    // Directly use the customizeResume method since it's the same endpoint
-    try {
-      const result = await this.customizeResume(
-        resumeId,
-        jobDescriptionId,
-        'balanced' // Default level
-      );
-      
-      // Transform the response to match the expected CustomizationResponse format
-      // This avoids having to duplicate code and ensures we're using a working endpoint
-      return {
-        customization_id: result.id,
-        status: 'started',
-        message: 'Customization started successfully'
-      };
-    } catch (error) {
-      console.error('Error in customization:', error);
-      throw error;
-    }
-  },
-
-  async getCustomizationResult(customizationId: string): Promise<CustomizationResult> {
-    return fetchWithAuth(`/customize/${customizationId}`);
-  },
-
-  createProgressWebSocket(customizationId: string, token: string): WebSocket {
-    const base = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:5001/api/v1';
-    const ws = new WebSocket(`${base}/ws/customize/${customizationId}?token=${token}`);
-    
-    // Setup token refresh mechanism for long-running WebSocket connections
-    let wsTokenRefreshInterval: NodeJS.Timeout | null = null;
-    
-    ws.onopen = () => {
-      console.log('WebSocket connection opened for customization:', customizationId);
-      // Refresh token periodically while websocket is open
-      if (typeof window !== 'undefined') {
-        const authContext = getAuthContext();
-        if (authContext) {
-          // First refresh now to ensure token is current when starting the process
-          authContext.refreshToken().then(success => {
-            if (!success) {
-              console.warn('Initial WebSocket token refresh failed');
-            }
-          });
-          
-          // Refresh more frequently (every 2 minutes) to ensure WebSocket stays authenticated
-          wsTokenRefreshInterval = setInterval(() => {
-            authContext.refreshToken().then(success => {
-              if (!success) {
-                console.warn('WebSocket token refresh failed');
-              } else {
-                console.log('WebSocket token refreshed successfully');
-              }
-            });
-          }, 2 * 60 * 1000); // 2 minutes
-        }
-      }
-    };
-    
-    ws.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-    
-    ws.onclose = (event) => {
-      console.log('WebSocket connection closed:', event.code, event.reason);
-      // Clean up the interval when the socket closes
-      if (wsTokenRefreshInterval) {
-        clearInterval(wsTokenRefreshInterval);
-      }
-    };
-    
-    return ws;
-  },
 };
 
 // Cover Letter
@@ -745,6 +770,227 @@ export const CoverLetterService = {
       }),
     });
   },
+};
+
+// Claude Code integration
+export interface ClaudeCodeCustomizeRequest {
+  resume_content: string;
+  job_description: string;
+  customization_level?: 'conservative' | 'balanced' | 'extensive';
+  user_id?: string;
+}
+
+export interface ClaudeCodeCustomizeResponse {
+  id: string;
+  customized_resume: string;
+  customization_summary: string;
+  original_resume: string;
+  job_description: string;
+  is_fallback: boolean;
+}
+
+export interface ClaudeCodeTaskStatusResponse {
+  task_id: string;
+  status: string;
+  progress: number;
+  message: string;
+  result?: any;
+  error?: string;
+  logs?: string[];
+}
+
+export const ClaudeCodeService = {
+  async customizeResume(
+    resumeId: string,
+    jobDescriptionId: string,
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced',
+    options?: { headers?: Record<string, string>, timeout?: number }
+  ): Promise<{ task_id: string; status: string }> {
+    console.log('ClaudeCodeService.customizeResume - input params:', { 
+      resumeId, 
+      jobDescriptionId, 
+      customizationLevel,
+      timeout: options?.timeout
+    });
+    
+    // First, fetch the resume and job description content
+    console.log('Fetching resume and job description content...');
+    
+    // Get the resume content
+    const resumeResponse = await fetchWithAuth(`/resumes/${resumeId}`);
+    if (!resumeResponse || !resumeResponse.current_version || !resumeResponse.current_version.content) {
+      throw new ApiError(404, 'Resume content not found', null);
+    }
+    const resumeContent = resumeResponse.current_version.content;
+    
+    // Get the job description content
+    const jobResponse = await fetchWithAuth(`/jobs/${jobDescriptionId}`);
+    if (!jobResponse || !jobResponse.description) {
+      throw new ApiError(404, 'Job description content not found', null);
+    }
+    const jobDescriptionContent = jobResponse.description;
+    
+    console.log('Successfully fetched content, calling Claude Code endpoint');
+    
+    const requestBody = JSON.stringify({
+      resume_id: resumeId,
+      job_id: jobDescriptionId,
+      user_id: null, // Optional, will be set by backend if authenticated
+      resume_content: resumeContent,
+      job_description: jobDescriptionContent
+    });
+    
+    // Bypass NextJS API routes and go directly to the backend
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    const headers = {
+      'Content-Type': 'application/json',
+      ...(token && { Authorization: `Bearer ${token}` }),
+      // Add custom timeout if provided
+      ...(options?.timeout && { 'X-Operation-Timeout': options.timeout.toString() }),
+      ...(options?.headers || {})
+    };
+    
+    // Use a custom timeout for the fetch itself
+    const controller = new AbortController();
+    const fetchTimeout = (options?.timeout || 1800) * 1000 + 20000; // Add 20s buffer to the backend timeout
+    const timeoutId = setTimeout(() => controller.abort(), fetchTimeout);
+    
+    try {
+      const url = `${BACKEND_API_URL}/api/v1/customize-resume/async/`;
+      console.log('Making request to:', url);
+      console.log('Request headers:', headers);
+      console.log('Request body:', requestBody);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: requestBody,
+        signal: controller.signal
+      });
+      
+      clearTimeout(timeoutId);
+      
+      console.log(`Claude Code customize response status: ${response.status} ${response.statusText}`);
+      
+      const data = await response.json().catch((err) => {
+        console.error(`Error parsing Claude Code response JSON: ${err.message}`);
+        return {};
+      });
+      
+      if (!response.ok) {
+        throw new ApiError(
+          response.status,
+          data.detail || 'Failed to customize resume with Claude Code',
+          data
+        );
+      }
+      
+      return data;
+    } catch (error) {
+      clearTimeout(timeoutId);
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw new ApiError(
+          408,
+          'Request timed out - Claude Code execution is taking too long',
+          { detail: 'The request to customize your resume timed out. Please try again or use a smaller resume/job description.' }
+        );
+      }
+      throw error;
+    }
+  },
+
+  // Direct content customization with Claude Code (without saving)
+  async customizeContent(
+    resumeContent: string,
+    jobDescriptionContent: string,
+    customizationLevel: 'conservative' | 'balanced' | 'extensive' = 'balanced',
+    options?: { headers?: Record<string, string>, timeout?: number }
+  ): Promise<ClaudeCodeCustomizeResponse> {
+    console.log('ClaudeCodeService.customizeContent - customization level:', customizationLevel);
+    
+    // Prepare custom headers with timeout if provided
+    const customHeaders = {
+      ...(options?.headers || {}),
+      ...(options?.timeout && { 'X-Operation-Timeout': options.timeout.toString() })
+    };
+    
+    try {
+      const result = await fetchWithAuth('/customize-resume/content', {
+        method: 'POST',
+        body: JSON.stringify({
+          resume_content: resumeContent,
+          job_description: jobDescriptionContent,
+          customization_level: customizationLevel
+        }),
+        headers: customHeaders
+      });
+      
+      console.log('Claude Code customizeContent result structure:', Object.keys(result));
+      return result;
+    } catch (error) {
+      console.error('Error in customizeContent:', error);
+      throw error;
+    }
+  },
+  
+  // Get logs for a task
+  async getLogs(taskId: string): Promise<string[]> {
+    const response = await fetchWithAuth(`/customize-resume/logs/${taskId}`);
+    return response.logs || [];
+  },
+  
+  // Get task status with logs
+  async getStatus(taskId: string, includeLogs: boolean = false): Promise<ClaudeCodeTaskStatusResponse> {
+    return fetchWithAuth(`/customize-resume/status/${taskId}?include_logs=${includeLogs}`);
+  },
+  
+  // Stream logs in real-time
+  streamLogs(taskId: string, callback: (logs: string[]) => void): () => void {
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    
+    // Create EventSource for SSE
+    const url = `${BACKEND_API_URL}/api/v1/customize-resume/logs/${taskId}/stream`;
+    console.log(`Streaming logs from: ${url}`);
+    
+    // Configure EventSource for streaming
+    const eventSource = new EventSource(url, {
+      withCredentials: true
+    });
+    
+    // Add token manually to avoid CORS issues with EventSource headers
+    if (token) {
+      console.log("Authentication token available for streaming");
+    }
+    
+    // Handle events
+    eventSource.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (data.logs) {
+          callback(data.logs);
+        } else if (data.new_log) {
+          callback([data.new_log]);
+        }
+        
+        // If the task is completed or errored, close the connection
+        if (data.status === 'completed' || data.status === 'error') {
+          eventSource.close();
+        }
+      } catch (e) {
+        console.error('Error parsing streaming log data:', e);
+      }
+    };
+    
+    eventSource.onerror = (error) => {
+      console.error('Error in log stream:', error);
+      eventSource.close();
+    };
+    
+    // Return a function to close the connection
+    return () => {
+      eventSource.close();
+    };
+  }
 };
 
 // Export
@@ -846,21 +1092,6 @@ export const ExportService = {
         error.detail || 'Export failed',
         error
       );
-    }
-
-    return response.blob();
-  },
-
-  async downloadFromUrl(url: string): Promise<Blob> {
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null}`,
-      },
-    });
-
-    if (!response.ok) {
-      const error = await response.json().catch(() => ({}));
-      throw new ApiError(response.status, error.detail || 'Download failed', error);
     }
 
     return response.blob();

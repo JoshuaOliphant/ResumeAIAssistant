@@ -1,38 +1,29 @@
-from fastapi import FastAPI, APIRouter, Request, status
+import sys
+from pathlib import Path
+
+import logfire
+from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-from pathlib import Path
-import sys
-import logfire
-from fastapi.responses import JSONResponse
 
 from app.api.endpoints import (
-    resumes,
-    jobs,
-    customize,
-    cover_letter,
-    export,
     auth,
+    claude_code,  # Main Claude Code endpoints for resume customization
+    export,
+    jobs,
     requirements,
-    enhance_customize,
-    progress,
-    resume_customizer,
-    templates as template_endpoints,
+    resumes,
+    websockets,  # Progress tracking endpoints
 )
 from app.core.config import settings
-from app.db.session import Base, engine
-from app.core.nltk_init import initialize_nltk
 from app.core.logging import configure_logging
+from app.db.session import Base, engine
 
 # Configure Logfire - this is just the basic configuration
 # The main.py file will handle the full instrumentation setup
 configure_logging()
-
-# Initialize NLTK data properly
-logfire.info("Initializing NLTK resources...")
-initialize_nltk()
-logfire.info("NLTK initialization complete")
 
 # Create database tables
 try:
@@ -44,7 +35,7 @@ except Exception as e:
         "Failed to initialize SQLite database",
         error=str(e),
         error_type=type(e).__name__,
-        traceback=str(sys.exc_info())
+        traceback=str(sys.exc_info()),
     )
     sys.exit(1)
 
@@ -59,11 +50,14 @@ templates_dir.mkdir(exist_ok=True)
 # The actual Logfire instrumentation will be done in main.py
 app = FastAPI(
     title="Resume Customization API",
-    description="API for customizing resumes and generating cover letters",
+    description="API for customizing resumes and generating cover letters using Claude Code",
     version="1.0.0",
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     docs_url=f"{settings.API_V1_STR}/docs",
     redoc_url=f"{settings.API_V1_STR}/redoc",
+    # Increased timeout limits to support longer customization operations (30 minutes)
+    default_response_class=JSONResponse,
+    # Add more parameters for timeout handling
 )
 
 # Set up templates
@@ -71,9 +65,10 @@ templates = Jinja2Templates(directory="templates")
 
 # Set up CORS
 if settings.BACKEND_CORS_ORIGINS:
+    print(f"Setting up CORS with origins: {settings.BACKEND_CORS_ORIGINS}")
     logfire.info(
         "Setting up CORS middleware",
-        origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS]
+        origins=[str(origin) for origin in settings.BACKEND_CORS_ORIGINS],
     )
     app.add_middleware(
         CORSMiddleware,
@@ -81,7 +76,10 @@ if settings.BACKEND_CORS_ORIGINS:
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["*"],
     )
+else:
+    print("WARNING: No CORS origins configured!")
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -89,32 +87,26 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # Create API router
 api_router = APIRouter()
 
-# Include all endpoint routers
+# Include only the Claude Code workflow endpoints
 api_router.include_router(auth.router, prefix="/auth", tags=["authentication"])
 api_router.include_router(resumes.router, prefix="/resumes", tags=["resumes"])
 api_router.include_router(jobs.router, prefix="/jobs", tags=["jobs"])
-api_router.include_router(customize.router, prefix="/customize", tags=["customize"])
-api_router.include_router(enhance_customize.router, prefix="/enhance-customize", tags=["enhanced-customize"])
-api_router.include_router(cover_letter.router, prefix="/cover-letter", tags=["cover-letter"])
 api_router.include_router(export.router, prefix="/export", tags=["export"])
-api_router.include_router(progress.router, prefix="/progress", tags=["progress"])
-api_router.include_router(requirements.router, prefix="/requirements", tags=["requirements"])
-api_router.include_router(template_endpoints.router, prefix="/templates", tags=["templates"])
 api_router.include_router(
-    resume_customizer.router, prefix="/resume-customizer", tags=["resume-customizer"]
+    requirements.router, prefix="/requirements", tags=["requirements"]
 )
+
+# Include WebSocket and Claude Code endpoints
+api_router.include_router(
+    websockets.router, prefix="/progress", tags=["progress"]
+)  # Progress tracking endpoints
+api_router.include_router(
+    claude_code.router, tags=["claude-code"]
+)  # Primary resume customization
 
 # Add the API router to the FastAPI application
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
-# Debug log all registered routes
-for route in app.routes:
-    logfire.debug(
-        "Registered route",
-        path=route.path,
-        name=getattr(route, "name", None),
-        methods=[method for method in getattr(route, "methods", [])],
-    )
 
 # Exception handler for global error logging
 @app.exception_handler(Exception)
@@ -131,11 +123,16 @@ async def global_exception_handler(request: Request, exc: Exception):
         content={"detail": "Internal server error"},
     )
 
+
 @app.get("/")
 async def root(request: Request):
     """Root endpoint for the resume customization application"""
-    logfire.info("Root endpoint accessed", client_ip=request.client.host if request.client else None)
+    logfire.info(
+        "Root endpoint accessed",
+        client_ip=request.client.host if request.client else None,
+    )
     return templates.TemplateResponse("index.html", {"request": request})
+
 
 @app.get("/health")
 async def health_check():

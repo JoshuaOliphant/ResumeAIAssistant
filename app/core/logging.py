@@ -7,7 +7,6 @@ import httpx
 import logfire
 from fastapi import FastAPI
 from sqlalchemy import Engine
-from app.core.pydantic_ai_compat import PydanticAIContext
 
 
 def configure_logging(
@@ -95,11 +94,30 @@ def setup_fastapi_instrumentation(
     try:
         # Configure request attributes mapping function
         def request_attributes_mapper(request, response=None):
-            attributes = {
-                "http.url": str(request.url),
-                "http.method": request.method,
-                "http.client_ip": request.client.host if request.client else None,
-            }
+            attributes = {}
+
+            # Handle WebSocket requests differently
+            if hasattr(request, "scope") and request.scope.get("type") == "websocket":
+                attributes["http.url"] = str(request.url)
+                attributes["ws.path"] = request.scope.get("path", "")
+                attributes["http.client_ip"] = (
+                    request.client.host
+                    if hasattr(request, "client") and request.client
+                    else None
+                )
+            else:
+                # Regular HTTP request
+                attributes["http.url"] = (
+                    str(request.url) if hasattr(request, "url") else None
+                )
+                attributes["http.method"] = (
+                    request.method if hasattr(request, "method") else None
+                )
+                attributes["http.client_ip"] = (
+                    request.client.host
+                    if hasattr(request, "client") and request.client
+                    else None
+                )
 
             # Add response attributes if available
             if response:
@@ -378,168 +396,6 @@ def log_function_call(func):
     return wrapper
 
 
-def setup_pydanticai_instrumentation(
-    log_agents: bool = True,
-    log_prompts: bool = True,
-    log_llm_responses: bool = True,
-    log_completions: bool = True,
-) -> None:
-    """
-    Set up PydanticAI instrumentation with Logfire
-
-    Args:
-        log_agents: Whether to log PydanticAI agent events
-        log_prompts: Whether to log prompts sent to LLMs
-        log_llm_responses: Whether to log raw responses from LLMs
-        log_completions: Whether to log completions from LLMs
-    """
-    try:
-        # Import RunContext from pydantic_ai if available
-        try:
-            from pydantic_ai import RunContext
-            from app.core.pydantic_ai_compat import adapt_run_context_to_pydanticai_context
-        except ImportError:
-            logfire.warning("Could not import RunContext from pydantic_ai")
-        
-        # Define a PydanticAI event handler for Logfire
-        def pydanticai_event_handler(context):
-            # Convert RunContext to PydanticAIContext if needed
-            if not isinstance(context, PydanticAIContext):
-                try:
-                    context = adapt_run_context_to_pydanticai_context(context)
-                except Exception as e:
-                    logfire.warning(f"Failed to adapt RunContext: {e}")
-            
-            # Extract relevant information from the context
-            event_type = getattr(context, "event_type", "unknown")
-            agent_id = getattr(context, "agent_id", None)
-            model = getattr(context, "model", None)
-            prompt = getattr(context, "prompt", None)
-            response = getattr(context, "response", None)
-            
-            # Create a span for this PydanticAI event
-            with logfire.span(f"pydanticai.{event_type}") as span:
-                # Set common attributes
-                span.set_attribute("pydanticai.event_type", event_type)
-                
-                if agent_id:
-                    span.set_attribute("pydanticai.agent_id", agent_id)
-                
-                if model:
-                    span.set_attribute("pydanticai.model", model)
-                
-                # Set event-specific attributes and log
-                if event_type == "agent_created":
-                    logfire.info(
-                        "PydanticAI agent created", 
-                        agent_id=agent_id,
-                        agent_name=getattr(context, "agent_name", None),
-                        agent_type=getattr(context, "agent_type", None),
-                    )
-                
-                elif event_type == "agent_completed":
-                    logfire.info(
-                        "PydanticAI agent completed", 
-                        agent_id=agent_id,
-                        agent_name=getattr(context, "agent_name", None),
-                        duration_ms=getattr(context, "duration_ms", None),
-                    )
-                
-                elif event_type == "prompt_created":
-                    # Truncate prompt if too long for logging
-                    safe_prompt = prompt
-                    if prompt and len(prompt) > 500:
-                        safe_prompt = prompt[:500] + "... [truncated]"
-                    
-                    logfire.info(
-                        "PydanticAI prompt created", 
-                        agent_id=agent_id,
-                        model=model,
-                        prompt_length=len(prompt) if prompt else 0,
-                        prompt=safe_prompt if log_prompts else None,
-                    )
-                
-                elif event_type == "llm_response":
-                    # Truncate response if too long for logging
-                    safe_response = response
-                    if response and isinstance(response, str) and len(response) > 500:
-                        safe_response = response[:500] + "... [truncated]"
-                    
-                    logfire.info(
-                        "PydanticAI LLM response received", 
-                        agent_id=agent_id,
-                        model=model,
-                        response_length=len(response) if isinstance(response, str) else None,
-                        content=safe_response if log_llm_responses else None,
-                    )
-                
-                elif event_type == "completion":
-                    completion = getattr(context, "completion", None)
-                    # Truncate completion if too long for logging
-                    safe_completion = completion
-                    if completion and isinstance(completion, str) and len(completion) > 500:
-                        safe_completion = completion[:500] + "... [truncated]"
-                    
-                    logfire.info(
-                        "PydanticAI completion", 
-                        agent_id=agent_id,
-                        completion_length=len(completion) if isinstance(completion, str) else None,
-                        completion=safe_completion if log_completions else None,
-                    )
-                
-                elif event_type == "error":
-                    error = getattr(context, "error", None)
-                    error_message = str(error) if error else "Unknown error"
-                    
-                    logfire.error(
-                        "PydanticAI error", 
-                        agent_id=agent_id,
-                        error_type=type(error).__name__ if error else None,
-                        error_message=error_message,
-                    )
-                    
-                    # Mark span as error
-                    span.set_attribute("error", True)
-                    if error:
-                        span.set_attribute("error.type", type(error).__name__)
-                        span.set_attribute("error.message", error_message)
-                
-                else:
-                    # Generic logging for other event types
-                    logfire.info(f"PydanticAI {event_type} event", agent_id=agent_id)
-        
-        # Register the event handler with logfire
-        # Handle the case where the API has changed
-        try:
-            # Try new API first
-            logfire.instrument_pydantic_ai(event_handler=pydanticai_event_handler)
-            logfire.info("PydanticAI instrumentation set up with new API")
-        except (AttributeError, TypeError):
-            try:
-                # Fall back to old API
-                logfire.instrument_pydanticai(event_handler=pydanticai_event_handler)
-                logfire.info("PydanticAI instrumentation set up with legacy API")
-            except (AttributeError, TypeError):
-                logfire.warning(
-                    "Could not set up PydanticAI instrumentation - logfire.instrument_pydantic_ai not available"
-                )
-        
-        logfire.info(
-            "PydanticAI instrumentation completed",
-            log_agents=log_agents,
-            log_prompts=log_prompts,
-            log_llm_responses=log_llm_responses,
-            log_completions=log_completions,
-        )
-    except Exception as e:
-        logfire.error(
-            "Failed to set up PydanticAI instrumentation",
-            error=str(e),
-            error_type=type(e).__name__,
-            traceback=traceback.format_exception(type(e), e, e.__traceback__),
-        )
-
-
 def get_logger(name: str):
     """
     Get a logger for a specific module
@@ -549,3 +405,4 @@ def get_logger(name: str):
     """
     # Return the logfire instance (it's already configured globally)
     return logfire
+

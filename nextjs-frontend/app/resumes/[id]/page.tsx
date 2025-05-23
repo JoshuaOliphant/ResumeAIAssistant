@@ -6,11 +6,11 @@ import Link from "next/link"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
-import { ResumeService } from "@/lib/client"
+import { ResumeService, ExportService } from "@/lib/client"
 import { Loader2, AlertCircle, Edit, ArrowLeft, FileText, Download } from "lucide-react"
 import { format } from "date-fns"
 
-export default function ResumePage({ params }: { params: { id: string } }) {
+export default function ResumePage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter()
   const [resume, setResume] = useState<any>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -19,7 +19,8 @@ export default function ResumePage({ params }: { params: { id: string } }) {
   useEffect(() => {
     async function loadResume() {
       try {
-        const data = await ResumeService.getResume(params.id)
+        const resolvedParams = await params
+        const data = await ResumeService.getResume(resolvedParams.id)
         setResume(data)
       } catch (err) {
         console.error("Error loading resume:", err)
@@ -30,11 +31,11 @@ export default function ResumePage({ params }: { params: { id: string } }) {
     }
     
     loadResume()
-  }, [params.id])
+  }, [params])
   
   const handleExportPdf = async () => {
     try {
-      const blob = await ResumeService.exportResumeToPdf(resume.id)
+      const blob = await ExportService.exportResumeToPdf(resume.id)
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a")
       a.href = url
@@ -131,7 +132,7 @@ export default function ResumePage({ params }: { params: { id: string } }) {
                 Version {resume.current_version.version_number}
               </div>
               <Button variant="outline" asChild>
-                <Link href={`/analyze?resumeId=${resume.id}`}>
+                <Link href={`/customize?resumeId=${resume.id}`}>
                   Use for Job Application
                 </Link>
               </Button>

@@ -8,7 +8,6 @@ from app.core.logging import (
     setup_fastapi_instrumentation,
     setup_sqlalchemy_instrumentation,
     setup_httpx_instrumentation,
-    setup_pydanticai_instrumentation,
 )
 
 # Import smart request handler setup function
@@ -49,14 +48,6 @@ try:
         capture_headers=False  # Avoid capturing potentially sensitive headers
     )
     
-    # Set up PydanticAI instrumentation with advanced settings
-    setup_pydanticai_instrumentation(
-        log_agents=True,
-        log_prompts=True,  # Set to True to see the actual prompts
-        log_llm_responses=True,  # Set to True to see raw responses from LLMs
-        log_completions=True  # Set to True to see parsed completions
-    )
-    
     # Set up smart request handling
     if SMART_REQUEST_AVAILABLE:
         try:
@@ -83,7 +74,7 @@ except Exception as e:
 try:
     # Import Base and all models to ensure they're registered
     from app.db.session import Base
-    from app.db.base import *  # This imports all models
+    from app.models import *  # This imports all models
     
     # Create database tables
     Base.metadata.create_all(bind=engine)

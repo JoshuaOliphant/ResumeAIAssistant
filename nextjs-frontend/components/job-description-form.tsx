@@ -126,7 +126,7 @@ export function JobDescriptionForm({ initialData, onSuccess }: JobDescriptionFor
           {initialData?.id ? "Edit Job Description" : "New Job Description"}
         </CardTitle>
         <CardDescription>
-          Add details about the job you're applying for
+          Add details about the job you&apos;re applying for
         </CardDescription>
       </CardHeader>
       
@@ -147,7 +147,7 @@ export function JobDescriptionForm({ initialData, onSuccess }: JobDescriptionFor
                     />
                   </FormControl>
                   <FormDescription>
-                    The title of the position you're applying for
+                    The title of the position you&apos;re applying for
                   </FormDescription>
                   <FormMessage />
                 </FormItem>
