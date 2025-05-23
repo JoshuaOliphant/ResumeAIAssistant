@@ -1089,3 +1089,4 @@ def export_diff_to_files(original_text: str, customized_text: str, output_dir: s
         "json_file": json_path,
         "stats_file": stats_path
     }
+
