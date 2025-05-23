@@ -96,6 +96,9 @@ def client():
     from app.db.session import Base, get_db
     from app.api.endpoints import auth, jobs, resumes, export, requirements, websockets
 
+    # Create FastAPI app instance
+    app = FastAPI()
+
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
@@ -125,4 +128,3 @@ def client():
             yield c
     finally:
         app.dependency_overrides.clear()
-    app.dependency_overrides.clear()
