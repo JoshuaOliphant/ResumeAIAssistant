@@ -506,3 +506,4 @@ def get_resume_version_diff(
         section_analysis=section_analysis,
         is_diff_view=True,
     )
+

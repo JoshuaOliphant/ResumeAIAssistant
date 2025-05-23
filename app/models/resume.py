@@ -55,3 +55,4 @@ class ResumeVersion(Base):
     def is_customized(self, value: bool) -> None:
         """Convert boolean to integer for database storage."""
         self._is_customized = 1 if value else 0
+

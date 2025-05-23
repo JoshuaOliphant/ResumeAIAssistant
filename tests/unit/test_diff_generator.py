@@ -11,3 +11,4 @@ def test_diff_generator_html_view_uses_helper():
         mock_doc.assert_called_once_with("A", "B")
         assert result == "<html>diff</html>"
 
+

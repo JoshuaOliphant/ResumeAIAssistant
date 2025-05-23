@@ -405,3 +405,4 @@ def get_logger(name: str):
     """
     # Return the logfire instance (it's already configured globally)
     return logfire
+
