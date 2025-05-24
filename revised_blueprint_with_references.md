@@ -59,8 +59,7 @@ Implement the core PydanticAI integration for the ResumeAIAssistant application,
 3. Update app/core/config.py to properly configure PydanticAI:
    - Configure thinking capability for Claude 3.7 models (see lines 121-130 in spec.md)
    - Set appropriate temperature and token limits per spec.md guidance
-   - Use Claude 3.7 Sonnet as the primary model
-   - Ensure fallback model configuration is in place
+   - Use only Claude 3.7 Sonnet as our model
 
 4. Create app/services/thinking_budget.py based on pydanticai_notes/11_dependency_injection.md:
    - ThinkingBudget class to manage token allocation
