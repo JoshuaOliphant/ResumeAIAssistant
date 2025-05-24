@@ -2,6 +2,10 @@ from pathlib import Path
 
 PROMPTS_DIR = Path(__file__).resolve().parents[2] / "claude_prompts"
 
+# Ensure the prompts directory exists
+if not PROMPTS_DIR.exists():
+    raise RuntimeError(f"Claude prompts directory not found: {PROMPTS_DIR}")
+
 
 def load_prompt(filename: str) -> str:
     """Load a prompt file from the claude_prompts directory."""
