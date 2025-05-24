@@ -39,7 +39,9 @@ class ClaudeCodeExecutor:
         )
 
     def _create_temp_workspace(self) -> str:
-        temp_dir = os.path.join(self.working_dir, f"claude_workspace_{uuid.uuid4().hex}")
+        temp_dir = os.path.join(
+            self.working_dir, f"claude_workspace_{uuid.uuid4().hex}"
+        )
         os.makedirs(temp_dir, exist_ok=True)
         return temp_dir
 
@@ -67,11 +69,15 @@ class ClaudeCodeExecutor:
 
         log_streamer = get_log_streamer()
         log_streamer.create_log_stream(task_id)
-        log_streamer.add_log(task_id, f"Starting Claude Code customization (timeout: {timeout_seconds}s)")
+        log_streamer.add_log(
+            task_id, f"Starting Claude Code customization (timeout: {timeout_seconds}s)"
+        )
 
         temp_dir = self._create_temp_workspace()
 
-        prompt = prompt_manager.build_prompt(resume_path, job_description_path, self.prompt_template)
+        prompt = prompt_manager.build_prompt(
+            resume_path, job_description_path, self.prompt_template
+        )
 
         command = [
             self.claude_cmd,
@@ -102,10 +108,14 @@ class ClaudeCodeExecutor:
                 timeout_seconds=timeout_seconds,
             )
         except subprocess.TimeoutExpired:
-            log_streamer.add_log(task_id, "ERROR: Claude Code execution timed out", level="error")
+            log_streamer.add_log(
+                task_id, "ERROR: Claude Code execution timed out", level="error"
+            )
             raise ClaudeCodeExecutionError("Claude Code execution timed out")
         except subprocess.CalledProcessError as exc:
-            log_streamer.add_log(task_id, f"Process failed with code {exc.returncode}", level="error")
+            log_streamer.add_log(
+                task_id, f"Process failed with code {exc.returncode}", level="error"
+            )
             raise ClaudeCodeExecutionError("Claude Code process failed")
 
         files_found = os.listdir(temp_dir)
@@ -113,17 +123,23 @@ class ClaudeCodeExecutor:
         summary_path = os.path.join(temp_dir, "customized_resume_output.md")
 
         if not os.path.exists(customized_resume_path):
-            alt = [f for f in files_found if f.endswith(".md") and "resume" in f.lower()]
+            alt = [
+                f for f in files_found if f.endswith(".md") and "resume" in f.lower()
+            ]
             if alt:
                 customized_resume_path = os.path.join(temp_dir, alt[0])
         if not os.path.exists(summary_path):
-            alt = [f for f in files_found if f.endswith(".md") and "summary" in f.lower()]
+            alt = [
+                f for f in files_found if f.endswith(".md") and "summary" in f.lower()
+            ]
             if alt:
                 summary_path = os.path.join(temp_dir, alt[0])
 
         parsed_results = output_parser.process_output(stdout_content)
 
-        if not parsed_results["customized_resume"] and os.path.exists(customized_resume_path):
+        if not parsed_results["customized_resume"] and os.path.exists(
+            customized_resume_path
+        ):
             with open(customized_resume_path, "r", encoding="utf-8") as file:
                 parsed_results["customized_resume"] = file.read()
         if not parsed_results["customization_summary"] and os.path.exists(summary_path):
@@ -154,7 +170,14 @@ class ClaudeCodeExecutor:
         progress_tracker.create_task().task_id = task_id
         thread = threading.Thread(
             target=self._run_customization_with_progress,
-            args=(resume_path, job_description_path, output_path, progress_callback, task_id, timeout),
+            args=(
+                resume_path,
+                job_description_path,
+                output_path,
+                progress_callback,
+                task_id,
+                timeout,
+            ),
             daemon=True,
         )
         thread.start()
@@ -182,7 +205,7 @@ class ClaudeCodeExecutor:
                 progress_callback(update)
 
         try:
-            result = self.customize_resume(
+            self.customize_resume(
                 resume_path=resume_path,
                 job_description_path=job_description_path,
                 output_path=output_path,
@@ -200,20 +223,32 @@ class ClaudeCodeExecutor:
     def validate_sdk_features(self) -> Dict[str, bool]:
         """Validate helper methods extracted into submodules."""
         import tempfile
-        results = {"system_prompt_creation": False, "mcp_config_creation": False, "stream_json_processing": False}
+
+        results = {
+            "system_prompt_creation": False,
+            "mcp_config_creation": False,
+            "stream_json_processing": False,
+        }
         try:
             with tempfile.TemporaryDirectory() as temp_dir:
                 path = prompt_manager.prepare_system_prompt(temp_dir)
-                results["system_prompt_creation"] = path is not None and os.path.exists(path)
+                results["system_prompt_creation"] = path is not None and os.path.exists(
+                    path
+                )
             with tempfile.TemporaryDirectory() as temp_dir:
                 path = prompt_manager.prepare_mcp_config(temp_dir)
-                results["mcp_config_creation"] = path is not None and os.path.exists(path)
+                results["mcp_config_creation"] = path is not None and os.path.exists(
+                    path
+                )
             from app.services.claude_code.log_streamer import get_log_streamer
+
             log_streamer = get_log_streamer()
             log_streamer.create_log_stream("test")
             test_json = '{"type": "content", "content": "test"}'
             parsed = output_parser.process_stream_json(test_json, "test", log_streamer)
-            results["stream_json_processing"] = isinstance(parsed, dict) and "content" in parsed
+            results["stream_json_processing"] = (
+                isinstance(parsed, dict) and "content" in parsed
+            )
         except Exception as exc:  # pragma: no cover - unexpected errors
             logger.error("SDK feature validation failed: %s", exc)
         return results
@@ -228,4 +263,3 @@ def get_claude_code_executor() -> ClaudeCodeExecutor:
     if _executor_instance is None:
         _executor_instance = ClaudeCodeExecutor()
     return _executor_instance
-
