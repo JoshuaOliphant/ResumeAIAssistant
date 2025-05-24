@@ -3,7 +3,16 @@ Pydantic schemas for API request and response validation.
 """
 
 from app.schemas.user import User, UserCreate, UserUpdate, UserInDB
-from app.schemas.resume import Resume, ResumeCreate, ResumeUpdate, ResumeDetail, ResumeVersion, ResumeDiffResponse, SectionDiffInfo
+from app.schemas.resume import (
+    Resume,
+    ResumeCreate,
+    ResumeUpdate,
+    ResumeDetail,
+    ResumeVersion,
+    ResumeDiffResponse,
+    SectionDiffInfo,
+    HtmlDiffResponse,
+)
 from app.schemas.job import JobDescription, JobDescriptionCreate, JobDescriptionUpdate, JobDescriptionCreateFromUrl
 from app.schemas.requirements import KeyRequirementsRequest, KeyRequirementsContentRequest, KeyRequirementsResponse, KeyRequirements, Requirement, RequirementCategory
 
@@ -27,6 +36,7 @@ __all__ = [
     "ResumeDetail",
     "ResumeVersion",
     "ResumeDiffResponse",
+    "HtmlDiffResponse",
     "SectionDiffInfo",
     
     # Job schemas
