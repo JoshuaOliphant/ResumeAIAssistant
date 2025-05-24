@@ -93,13 +93,13 @@ def prepare_mcp_config(temp_dir: str) -> Optional[str]:
     except Exception as exc:  # pragma: no cover - filesystem errors
         logger.warning("Failed to create MCP config file: %s", exc)
         return None
-
-
 def build_prompt(resume_path: str, job_description_path: str, template: Optional[str]) -> str:
     """Construct the full prompt for Claude Code execution."""
     try:
         with open(resume_path, "r", encoding="utf-8") as r_file:
             resume_content = r_file.read()
+        with open(job_description_path, "r", encoding="utf-8") as j_file:
+            job_description_content = j_file.read()
         with open(job_description_path, "r", encoding="utf-8") as j_file:
             job_description_content = j_file.read()
 
