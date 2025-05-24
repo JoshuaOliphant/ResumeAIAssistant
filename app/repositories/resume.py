@@ -1,4 +1,5 @@
 from typing import List, Optional
+from uuid import uuid4
 
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
@@ -102,6 +103,8 @@ class ResumeRepository(BaseRepository[Resume, ResumeCreate, ResumeUpdate]):
         version_data = version_in.dict()
         version_data["resume_id"] = resume_id
         version_data["version_number"] = version_number
+        if "id" not in version_data:
+            version_data["id"] = str(uuid4())
 
         db_version = ResumeVersion(**version_data)
         self.db.add(db_version)
