@@ -526,7 +526,7 @@ def compare_resume_versions(
     if not resume:
         raise HTTPException(status_code=404, detail="Resume not found")
 
-    if current_user and resume.user_id and resume.user_id != current_user.id:
+    if resume.user_id and (not current_user or resume.user_id != current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized to access this resume")
 
     source_version = (
