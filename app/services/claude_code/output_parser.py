@@ -138,16 +138,16 @@ def save_results(results: Dict[str, Any], output_path: str) -> Dict[str, Any]:
         output_dir = os.path.dirname(output_path)
         os.makedirs(output_dir, exist_ok=True)
 
-        with open(output_path, "w") as file:
+        with open(output_path, "w", encoding="utf-8") as file:
             file.write(results.get("customized_resume", ""))
 
         summary_path = os.path.join(output_dir, "customized_resume_output.md")
-        with open(summary_path, "w") as file:
+        with open(summary_path, "w", encoding="utf-8") as file:
             file.write(results.get("customization_summary", ""))
 
         for name, content in results.get("intermediate_files", {}).items():
             file_path = os.path.join(output_dir, name)
-            with open(file_path, "w") as file:
+            with open(file_path, "w", encoding="utf-8") as file:
                 if isinstance(content, (dict, list)):
                     json.dump(content, file, indent=2)
                 else:

@@ -26,14 +26,14 @@ def run_claude_subprocess(
     os.makedirs(output_dir, exist_ok=True)
 
     prompt_file_path = os.path.join(input_dir, "prompt.txt")
-    with open(prompt_file_path, "w") as file:
+    with open(prompt_file_path, "w", encoding="utf-8") as file:
         file.write(prompt)
 
     env = os.environ.copy()
     env["CLAUDE_CODE_OUTPUT_DIR"] = output_dir
 
     instructions_file = os.path.join(temp_dir, "INSTRUCTIONS.md")
-    with open(instructions_file, "w") as file:
+    with open(instructions_file, "w", encoding="utf-8") as file:
         file.write(
             f"# IMPORTANT: Save Output Instructions\n\n"
             f"You are currently in the working directory: {temp_dir}\n\n"
@@ -58,9 +58,12 @@ def run_claude_subprocess(
         env=env,
     )
 
-    process.stdin.write(prompt)
-    process.stdin.flush()
-    process.stdin.close()
+    try:
+        process.stdin.write(prompt)
+        process.stdin.flush()
+        process.stdin.close()
+    except (BrokenPipeError, IOError) as e:
+        log_streamer.add_log(task_id, f"Error writing to subprocess: {e}", level="error")
 
     stdout_queue: queue.Queue[str] = queue.Queue(maxsize=1000)
     stderr_queue: queue.Queue[str] = queue.Queue(maxsize=1000)
@@ -122,7 +125,12 @@ def run_claude_subprocess(
                     last_activity_time = time.time()
                     all_stdout.append(line)
                     if line.strip():
-                        log_streamer.add_log(task_id, f"Claude: {line.strip()}", level="info")
+                        # Try to parse as stream-json, fallback to plain logging
+                        try:
+                            from app.services.claude_code import output_parser
+                            parsed = output_parser.process_stream_json(line.strip(), task_id, log_streamer)
+                        except Exception:
+                            log_streamer.add_log(task_id, f"Claude: {line.strip()}", level="info")
             except queue.Empty:
                 pass
 
@@ -167,7 +175,8 @@ def run_claude_subprocess(
         stderr_thread.join(timeout=5)
 
         if process.returncode != 0:
-            raise subprocess.CalledProcessError(process.returncode, command)
+            error_output = "\n".join(all_stdout[-20:]) if all_stdout else "No output captured"
+            raise subprocess.CalledProcessError(process.returncode, command, output=error_output)
 
         return "\n".join(all_stdout)
     finally:

@@ -70,8 +70,6 @@ class ClaudeCodeExecutor:
         log_streamer.add_log(task_id, f"Starting Claude Code customization (timeout: {timeout_seconds}s)")
 
         temp_dir = self._create_temp_workspace()
-        prompt_manager.prepare_system_prompt(temp_dir)
-        prompt_manager.prepare_mcp_config(temp_dir)
 
         prompt = prompt_manager.build_prompt(resume_path, job_description_path, self.prompt_template)
 
@@ -79,10 +77,20 @@ class ClaudeCodeExecutor:
             self.claude_cmd,
             "--print",
             "--output-format",
-            "text",
+            "stream-json",
             "--allowedTools",
             "Write,Read,Edit,Bash,Grep,Glob",
         ]
+
+        # Add system prompt file if created
+        system_prompt_path = prompt_manager.prepare_system_prompt(temp_dir)
+        if system_prompt_path:
+            command.extend(["--system-prompt-file", system_prompt_path])
+
+        # Add MCP config file if created
+        mcp_config_path = prompt_manager.prepare_mcp_config(temp_dir)
+        if mcp_config_path:
+            command.extend(["--mcp-config", mcp_config_path])
 
         try:
             stdout_content = subprocess_runner.run_claude_subprocess(
@@ -116,10 +124,10 @@ class ClaudeCodeExecutor:
         parsed_results = output_parser.process_output(stdout_content)
 
         if not parsed_results["customized_resume"] and os.path.exists(customized_resume_path):
-            with open(customized_resume_path, "r") as file:
+            with open(customized_resume_path, "r", encoding="utf-8") as file:
                 parsed_results["customized_resume"] = file.read()
         if not parsed_results["customization_summary"] and os.path.exists(summary_path):
-            with open(summary_path, "r") as file:
+            with open(summary_path, "r", encoding="utf-8") as file:
                 parsed_results["customization_summary"] = file.read()
 
         result = output_parser.save_results(parsed_results, output_path)

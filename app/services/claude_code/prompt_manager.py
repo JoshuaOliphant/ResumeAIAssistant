@@ -20,7 +20,7 @@ def load_prompt_template(path: str) -> str:
         The template content.
     """
     try:
-        with open(path, "r") as file:
+        with open(path, "r", encoding="utf-8") as file:
             return file.read()
     except FileNotFoundError as exc:
         logger.error("Prompt template file not found: %s", path)
@@ -54,8 +54,9 @@ def prepare_system_prompt(temp_dir: str) -> Optional[str]:
         if not system_prompt_content:
             system_prompt_content = get_system_prompt_content_inline()
 
+        os.makedirs(temp_dir, exist_ok=True)
         path = os.path.join(temp_dir, "system_prompt.txt")
-        with open(path, "w") as file:
+        with open(path, "w", encoding="utf-8") as file:
             file.write(system_prompt_content)
         logger.info("Created system prompt file at %s", path)
         return path
@@ -83,8 +84,9 @@ def prepare_mcp_config(temp_dir: str) -> Optional[str]:
             }
 
         config = {"mcpServers": mcp_servers}
+        os.makedirs(temp_dir, exist_ok=True)
         path = os.path.join(temp_dir, "claude_desktop_config.json")
-        with open(path, "w") as file:
+        with open(path, "w", encoding="utf-8") as file:
             json.dump(config, file, indent=2)
         logger.info("Created MCP config file at %s", path)
         return path
@@ -96,9 +98,9 @@ def prepare_mcp_config(temp_dir: str) -> Optional[str]:
 def build_prompt(resume_path: str, job_description_path: str, template: Optional[str]) -> str:
     """Construct the full prompt for Claude Code execution."""
     try:
-        with open(resume_path, "r") as r_file:
+        with open(resume_path, "r", encoding="utf-8") as r_file:
             resume_content = r_file.read()
-        with open(job_description_path, "r") as j_file:
+        with open(job_description_path, "r", encoding="utf-8") as j_file:
             job_description_content = j_file.read()
 
         system_prompt = get_system_prompt_content_inline()
