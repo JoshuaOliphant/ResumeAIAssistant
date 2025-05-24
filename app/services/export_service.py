@@ -277,3 +277,4 @@ class TemplateProcessor:
 
         context = {sec: "\n".join(lines) for sec, lines in sections.items()}
         return context
+

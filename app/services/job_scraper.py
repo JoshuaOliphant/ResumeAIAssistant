@@ -467,3 +467,4 @@ def extract_job_description(soup: BeautifulSoup, url: str) -> str:
         
         result = description_text.strip() or "No job description found."
         return result
+

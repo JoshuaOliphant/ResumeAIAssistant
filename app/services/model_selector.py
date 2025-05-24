@@ -786,3 +786,4 @@ def get_model_config_for_task(
             )
 
     return complete_config
+
