@@ -64,6 +64,9 @@ def run_claude_subprocess(
         process.stdin.close()
     except (BrokenPipeError, IOError) as e:
         log_streamer.add_log(task_id, f"Error writing to subprocess: {e}", level="error")
+        process.stdin.close()
+    except (BrokenPipeError, IOError) as e:
+        log_streamer.add_log(task_id, f"Error writing to subprocess: {e}", level="error")
 
     stdout_queue: queue.Queue[str] = queue.Queue(maxsize=1000)
     stderr_queue: queue.Queue[str] = queue.Queue(maxsize=1000)
