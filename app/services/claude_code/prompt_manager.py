@@ -100,8 +100,6 @@ def build_prompt(resume_path: str, job_description_path: str, template: Optional
             resume_content = r_file.read()
         with open(job_description_path, "r", encoding="utf-8") as j_file:
             job_description_content = j_file.read()
-        with open(job_description_path, "r", encoding="utf-8") as j_file:
-            job_description_content = j_file.read()
 
         system_prompt = get_system_prompt_content_inline()
         instructions = template or (
