@@ -25,6 +25,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from app.services.claude_code.executor import ClaudeCodeExecutor, ClaudeCodeExecutionError
 from app.services.claude_code.progress_tracker import ProgressTracker, Task, progress_tracker
 from app.services.claude_code.log_streamer import get_log_streamer
+from app.services.claude_code import prompt_manager, output_parser
 from app.core.config import settings
 
 
@@ -69,7 +70,7 @@ class TestSystemPromptGeneration(TestClaudeSDKFeatures):
             mock_settings.CLAUDE_SYSTEM_PROMPT = None
             
             # Create system prompt
-            system_prompt_path = self.executor._prepare_system_prompt(self.temp_dir)
+            system_prompt_path = prompt_manager.prepare_system_prompt(self.temp_dir)
             
             # Verify file was created
             assert system_prompt_path is not None
@@ -92,7 +93,7 @@ class TestSystemPromptGeneration(TestClaudeSDKFeatures):
             mock_settings.CLAUDE_SYSTEM_PROMPT = custom_prompt
             
             # Create system prompt
-            system_prompt_path = self.executor._prepare_system_prompt(self.temp_dir)
+            system_prompt_path = prompt_manager.prepare_system_prompt(self.temp_dir)
             
             # Verify file was created with custom content
             assert system_prompt_path is not None
@@ -109,7 +110,7 @@ class TestSystemPromptGeneration(TestClaudeSDKFeatures):
         readonly_dir = "/nonexistent/readonly"
         
         # Should return None on failure, not raise exception
-        system_prompt_path = self.executor._prepare_system_prompt(readonly_dir)
+        system_prompt_path = prompt_manager.prepare_system_prompt(readonly_dir)
         assert system_prompt_path is None
 
 
@@ -123,7 +124,7 @@ class TestMCPConfigGeneration(TestClaudeSDKFeatures):
             mock_settings.CLAUDE_MCP_ENABLED = False
             
             # Create MCP config
-            mcp_config_path = self.executor._prepare_mcp_config(self.temp_dir)
+            mcp_config_path = prompt_manager.prepare_mcp_config(self.temp_dir)
             
             # Should return None when disabled
             assert mcp_config_path is None
@@ -136,7 +137,7 @@ class TestMCPConfigGeneration(TestClaudeSDKFeatures):
             mock_settings.CLAUDE_MCP_SERVERS = {}
             
             # Create MCP config
-            mcp_config_path = self.executor._prepare_mcp_config(self.temp_dir)
+            mcp_config_path = prompt_manager.prepare_mcp_config(self.temp_dir)
             
             # Verify file was created
             assert mcp_config_path is not None
@@ -167,7 +168,7 @@ class TestMCPConfigGeneration(TestClaudeSDKFeatures):
             mock_settings.CLAUDE_MCP_SERVERS = custom_servers
             
             # Create MCP config
-            mcp_config_path = self.executor._prepare_mcp_config(self.temp_dir)
+            mcp_config_path = prompt_manager.prepare_mcp_config(self.temp_dir)
             
             # Verify file was created with custom configuration
             assert mcp_config_path is not None
@@ -192,7 +193,7 @@ class TestMCPConfigGeneration(TestClaudeSDKFeatures):
             readonly_dir = "/nonexistent/readonly"
             
             # Should return None on failure, not raise exception
-            mcp_config_path = self.executor._prepare_mcp_config(readonly_dir)
+            mcp_config_path = prompt_manager.prepare_mcp_config(readonly_dir)
             assert mcp_config_path is None
 
 
@@ -212,7 +213,7 @@ class TestStreamJSONProcessing(TestClaudeSDKFeatures):
         """Test processing content events from stream-json"""
         content_json = '{"type": "content", "content": "This is test content from Claude"}'
         
-        result = self.executor._process_stream_json(content_json, self.test_task_id, self.log_streamer)
+        result = output_parser.process_stream_json(content_json, self.test_task_id, self.log_streamer)
         
         # Verify parsing
         assert isinstance(result, dict)
@@ -227,7 +228,7 @@ class TestStreamJSONProcessing(TestClaudeSDKFeatures):
         """Test processing tool_use events from stream-json"""
         tool_use_json = '{"type": "tool_use", "name": "Write", "input": {"file_path": "/tmp/test.md", "content": "test"}}'
         
-        result = self.executor._process_stream_json(tool_use_json, self.test_task_id, self.log_streamer)
+        result = output_parser.process_stream_json(tool_use_json, self.test_task_id, self.log_streamer)
         
         # Verify parsing
         assert result["type"] == "tool_use"
@@ -242,7 +243,7 @@ class TestStreamJSONProcessing(TestClaudeSDKFeatures):
         """Test processing successful tool_result events"""
         tool_result_json = '{"type": "tool_result", "tool_name": "Write", "is_error": false, "content": "File written successfully"}'
         
-        result = self.executor._process_stream_json(tool_result_json, self.test_task_id, self.log_streamer)
+        result = output_parser.process_stream_json(tool_result_json, self.test_task_id, self.log_streamer)
         
         # Verify parsing
         assert result["type"] == "tool_result"
@@ -257,7 +258,7 @@ class TestStreamJSONProcessing(TestClaudeSDKFeatures):
         """Test processing error tool_result events"""
         tool_result_json = '{"type": "tool_result", "tool_name": "Write", "is_error": true, "content": "Permission denied"}'
         
-        result = self.executor._process_stream_json(tool_result_json, self.test_task_id, self.log_streamer)
+        result = output_parser.process_stream_json(tool_result_json, self.test_task_id, self.log_streamer)
         
         # Verify parsing
         assert result["type"] == "tool_result"
@@ -272,7 +273,7 @@ class TestStreamJSONProcessing(TestClaudeSDKFeatures):
         """Test processing progress update events"""
         progress_json = '{"type": "progress", "progress": 45, "message": "Analyzing job requirements"}'
         
-        result = self.executor._process_stream_json(progress_json, self.test_task_id, self.log_streamer)
+        result = output_parser.process_stream_json(progress_json, self.test_task_id, self.log_streamer)
         
         # Verify parsing
         assert result["type"] == "progress"
@@ -287,7 +288,7 @@ class TestStreamJSONProcessing(TestClaudeSDKFeatures):
         """Test processing status update events"""
         status_json = '{"type": "status", "status": "in_progress", "message": "Customizing resume sections"}'
         
-        result = self.executor._process_stream_json(status_json, self.test_task_id, self.log_streamer)
+        result = output_parser.process_stream_json(status_json, self.test_task_id, self.log_streamer)
         
         # Verify parsing
         assert result["type"] == "status"
@@ -302,7 +303,7 @@ class TestStreamJSONProcessing(TestClaudeSDKFeatures):
         """Test processing completion events"""
         completion_json = '{"type": "completion", "success": true, "message": "Resume customization completed"}'
         
-        result = self.executor._process_stream_json(completion_json, self.test_task_id, self.log_streamer)
+        result = output_parser.process_stream_json(completion_json, self.test_task_id, self.log_streamer)
         
         # Verify parsing
         assert result["type"] == "completion"
@@ -317,7 +318,7 @@ class TestStreamJSONProcessing(TestClaudeSDKFeatures):
         """Test processing invalid JSON gracefully"""
         invalid_json = '{"type": "content", "content": invalid json'
         
-        result = self.executor._process_stream_json(invalid_json, self.test_task_id, self.log_streamer)
+        result = output_parser.process_stream_json(invalid_json, self.test_task_id, self.log_streamer)
         
         # Should return empty dict on invalid JSON
         assert result == {}
@@ -326,7 +327,7 @@ class TestStreamJSONProcessing(TestClaudeSDKFeatures):
         """Test processing unknown event types"""
         unknown_json = '{"type": "unknown_event", "data": "some data", "message": "Unknown message"}'
         
-        result = self.executor._process_stream_json(unknown_json, self.test_task_id, self.log_streamer)
+        result = output_parser.process_stream_json(unknown_json, self.test_task_id, self.log_streamer)
         
         # Should still parse but log as message
         assert result["type"] == "unknown_event"
@@ -491,8 +492,8 @@ class TestSDKFeatureIntegration(TestClaudeSDKFeatures):
         # Mock threading and queue for output handling
         with patch('threading.Thread'), \
              patch('queue.Queue'), \
-             patch.object(self.executor, '_save_results') as mock_save, \
-             patch.object(self.executor, '_process_output') as mock_process_output:
+             patch('app.services.claude_code.output_parser.save_results') as mock_save, \
+             patch('app.services.claude_code.output_parser.process_output') as mock_process_output:
             
             # Configure mocks
             mock_process_output.return_value = {
@@ -544,11 +545,11 @@ class TestSDKFeatureIntegration(TestClaudeSDKFeatures):
             mock_settings.CLAUDE_SYSTEM_PROMPT = None
             
             # Test MCP config creation (should return None)
-            mcp_config_path = self.executor._prepare_mcp_config(self.temp_dir)
+            mcp_config_path = prompt_manager.prepare_mcp_config(self.temp_dir)
             assert mcp_config_path is None
             
             # Test system prompt creation (should create default)
-            system_prompt_path = self.executor._prepare_system_prompt(self.temp_dir)
+            system_prompt_path = prompt_manager.prepare_system_prompt(self.temp_dir)
             assert system_prompt_path is not None
             
             # Verify default system prompt content
@@ -596,7 +597,7 @@ class TestSDKFeatureIntegration(TestClaudeSDKFeatures):
         
         # Process each event
         for event_json in events:
-            result = self.executor._process_stream_json(event_json, task_id, log_streamer)
+            result = output_parser.process_stream_json(event_json, task_id, log_streamer)
             assert isinstance(result, dict)
         
         # Verify logs were created
@@ -620,12 +621,12 @@ class TestSDKFeatureIntegration(TestClaudeSDKFeatures):
         log_streamer.create_log_stream(task_id)
         
         # Should handle gracefully
-        result = self.executor._process_stream_json(malformed_json, task_id, log_streamer)
+        result = output_parser.process_stream_json(malformed_json, task_id, log_streamer)
         assert result == {}
         
         # Test system prompt creation failure
         with patch('builtins.open', side_effect=PermissionError("Access denied")):
-            system_prompt_path = self.executor._prepare_system_prompt(self.temp_dir)
+            system_prompt_path = prompt_manager.prepare_system_prompt(self.temp_dir)
             assert system_prompt_path is None
         
         # Test MCP config creation failure
@@ -634,7 +635,7 @@ class TestSDKFeatureIntegration(TestClaudeSDKFeatures):
             mock_settings.CLAUDE_MCP_ENABLED = True
             mock_settings.CLAUDE_MCP_SERVERS = {}
             
-            mcp_config_path = self.executor._prepare_mcp_config(self.temp_dir)
+            mcp_config_path = prompt_manager.prepare_mcp_config(self.temp_dir)
             assert mcp_config_path is None
 
 

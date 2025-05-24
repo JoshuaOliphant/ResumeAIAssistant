@@ -165,3 +165,4 @@ def delete_job_description(
     db.commit()
 
     return None
+
