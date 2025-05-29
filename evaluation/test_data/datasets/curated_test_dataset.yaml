@@ -1,0 +1,1234 @@
+# ABOUTME: Curated test dataset for resume-job matching evaluation
+# ABOUTME: Contains diverse test cases with ground truth annotations
+
+name: "Curated Resume-Job Test Dataset"
+version: "1.0"
+description: "Manually curated test cases for evaluating resume-job matching algorithms"
+author: "ResumeAI Team"
+created_at: "2025-01-29"
+
+test_cases:
+  # Test Case 1: Perfect Match - Senior Software Engineer
+  - id: "test_001_perfect_match_senior_swe"
+    name: "Perfect Match - Senior Software Engineer"
+    description: "Experienced engineer with exact skills match for senior position"
+    category: "technical"
+    difficulty: "easy"
+    tags: ["perfect_match", "senior", "software_engineering"]
+    
+    resume_content: |
+      John Smith
+      Senior Software Engineer
+      Email: john.smith@email.com | Phone: (555) 123-4567
+      LinkedIn: linkedin.com/in/johnsmith | GitHub: github.com/johnsmith
+      
+      SUMMARY
+      Experienced Senior Software Engineer with 8+ years developing scalable web applications and leading 
+      engineering teams. Expert in Python, JavaScript, and cloud architectures. Proven track record of 
+      delivering high-quality software solutions and mentoring junior developers.
+      
+      EXPERIENCE
+      Senior Software Engineer | TechCorp Inc. | San Francisco, CA | 2019-Present
+      - Lead a team of 6 engineers developing microservices architecture using Python and Kubernetes
+      - Designed and implemented RESTful APIs serving 10M+ daily requests with 99.9% uptime
+      - Mentored 4 junior developers, conducting code reviews and pair programming sessions
+      - Reduced system latency by 40% through performance optimization and caching strategies
+      - Implemented CI/CD pipelines using GitHub Actions and automated deployment processes
+      
+      Software Engineer | StartupXYZ | San Francisco, CA | 2017-2019
+      - Developed full-stack web applications using React.js and Django
+      - Built real-time features using WebSockets and Redis pub/sub
+      - Collaborated with product team to define technical requirements and deliver features
+      - Wrote comprehensive unit and integration tests achieving 85% code coverage
+      
+      SKILLS
+      Languages: Python, JavaScript, TypeScript, SQL, Java
+      Frameworks: Django, FastAPI, React.js, Node.js, Express.js
+      Databases: PostgreSQL, MongoDB, Redis, Elasticsearch
+      Cloud/DevOps: AWS (EC2, S3, RDS), Docker, Kubernetes, CI/CD, Terraform
+      Tools: Git, GitHub Actions, Jenkins, JIRA, Datadog
+      
+      EDUCATION
+      B.S. Computer Science | University of California, Berkeley | 2016
+    
+    job_description: |
+      Senior Software Engineer
+      TechCompany - San Francisco, CA
+      
+      We're looking for an experienced Senior Software Engineer to join our growing engineering team. 
+      You'll work on building scalable web applications and mentor junior team members.
+      
+      Requirements:
+      - 7+ years of software development experience
+      - Strong proficiency in Python and JavaScript
+      - Experience with microservices architecture and Kubernetes
+      - Proven experience leading engineering teams and mentoring developers
+      - Experience building and maintaining RESTful APIs
+      - Strong understanding of cloud platforms (AWS preferred)
+      - Experience with CI/CD pipelines and DevOps practices
+      - Bachelor's degree in Computer Science or related field
+      
+      Nice to have:
+      - Experience with React.js and modern frontend frameworks
+      - Knowledge of performance optimization techniques
+      - Experience with monitoring tools like Datadog
+      - Open source contributions
+    
+    expected_match_score: 95.0
+    expected_skills: ["Python", "JavaScript", "Kubernetes", "AWS", "React.js", "API Development", "Team Leadership"]
+    expected_technologies: ["Python", "JavaScript", "React.js", "Kubernetes", "AWS", "Docker", "PostgreSQL"]
+    
+    ground_truth:
+      match_rationale: "Candidate has all required skills and experience, including 8 years (exceeds 7+ requirement), Python/JavaScript expertise, Kubernetes and microservices experience, team leadership, API development, AWS experience, CI/CD knowledge, and CS degree."
+      strength_areas: ["Years of experience", "Technical skills match", "Leadership experience", "Cloud expertise"]
+      gap_areas: []
+
+  # Test Case 2: Good Match - Junior Developer with Growth Potential
+  - id: "test_002_good_match_junior_dev"
+    name: "Good Match - Junior Developer"
+    description: "Recent graduate with relevant internship experience and matching technical skills"
+    category: "technical"
+    difficulty: "medium"
+    tags: ["good_match", "junior", "software_engineering"]
+    
+    resume_content: |
+      Sarah Johnson
+      Software Developer
+      Email: sarah.j@email.com | Phone: (555) 987-6543
+      LinkedIn: linkedin.com/in/sarahjohnson | GitHub: github.com/sarahj
+      
+      SUMMARY
+      Recent Computer Science graduate with strong foundation in software development and 1 year of 
+      internship experience. Passionate about building user-friendly applications and learning new technologies.
+      
+      EXPERIENCE
+      Software Engineering Intern | InnovateTech | Boston, MA | Summer 2023
+      - Developed features for web application using React.js and Node.js
+      - Implemented RESTful API endpoints using Express.js and MongoDB
+      - Participated in daily standup meetings and sprint planning
+      - Fixed bugs and improved application performance by 20%
+      - Wrote unit tests using Jest achieving 80% coverage
+      
+      Teaching Assistant | Boston University | Boston, MA | 2022-2023
+      - Assisted professors in teaching Data Structures and Algorithms course
+      - Helped 50+ students debug code and understand programming concepts
+      - Created supplementary learning materials and coding exercises
+      
+      PROJECTS
+      E-commerce Platform (Personal Project) | 2023
+      - Built full-stack e-commerce site using MERN stack (MongoDB, Express, React, Node.js)
+      - Implemented user authentication, shopping cart, and payment integration
+      - Deployed application on Heroku with CI/CD pipeline
+      
+      Weather Dashboard | University Project | 2022
+      - Created responsive weather application using React and OpenWeather API
+      - Implemented location-based weather updates and 5-day forecasts
+      
+      SKILLS
+      Languages: JavaScript, Python, Java, HTML/CSS
+      Frameworks: React.js, Node.js, Express.js, Django
+      Databases: MongoDB, MySQL
+      Tools: Git, VS Code, Postman, Heroku
+      
+      EDUCATION
+      B.S. Computer Science | Boston University | 2023
+      GPA: 3.7/4.0
+    
+    job_description: |
+      Junior Software Developer
+      TechStartup - Boston, MA
+      
+      We're seeking a motivated Junior Software Developer to join our engineering team. This is an 
+      excellent opportunity for recent graduates or early-career developers to grow their skills.
+      
+      Requirements:
+      - Bachelor's degree in Computer Science or related field
+      - 0-2 years of software development experience (internships count)
+      - Proficiency in JavaScript and at least one backend language
+      - Experience with React.js or similar frontend framework
+      - Understanding of RESTful APIs and web development
+      - Familiarity with version control (Git)
+      - Strong problem-solving skills and eagerness to learn
+      
+      Nice to have:
+      - Experience with Node.js and Express.js
+      - Knowledge of MongoDB or other NoSQL databases
+      - Personal projects or open source contributions
+      - Experience with agile development practices
+    
+    expected_match_score: 85.0
+    expected_skills: ["JavaScript", "React.js", "Node.js", "MongoDB", "API Development", "Git"]
+    expected_technologies: ["JavaScript", "React.js", "Node.js", "Express.js", "MongoDB", "Git"]
+    
+    ground_truth:
+      match_rationale: "Strong match for junior position with CS degree, 1 year internship experience, JavaScript proficiency, React.js experience, API development knowledge, and Git familiarity. Has all nice-to-have skills including Node.js, Express.js, MongoDB, and personal projects."
+      strength_areas: ["Education match", "Technical skills", "Relevant internship", "Personal projects"]
+      gap_areas: ["Limited professional experience", "No mention of agile experience beyond basic exposure"]
+
+  # Test Case 3: Partial Match - Career Transition
+  - id: "test_003_partial_match_career_transition"
+    name: "Partial Match - Career Transition from Data Analyst to Software Engineer"
+    description: "Data analyst transitioning to software engineering with some relevant skills"
+    category: "technical"
+    difficulty: "hard"
+    tags: ["partial_match", "career_transition", "software_engineering"]
+    
+    resume_content: |
+      Michael Chen
+      Data Analyst | Aspiring Software Engineer
+      Email: m.chen@email.com | Phone: (555) 234-5678
+      
+      SUMMARY
+      Data Analyst with 4 years of experience seeking to transition into software engineering. 
+      Self-taught programmer with strong analytical skills and growing expertise in Python and web development.
+      
+      EXPERIENCE
+      Senior Data Analyst | DataCorp Analytics | Chicago, IL | 2021-Present
+      - Analyze large datasets using Python, pandas, and SQL to derive business insights
+      - Built automated reporting dashboards using Python and Tableau
+      - Created data pipelines to process 1M+ records daily
+      - Collaborated with engineering team to define data requirements
+      
+      Data Analyst | MarketInsights Co | Chicago, IL | 2019-2021
+      - Performed statistical analysis using Python and R
+      - Created visualizations and reports for stakeholder presentations
+      - Automated manual processes using Python scripts, saving 10 hours/week
+      
+      SELF-DIRECTED LEARNING & PROJECTS
+      Full-Stack Web Development Bootcamp | Completed 2024
+      - Learned HTML, CSS, JavaScript, React, and Node.js
+      - Built 5 full-stack projects including a task management application
+      
+      Personal Finance Tracker | 2023
+      - Developed web application using Flask and PostgreSQL
+      - Implemented user authentication and data visualization features
+      - Deployed on Heroku with automated backups
+      
+      SKILLS
+      Programming: Python, JavaScript (learning), SQL, R
+      Web Development: HTML/CSS, React (basic), Flask
+      Data Tools: pandas, NumPy, scikit-learn, Tableau
+      Databases: PostgreSQL, MySQL
+      Other: Git, Excel, Statistical Analysis
+      
+      EDUCATION
+      B.S. Statistics | Northwestern University | 2019
+      
+      CERTIFICATIONS
+      - Python for Everybody Specialization (Coursera)
+      - Web Development Bootcamp Certificate (2024)
+    
+    job_description: |
+      Software Engineer
+      TechSolutions Inc - Chicago, IL
+      
+      We're looking for a Software Engineer to join our product development team. You'll work on 
+      building web applications and services that power our platform.
+      
+      Requirements:
+      - 3+ years of software development experience
+      - Strong proficiency in JavaScript and modern web frameworks (React preferred)
+      - Experience building production-ready web applications
+      - Understanding of software design patterns and best practices
+      - Experience with RESTful API development
+      - Familiarity with agile development methodologies
+      - Bachelor's degree in Computer Science or equivalent experience
+      
+      Nice to have:
+      - Experience with Python
+      - Knowledge of cloud platforms (AWS, GCP, or Azure)
+      - Experience with containerization (Docker)
+      - Background in data analysis or data engineering
+    
+    expected_match_score: 65.0
+    expected_skills: ["Python", "JavaScript", "Web Development", "SQL", "Git", "API Development"]
+    expected_technologies: ["Python", "JavaScript", "React", "Flask", "PostgreSQL", "Git"]
+    
+    ground_truth:
+      match_rationale: "Partial match due to career transition. Has Python proficiency and basic JavaScript/React knowledge, but lacks 3+ years software development experience. Has relevant degree in Statistics (not CS) and strong analytical background. Limited production web app experience."
+      strength_areas: ["Python proficiency", "Analytical skills", "Self-directed learning", "Basic web development"]
+      gap_areas: ["Limited JavaScript/React experience", "No production software development experience", "Lacks CS degree", "No agile methodology experience"]
+
+  # Test Case 4: Poor Match - Wrong Specialization
+  - id: "test_004_poor_match_wrong_specialization"
+    name: "Poor Match - Mobile Developer for Backend Position"
+    description: "Mobile developer applying for backend engineering role with minimal overlap"
+    category: "technical"
+    difficulty: "easy"
+    tags: ["poor_match", "wrong_specialization", "software_engineering"]
+    
+    resume_content: |
+      Jennifer Lee
+      Mobile Application Developer
+      Email: j.lee@email.com | Phone: (555) 345-6789
+      
+      SUMMARY
+      Experienced Mobile Developer with 5 years creating native iOS and Android applications. 
+      Specialized in Swift and Kotlin development with focus on user experience and performance.
+      
+      EXPERIENCE
+      Senior iOS Developer | MobileFirst Inc. | Seattle, WA | 2021-Present
+      - Lead iOS development for flagship app with 1M+ downloads
+      - Architected modular iOS application using Swift and MVVM pattern
+      - Implemented complex UI animations and custom components
+      - Integrated third-party SDKs and RESTful APIs
+      - Mentored 2 junior iOS developers
+      
+      Mobile Developer | AppCreators | Seattle, WA | 2019-2021
+      - Developed iOS and Android applications using Swift and Kotlin
+      - Implemented push notifications and in-app purchases
+      - Collaborated with designers to create pixel-perfect UIs
+      - Published 10+ apps to App Store and Google Play
+      
+      SKILLS
+      Languages: Swift, Kotlin, Objective-C, Java (Android)
+      Mobile Frameworks: UIKit, SwiftUI, Android SDK, Jetpack Compose
+      Tools: Xcode, Android Studio, Firebase, CocoaPods, Gradle
+      Other: RESTful APIs, JSON, Git, Agile/Scrum
+      
+      EDUCATION
+      B.S. Computer Science | University of Washington | 2019
+    
+    job_description: |
+      Backend Software Engineer
+      CloudTech Solutions - Seattle, WA
+      
+      We're seeking a Backend Software Engineer to design and build scalable server-side applications 
+      and microservices that power our cloud platform.
+      
+      Requirements:
+      - 4+ years of backend development experience
+      - Strong proficiency in Python or Java for backend development
+      - Experience with microservices architecture and distributed systems
+      - Expertise in SQL and NoSQL databases (PostgreSQL, MongoDB)
+      - Experience building and maintaining RESTful APIs
+      - Knowledge of cloud platforms (AWS, GCP, or Azure)
+      - Understanding of containerization (Docker, Kubernetes)
+      - Experience with message queuing systems (RabbitMQ, Kafka)
+      
+      Nice to have:
+      - Experience with GraphQL
+      - Knowledge of caching strategies (Redis, Memcached)
+      - Experience with monitoring and logging tools
+      - DevOps experience
+    
+    expected_match_score: 35.0
+    expected_skills: ["RESTful APIs", "Git", "Agile"]
+    expected_technologies: ["Git"]
+    
+    ground_truth:
+      match_rationale: "Poor match as candidate is specialized in mobile development with no backend experience. Only overlapping skills are RESTful API integration (from client side), Git, and Agile. Lacks all core backend requirements: Python/Java backend experience, databases, microservices, cloud platforms, containerization."
+      strength_areas: ["CS degree", "5 years development experience", "API integration experience"]
+      gap_areas: ["No backend development experience", "No Python/Java backend skills", "No database experience", "No cloud platform knowledge", "No microservices experience", "No containerization knowledge"]
+
+  # Test Case 5: DevOps Engineer - Good Match
+  - id: "test_005_good_match_devops"
+    name: "Good Match - DevOps Engineer"
+    description: "Experienced DevOps engineer with strong infrastructure and automation skills"
+    category: "technical"
+    difficulty: "medium"
+    tags: ["good_match", "devops", "infrastructure"]
+    
+    resume_content: |
+      Robert Martinez
+      DevOps Engineer
+      Email: r.martinez@email.com | Phone: (555) 456-7890
+      LinkedIn: linkedin.com/in/robertmartinez
+      
+      SUMMARY
+      DevOps Engineer with 6 years of experience building and maintaining cloud infrastructure. 
+      Expert in automation, CI/CD pipelines, and container orchestration. Strong background in 
+      both development and operations.
+      
+      EXPERIENCE
+      Senior DevOps Engineer | CloudScale Inc. | Denver, CO | 2020-Present
+      - Designed and implemented Kubernetes clusters serving 50+ microservices
+      - Built CI/CD pipelines using Jenkins and GitLab CI reducing deployment time by 70%
+      - Automated infrastructure provisioning using Terraform and Ansible
+      - Implemented monitoring and alerting using Prometheus and Grafana
+      - Managed AWS infrastructure with monthly costs of $100K+
+      - Led migration from monolithic architecture to microservices
+      
+      DevOps Engineer | TechOps Solutions | Denver, CO | 2018-2020
+      - Maintained Docker containers and orchestration using Docker Swarm
+      - Implemented Infrastructure as Code using Terraform
+      - Automated deployment processes using Bash and Python scripts
+      - Configured and maintained Linux servers (Ubuntu, CentOS)
+      - Set up ELK stack for centralized logging
+      
+      Systems Administrator | DataCenter Co. | Denver, CO | 2016-2018
+      - Managed on-premise servers and network infrastructure
+      - Implemented backup and disaster recovery procedures
+      - Automated routine tasks using PowerShell and Bash
+      
+      SKILLS
+      Cloud Platforms: AWS (EC2, S3, RDS, Lambda, VPC), Azure basics
+      Containers: Docker, Kubernetes, Helm, Docker Compose
+      CI/CD: Jenkins, GitLab CI, GitHub Actions, ArgoCD
+      IaC: Terraform, Ansible, CloudFormation
+      Monitoring: Prometheus, Grafana, ELK Stack, Datadog
+      Languages: Python, Bash, Go (basic), YAML
+      Databases: PostgreSQL, MySQL, Redis
+      
+      EDUCATION
+      B.S. Information Technology | Colorado State University | 2016
+      
+      CERTIFICATIONS
+      - AWS Certified Solutions Architect
+      - Certified Kubernetes Administrator (CKA)
+    
+    job_description: |
+      DevOps Engineer
+      TechInfra Corp - Denver, CO (Remote Available)
+      
+      We're looking for an experienced DevOps Engineer to help us scale our infrastructure and 
+      improve our deployment processes. You'll work closely with development teams to ensure 
+      smooth operations.
+      
+      Requirements:
+      - 5+ years of DevOps or similar experience
+      - Strong experience with AWS cloud services
+      - Expertise in Kubernetes and container orchestration
+      - Experience with Infrastructure as Code (Terraform preferred)
+      - Proficiency in CI/CD pipeline development
+      - Strong scripting skills (Python, Bash)
+      - Experience with monitoring and logging tools
+      - Understanding of security best practices
+      
+      Nice to have:
+      - AWS certifications
+      - Experience with GitOps practices
+      - Knowledge of Go programming language
+      - Experience with service mesh technologies
+    
+    expected_match_score: 88.0
+    expected_skills: ["AWS", "Kubernetes", "Terraform", "CI/CD", "Python", "Bash", "Docker", "Monitoring"]
+    expected_technologies: ["AWS", "Kubernetes", "Docker", "Terraform", "Jenkins", "Prometheus", "Grafana", "Python", "Bash"]
+    
+    ground_truth:
+      match_rationale: "Strong match with 6 years DevOps experience (exceeds 5+ requirement), extensive AWS experience with certification, Kubernetes expertise with CKA certification, Terraform/IaC experience, CI/CD proficiency, strong scripting skills, and monitoring tools experience. Has some nice-to-haves including AWS certification and basic Go knowledge."
+      strength_areas: ["Years of experience", "AWS expertise with certification", "Kubernetes mastery", "IaC experience", "CI/CD expertise"]
+      gap_areas: ["Limited Go programming experience", "No mention of GitOps", "No service mesh experience"]
+
+  # Test Case 6: Data Scientist - Wrong Domain
+  - id: "test_006_poor_match_data_scientist"
+    name: "Poor Match - Data Scientist for Frontend Role"
+    description: "Data scientist applying for frontend developer position"
+    category: "technical"
+    difficulty: "easy"
+    tags: ["poor_match", "wrong_domain", "data_science"]
+    
+    resume_content: |
+      Emily Watson
+      Data Scientist
+      Email: e.watson@email.com | Phone: (555) 567-8901
+      
+      SUMMARY
+      Data Scientist with 5 years of experience in machine learning and statistical analysis. 
+      Specialized in predictive modeling, NLP, and deep learning applications.
+      
+      EXPERIENCE
+      Senior Data Scientist | AI Research Lab | Boston, MA | 2021-Present
+      - Developed machine learning models for customer churn prediction (95% accuracy)
+      - Built NLP pipeline for sentiment analysis processing 1M+ reviews daily
+      - Implemented deep learning models using TensorFlow and PyTorch
+      - Published 2 research papers on neural network architectures
+      - Mentored junior data scientists on ML best practices
+      
+      Data Scientist | Analytics Corp | Boston, MA | 2019-2021
+      - Created predictive models using scikit-learn and XGBoost
+      - Performed A/B testing and statistical analysis
+      - Built data pipelines using Apache Spark
+      - Visualized insights using Matplotlib and Seaborn
+      
+      SKILLS
+      Languages: Python, R, SQL
+      ML/DL: TensorFlow, PyTorch, scikit-learn, XGBoost
+      Big Data: Spark, Hadoop, Hive
+      Tools: Jupyter, Git, Docker
+      Statistics: Hypothesis Testing, Regression, Time Series
+      
+      EDUCATION
+      M.S. Data Science | MIT | 2019
+      B.S. Mathematics | Boston University | 2017
+    
+    job_description: |
+      Frontend Developer
+      WebDesign Studios - Boston, MA
+      
+      We're seeking a talented Frontend Developer to create beautiful, responsive user interfaces 
+      for our clients' web applications.
+      
+      Requirements:
+      - 3+ years of frontend development experience
+      - Expert knowledge of HTML5, CSS3, and JavaScript
+      - Strong experience with React.js and modern frontend frameworks
+      - Proficiency in responsive design and mobile-first development
+      - Experience with CSS preprocessors (SASS/LESS)
+      - Knowledge of frontend build tools (Webpack, Babel)
+      - Understanding of web accessibility standards
+      - Experience with version control (Git)
+      
+      Nice to have:
+      - Experience with TypeScript
+      - Knowledge of UI/UX design principles
+      - Familiarity with design tools (Figma, Sketch)
+      - Experience with animation libraries
+    
+    expected_match_score: 20.0
+    expected_skills: ["Git"]
+    expected_technologies: ["Git", "Docker"]
+    
+    ground_truth:
+      match_rationale: "Very poor match as candidate has no frontend development experience. Only overlapping skill is Git usage. Candidate is specialized in data science and machine learning with no web development, HTML/CSS, JavaScript, or React experience."
+      strength_areas: ["Technical background", "Git experience"]
+      gap_areas: ["No frontend development experience", "No HTML/CSS/JavaScript skills", "No React.js experience", "No web development knowledge", "No UI/UX experience", "Wrong technical domain"]
+
+  # Test Case 7: Mid-Level Full Stack Developer - Perfect Match
+  - id: "test_007_perfect_match_fullstack"
+    name: "Perfect Match - Full Stack Developer"
+    description: "Mid-level developer with balanced frontend and backend skills"
+    category: "technical"
+    difficulty: "medium"
+    tags: ["perfect_match", "fullstack", "mid_level"]
+    
+    resume_content: |
+      David Kim
+      Full Stack Developer
+      Email: d.kim@email.com | Phone: (555) 678-9012
+      Portfolio: davidkim.dev | GitHub: github.com/davidkim
+      
+      SUMMARY
+      Full Stack Developer with 4 years of experience building web applications from conception to deployment. 
+      Proficient in both frontend and backend technologies with a passion for creating user-centric solutions.
+      
+      EXPERIENCE
+      Full Stack Developer | WebSolutions Pro | Austin, TX | 2021-Present
+      - Developed responsive web applications using React.js and Node.js
+      - Built RESTful APIs serving 100K+ daily active users
+      - Implemented authentication systems using JWT and OAuth 2.0
+      - Designed PostgreSQL database schemas and optimized queries
+      - Collaborated with UX designers to implement pixel-perfect designs
+      - Deployed applications to AWS using EC2 and RDS
+      
+      Junior Full Stack Developer | StartupHub | Austin, TX | 2020-2021
+      - Created dynamic frontend interfaces using React and Redux
+      - Developed backend services using Express.js and MongoDB
+      - Integrated third-party APIs including Stripe and SendGrid
+      - Wrote comprehensive test suites using Jest and Cypress
+      - Participated in agile ceremonies and code reviews
+      
+      PROJECTS
+      E-Learning Platform | 2023
+      - Built complete LMS using MERN stack with video streaming
+      - Implemented real-time chat using Socket.io
+      - Integrated payment processing and subscription management
+      
+      SKILLS
+      Frontend: JavaScript, React.js, Redux, HTML5, CSS3, SASS, TypeScript
+      Backend: Node.js, Express.js, RESTful APIs, GraphQL
+      Databases: PostgreSQL, MongoDB, Redis
+      Cloud: AWS (EC2, S3, RDS), Heroku
+      Tools: Git, Docker, Jest, Cypress, Webpack
+      
+      EDUCATION
+      B.S. Computer Science | University of Texas at Austin | 2020
+    
+    job_description: |
+      Full Stack Developer
+      TechVentures - Austin, TX
+      
+      We're looking for a talented Full Stack Developer to join our product team. You'll work on 
+      all aspects of our web application, from database to user interface.
+      
+      Requirements:
+      - 3-5 years of full stack development experience
+      - Strong proficiency in JavaScript and modern frameworks
+      - Experience with React.js for frontend development
+      - Backend development experience with Node.js
+      - Database experience (PostgreSQL and/or MongoDB)
+      - RESTful API design and implementation
+      - Experience with cloud deployment (AWS preferred)
+      - Understanding of web security best practices
+      - Bachelor's degree in Computer Science or related field
+      
+      Nice to have:
+      - TypeScript experience
+      - GraphQL knowledge
+      - Experience with testing frameworks
+      - Docker containerization
+      - Agile development experience
+    
+    expected_match_score: 96.0
+    expected_skills: ["JavaScript", "React.js", "Node.js", "PostgreSQL", "MongoDB", "AWS", "RESTful APIs", "TypeScript"]
+    expected_technologies: ["JavaScript", "React.js", "Node.js", "Express.js", "PostgreSQL", "MongoDB", "AWS", "Docker", "Git"]
+    
+    ground_truth:
+      match_rationale: "Perfect match with 4 years full stack experience (within 3-5 range), strong JavaScript/React.js/Node.js skills, experience with both PostgreSQL and MongoDB, RESTful API expertise, AWS deployment experience, security knowledge (authentication), and CS degree. Has all nice-to-haves: TypeScript, GraphQL, testing frameworks, Docker, and agile experience."
+      strength_areas: ["Years of experience match", "Complete technical stack match", "Database expertise", "Cloud deployment", "Has all nice-to-have skills"]
+      gap_areas: []
+
+  # Test Case 8: Overqualified Senior Architect
+  - id: "test_008_overqualified_architect"
+    name: "Overqualified - Senior Architect for Mid-Level Position"
+    description: "Very senior architect applying for mid-level developer role"
+    category: "technical"
+    difficulty: "hard"
+    tags: ["overqualified", "senior", "architect"]
+    
+    resume_content: |
+      William Thompson
+      Principal Software Architect
+      Email: w.thompson@email.com | Phone: (555) 789-0123
+      
+      SUMMARY
+      Principal Software Architect with 15+ years designing enterprise-scale systems. Expert in 
+      distributed systems, cloud architecture, and technical leadership. Led architecture for 
+      systems serving millions of users.
+      
+      EXPERIENCE
+      Principal Architect | MegaCorp Tech | San Francisco, CA | 2018-Present
+      - Led architecture design for $50M digital transformation initiative
+      - Designed microservices platform handling 100M+ daily transactions
+      - Established architectural standards and governance for 200+ engineers
+      - Mentored 20+ senior engineers and architects
+      - Presented at major conferences (re:Invent, KubeCon)
+      
+      Senior Software Architect | Enterprise Solutions Inc. | San Francisco, CA | 2013-2018
+      - Architected multi-tenant SaaS platform serving Fortune 500 clients
+      - Led migration from monolith to microservices (500+ services)
+      - Designed event-driven architecture using Kafka and event sourcing
+      - Established company-wide API standards and design patterns
+      
+      Tech Lead / Senior Engineer | Various Companies | 2008-2013
+      - Progressed from Senior Engineer to Tech Lead roles
+      - Built high-performance systems using Java, Python, and Go
+      - Led teams of 5-10 engineers on critical projects
+      
+      SKILLS
+      Languages: Java, Python, Go, Scala, JavaScript
+      Architecture: Microservices, Event-Driven, DDD, CQRS
+      Cloud: AWS (Expert), GCP, Azure, Kubernetes, Service Mesh
+      Data: PostgreSQL, Cassandra, MongoDB, Kafka, Redis
+      Leadership: Technical Strategy, Mentoring, Public Speaking
+      
+      EDUCATION
+      M.S. Computer Science | Stanford University | 2008
+      B.S. Computer Science | UC Berkeley | 2006
+      
+      PUBLICATIONS & SPEAKING
+      - "Scaling Microservices at MegaCorp" - KubeCon 2023
+      - "Event-Driven Architecture Patterns" - O'Reilly 2022
+      - 10+ technical blog posts on distributed systems
+    
+    job_description: |
+      Software Developer (Mid-Level)
+      StartupTech - San Francisco, CA
+      
+      We're a growing startup looking for a mid-level Software Developer to join our engineering team. 
+      You'll work on building features for our web application.
+      
+      Requirements:
+      - 3-5 years of software development experience
+      - Proficiency in Python or JavaScript
+      - Experience with web application development
+      - Understanding of databases (PostgreSQL preferred)
+      - Familiarity with REST APIs
+      - Ability to work in a fast-paced startup environment
+      - Bachelor's degree in Computer Science
+      
+      Nice to have:
+      - Experience with React or similar frontend framework
+      - Knowledge of Docker
+      - Startup experience
+    
+    expected_match_score: 70.0
+    expected_skills: ["Python", "JavaScript", "PostgreSQL", "REST APIs", "Docker"]
+    expected_technologies: ["Python", "JavaScript", "PostgreSQL", "Docker", "Kubernetes", "AWS"]
+    
+    ground_truth:
+      match_rationale: "Overqualified match with 15+ years experience (far exceeds 3-5 years requirement). Has all technical requirements but is a Principal Architect applying for mid-level role. Skills far exceed position needs. May have concerns about salary expectations, retention, and fitting into startup environment."
+      strength_areas: ["Exceeds all technical requirements", "Extensive experience", "Strong educational background"]
+      gap_areas: ["Overqualified for position level", "No recent startup experience", "May not be interested in hands-on development", "Salary mismatch likely"]
+
+  # Test Case 9: Good Match with Missing Skills - Backend Developer
+  - id: "test_009_good_match_missing_skills"
+    name: "Good Match with Skills Gap - Backend Developer"
+    description: "Strong backend developer missing some specific required technologies"
+    category: "technical"
+    difficulty: "medium"
+    tags: ["good_match", "skills_gap", "backend"]
+    
+    resume_content: |
+      Lisa Anderson
+      Backend Software Engineer
+      Email: l.anderson@email.com | Phone: (555) 890-1234
+      GitHub: github.com/lisaanderson
+      
+      SUMMARY
+      Backend Software Engineer with 5 years of experience building scalable APIs and services. 
+      Strong expertise in Java and Spring Boot with growing knowledge of cloud technologies.
+      
+      EXPERIENCE
+      Backend Engineer | FinTech Solutions | New York, NY | 2021-Present
+      - Developed high-performance REST APIs using Java and Spring Boot
+      - Designed microservices handling financial transactions (100K+ daily)
+      - Implemented robust error handling and retry mechanisms
+      - Optimized database queries reducing response time by 60%
+      - Worked with RabbitMQ for asynchronous message processing
+      
+      Software Engineer | TechCorp | New York, NY | 2019-2021
+      - Built backend services for e-commerce platform using Java
+      - Integrated with payment gateways (Stripe, PayPal)
+      - Implemented caching layer using Redis
+      - Wrote comprehensive unit and integration tests
+      - Participated in on-call rotation and incident response
+      
+      Junior Developer | StartupXYZ | New York, NY | 2018-2019
+      - Developed REST APIs using Spring Boot
+      - Worked with MySQL databases and wrote complex queries
+      - Learned agile methodologies and Git workflows
+      
+      SKILLS
+      Languages: Java (Expert), Python (Intermediate), SQL
+      Frameworks: Spring Boot, Spring Cloud, Hibernate
+      Databases: MySQL, PostgreSQL, Redis
+      Message Queues: RabbitMQ
+      Tools: Git, Maven, Jenkins, IntelliJ IDEA
+      Cloud: AWS (Basic - EC2, S3)
+      
+      EDUCATION
+      B.S. Computer Science | New York University | 2018
+    
+    job_description: |
+      Senior Backend Engineer
+      CloudFirst Inc - New York, NY
+      
+      We're looking for a Senior Backend Engineer to help build our next-generation cloud platform.
+      
+      Requirements:
+      - 5+ years of backend development experience
+      - Strong proficiency in Java or Python
+      - Experience with microservices architecture
+      - Deep knowledge of SQL and NoSQL databases
+      - Experience with message queuing systems (Kafka preferred)
+      - Strong AWS experience (Lambda, DynamoDB, SQS)
+      - Experience with containerization (Docker, Kubernetes)
+      - Knowledge of GraphQL
+      - Bachelor's degree in Computer Science
+      
+      Nice to have:
+      - Experience with Spring Boot
+      - Knowledge of event-driven architecture
+      - DevOps experience
+      - Financial services background
+    
+    expected_match_score: 75.0
+    expected_skills: ["Java", "Microservices", "SQL", "Message Queuing", "AWS", "Spring Boot"]
+    expected_technologies: ["Java", "Spring Boot", "MySQL", "PostgreSQL", "RabbitMQ", "Redis", "AWS"]
+    
+    ground_truth:
+      match_rationale: "Good match with exactly 5 years backend experience, strong Java proficiency, microservices experience, SQL database expertise, and message queuing experience (RabbitMQ instead of Kafka). Has CS degree and Spring Boot experience (nice-to-have). Major gaps in AWS expertise (only basic), no containerization experience, and no GraphQL knowledge."
+      strength_areas: ["Years of experience match", "Java expertise", "Microservices experience", "Database knowledge", "Spring Boot"]
+      gap_areas: ["Limited AWS experience", "No Kubernetes/Docker", "No GraphQL experience", "RabbitMQ instead of Kafka"]
+
+  # Test Case 10: Entry Level - Recent Bootcamp Graduate
+  - id: "test_010_entry_level_bootcamp"
+    name: "Entry Level - Bootcamp Graduate"
+    description: "Recent coding bootcamp graduate with projects but no professional experience"
+    category: "technical"
+    difficulty: "medium"
+    tags: ["entry_level", "bootcamp", "career_change"]
+    
+    resume_content: |
+      Maria Rodriguez
+      Full Stack Web Developer
+      Email: maria.r@email.com | Phone: (555) 901-2345
+      Portfolio: mariarodriguez.dev | GitHub: github.com/mariarodriguez
+      
+      SUMMARY
+      Recent coding bootcamp graduate transitioning from marketing to software development. 
+      Completed intensive 6-month full-stack program with 1000+ hours of coding experience.
+      
+      EXPERIENCE
+      Marketing Manager | BrandCo | Miami, FL | 2019-2023
+      - Managed digital marketing campaigns and analyzed performance metrics
+      - Led cross-functional teams and managed project timelines
+      - Created data-driven strategies increasing conversions by 40%
+      
+      EDUCATION & TRAINING
+      Full Stack Web Development Certificate | Tech Bootcamp | 2024
+      - Intensive 6-month program covering modern web technologies
+      - Built 15+ projects using React, Node.js, and PostgreSQL
+      - Collaborated on team projects using Git and agile methodologies
+      
+      B.A. Marketing | University of Miami | 2019
+      
+      PROJECTS
+      TaskFlow - Project Management App | 2024
+      - Full-stack application built with React, Node.js, and PostgreSQL
+      - Implemented user authentication and real-time updates
+      - Deployed to Heroku with CI/CD pipeline
+      - GitHub: github.com/mariarodriguez/taskflow
+      
+      Weather Dashboard | 2024
+      - React application with OpenWeather API integration
+      - Responsive design with location-based forecasts
+      - Implemented using React Hooks and Context API
+      
+      E-Commerce Store | 2024
+      - MERN stack application with shopping cart functionality
+      - Integrated Stripe payment processing
+      - Admin panel for inventory management
+      
+      SKILLS
+      Frontend: HTML, CSS, JavaScript, React, Bootstrap
+      Backend: Node.js, Express.js, RESTful APIs
+      Databases: PostgreSQL, MongoDB
+      Tools: Git, VS Code, Postman, Heroku
+      Other: Agile, Problem-solving, Team collaboration
+    
+    job_description: |
+      Junior Frontend Developer
+      DigitalAgency - Miami, FL
+      
+      We're seeking an enthusiastic Junior Frontend Developer to join our creative team. Perfect 
+      opportunity for recent graduates or bootcamp alumni looking to start their tech career.
+      
+      Requirements:
+      - 0-2 years of web development experience
+      - Knowledge of HTML, CSS, and JavaScript
+      - Experience with React or similar framework
+      - Understanding of responsive design principles
+      - Portfolio demonstrating web development projects
+      - Strong problem-solving skills
+      - Excellent communication and teamwork abilities
+      
+      Nice to have:
+      - Experience with version control (Git)
+      - Knowledge of CSS preprocessors
+      - Basic understanding of backend development
+      - Previous professional experience in any field
+    
+    expected_match_score: 82.0
+    expected_skills: ["HTML", "CSS", "JavaScript", "React", "Git", "Responsive Design"]
+    expected_technologies: ["HTML", "CSS", "JavaScript", "React", "Node.js", "Git", "Bootstrap"]
+    
+    ground_truth:
+      match_rationale: "Strong match for entry-level position. Recent bootcamp graduate (0 years professional dev experience fits 0-2 requirement), knows HTML/CSS/JavaScript, React experience through projects, has portfolio with multiple projects, demonstrates problem-solving through career transition. Has all nice-to-haves: Git experience, backend knowledge, and professional experience in marketing."
+      strength_areas: ["Recent relevant training", "Multiple React projects", "Portfolio available", "Career transition shows dedication", "Team collaboration experience"]
+      gap_areas: ["No professional development experience", "Limited time with technologies", "No mention of CSS preprocessors"]
+
+  # Test Case 11: Mid-Level Data Engineer
+  - id: "test_011_perfect_match_data_engineer"
+    name: "Perfect Match - Data Engineer"
+    description: "Data engineer with exact skills match for big data position"
+    category: "technical"
+    difficulty: "medium"
+    tags: ["perfect_match", "data_engineering", "big_data"]
+    
+    resume_content: |
+      James Wilson
+      Data Engineer
+      Email: j.wilson@email.com | Phone: (555) 012-3456
+      LinkedIn: linkedin.com/in/jameswilson
+      
+      SUMMARY
+      Data Engineer with 4 years of experience building scalable data pipelines and analytics 
+      infrastructure. Expert in Apache Spark, cloud platforms, and real-time data processing.
+      
+      EXPERIENCE
+      Data Engineer | DataTech Corp | San Francisco, CA | 2021-Present
+      - Built ETL pipelines processing 5TB+ daily using Apache Spark and Airflow
+      - Designed data lake architecture on AWS S3 with Athena and Glue
+      - Implemented real-time streaming pipelines using Kafka and Spark Streaming
+      - Optimized data warehouse queries reducing runtime by 75%
+      - Created data quality monitoring and alerting systems
+      
+      Junior Data Engineer | Analytics Inc | San Francisco, CA | 2020-2021
+      - Developed Python scripts for data extraction and transformation
+      - Built data pipelines using Apache Beam on Google Cloud Dataflow
+      - Maintained PostgreSQL and Redshift data warehouses
+      - Collaborated with data scientists to prepare ML datasets
+      
+      SKILLS
+      Languages: Python, SQL, Scala, Java
+      Big Data: Apache Spark, Hadoop, Hive, Presto
+      Streaming: Kafka, Spark Streaming, Kinesis
+      Cloud: AWS (S3, EMR, Glue, Athena), GCP (BigQuery, Dataflow)
+      Databases: PostgreSQL, Redshift, Snowflake, MongoDB
+      Tools: Airflow, Docker, Git, Terraform
+      
+      EDUCATION
+      B.S. Computer Science | UC Berkeley | 2020
+      
+      CERTIFICATIONS
+      - AWS Certified Data Analytics
+      - Databricks Certified Apache Spark Developer
+    
+    job_description: |
+      Data Engineer
+      BigData Solutions - San Francisco, CA
+      
+      We're looking for a talented Data Engineer to join our data platform team and help build 
+      next-generation analytics infrastructure.
+      
+      Requirements:
+      - 3-5 years of data engineering experience
+      - Strong proficiency in Python and SQL
+      - Experience with Apache Spark and big data technologies
+      - Hands-on experience with cloud data platforms (AWS preferred)
+      - Knowledge of data streaming technologies (Kafka, Kinesis)
+      - Experience building and maintaining ETL/ELT pipelines
+      - Understanding of data warehousing concepts
+      - Bachelor's degree in Computer Science or related field
+      
+      Nice to have:
+      - Experience with workflow orchestration (Airflow)
+      - Knowledge of Infrastructure as Code (Terraform)
+      - AWS certifications
+      - Experience with real-time analytics
+    
+    expected_match_score: 94.0
+    expected_skills: ["Python", "SQL", "Apache Spark", "AWS", "Kafka", "ETL", "Data Warehousing"]
+    expected_technologies: ["Python", "SQL", "Apache Spark", "Kafka", "AWS", "Airflow", "Terraform", "Redshift"]
+    
+    ground_truth:
+      match_rationale: "Excellent match with 4 years experience (within 3-5 range), strong Python/SQL skills, extensive Spark experience with certification, deep AWS knowledge with certification, Kafka streaming experience, proven ETL pipeline expertise, data warehousing experience, and CS degree. Has all nice-to-haves: Airflow, Terraform, AWS certification, and real-time analytics."
+      strength_areas: ["Years of experience match", "All required technical skills", "Relevant certifications", "Big data expertise", "Has all nice-to-haves"]
+      gap_areas: ["None significant"]
+
+  # Test Case 12: QA Engineer Transitioning to Development
+  - id: "test_012_partial_match_qa_to_dev"
+    name: "Partial Match - QA Engineer to Developer"
+    description: "QA engineer with some development skills transitioning to developer role"
+    category: "technical"
+    difficulty: "hard"
+    tags: ["partial_match", "career_transition", "qa_to_dev"]
+    
+    resume_content: |
+      Patricia Davis
+      QA Engineer | Aspiring Software Developer
+      Email: p.davis@email.com | Phone: (555) 123-4567
+      GitHub: github.com/patriciadavis
+      
+      SUMMARY
+      QA Engineer with 5 years of experience and growing development skills. Passionate about 
+      transitioning to software development with strong foundation in testing and automation.
+      
+      EXPERIENCE
+      Senior QA Engineer | QualitySoft | Portland, OR | 2021-Present
+      - Created automated test suites using Selenium and Python
+      - Developed test automation framework reducing manual testing by 80%
+      - Built API testing scripts using Postman and Python requests
+      - Collaborated with developers on bug fixes and code reviews
+      - Mentored junior QA engineers on automation best practices
+      
+      QA Engineer | TestPro Inc | Portland, OR | 2019-2021
+      - Performed manual and automated testing for web applications
+      - Wrote test cases and maintained test documentation
+      - Used SQL queries to validate data integrity
+      - Participated in agile ceremonies and sprint planning
+      
+      SIDE PROJECTS & DEVELOPMENT
+      Personal Task Manager | 2023
+      - Built full-stack web app using Flask and SQLite
+      - Implemented user authentication and CRUD operations
+      - Deployed to Heroku with automated testing
+      
+      Contributing to Open Source | 2022-Present
+      - Fixed bugs and added features to 3 Python projects
+      - Improved test coverage for popular testing library
+      
+      SKILLS
+      Programming: Python (Intermediate), JavaScript (Basic), SQL
+      Testing: Selenium, Pytest, Jest, Postman, JMeter
+      Development: Flask, HTML/CSS, Git, Basic React
+      Databases: PostgreSQL, SQLite, MongoDB (basic)
+      Tools: JIRA, Jenkins, Docker (basic)
+      
+      EDUCATION
+      B.S. Information Systems | Portland State University | 2019
+      
+      COURSES & CERTIFICATIONS
+      - Python for Web Development (Udemy) - 2023
+      - JavaScript Fundamentals (Codecademy) - 2023
+    
+    job_description: |
+      Software Developer
+      TechCo - Portland, OR
+      
+      We're looking for a Software Developer to join our product development team. You'll work on 
+      building features for our web applications.
+      
+      Requirements:
+      - 3+ years of software development experience
+      - Proficiency in Python or JavaScript
+      - Experience building web applications
+      - Understanding of RESTful APIs
+      - Database experience (PostgreSQL preferred)
+      - Version control with Git
+      - Strong problem-solving skills
+      - Bachelor's degree in Computer Science or related field
+      
+      Nice to have:
+      - Experience with React or similar frameworks
+      - Test-driven development experience
+      - Understanding of CI/CD pipelines
+      - Agile methodology experience
+    
+    expected_match_score: 60.0
+    expected_skills: ["Python", "JavaScript", "Git", "PostgreSQL", "RESTful APIs", "Agile"]
+    expected_technologies: ["Python", "JavaScript", "Flask", "PostgreSQL", "Git", "Docker"]
+    
+    ground_truth:
+      match_rationale: "Partial match as QA engineer transitioning to development. Has 5 years QA experience but limited development experience (doesn't meet 3+ years requirement). Has Python skills, basic JavaScript, Git experience, PostgreSQL knowledge, and related degree. Strong in testing and has some nice-to-haves (TDD experience, CI/CD understanding, agile)."
+      strength_areas: ["Python proficiency", "Testing expertise", "Some web development", "Database experience", "Strong testing background"]
+      gap_areas: ["Limited development experience", "Basic JavaScript skills", "No production web app experience", "Limited React knowledge"]
+
+  # Test Case 13: Perfect Match - Junior DevOps
+  - id: "test_013_perfect_match_junior_devops"
+    name: "Perfect Match - Junior DevOps Engineer"
+    description: "Recent graduate with internship experience perfect for junior DevOps role"
+    category: "technical"
+    difficulty: "easy"
+    tags: ["perfect_match", "junior", "devops"]
+    
+    resume_content: |
+      Kevin Zhang
+      DevOps Engineer
+      Email: k.zhang@email.com | Phone: (555) 234-5678
+      LinkedIn: linkedin.com/in/kevinzhang
+      
+      SUMMARY
+      Recent Computer Science graduate with DevOps internship experience and passion for 
+      automation and cloud technologies. Strong foundation in Linux, containerization, and CI/CD.
+      
+      EXPERIENCE
+      DevOps Intern | CloudTech Startup | Seattle, WA | Summer 2023
+      - Assisted in managing AWS infrastructure for development environments
+      - Created Docker containers for microservices deployment
+      - Wrote Bash and Python scripts for automation tasks
+      - Set up monitoring dashboards using CloudWatch
+      - Participated in on-call rotation and incident response
+      
+      IT Support Intern | University IT Department | Seattle, WA | 2022-2023
+      - Maintained Linux servers for student services
+      - Automated software installations using Ansible playbooks
+      - Troubleshot network and server issues
+      - Created documentation for common procedures
+      
+      PROJECTS
+      Home Lab Kubernetes Cluster | 2023
+      - Built 3-node Kubernetes cluster on Raspberry Pi
+      - Deployed personal projects using Helm charts
+      - Implemented GitOps workflow with ArgoCD
+      - Monitored cluster with Prometheus and Grafana
+      
+      CI/CD Pipeline Project | University Capstone | 2023
+      - Designed Jenkins pipeline for team project
+      - Integrated automated testing and code quality checks
+      - Implemented blue-green deployment strategy
+      
+      SKILLS
+      Cloud: AWS (EC2, S3, IAM, CloudWatch)
+      Containers: Docker, Kubernetes (basics), Docker Compose
+      Languages: Python, Bash, YAML
+      Tools: Git, Jenkins, Ansible, Terraform (learning)
+      OS: Linux (Ubuntu, CentOS), Windows Server
+      Monitoring: CloudWatch, Prometheus (basic)
+      
+      EDUCATION
+      B.S. Computer Science | University of Washington | 2024
+      Relevant Coursework: Cloud Computing, Networks, Operating Systems
+      
+      CERTIFICATIONS
+      - AWS Certified Cloud Practitioner (2023)
+    
+    job_description: |
+      Junior DevOps Engineer
+      StartupCloud - Seattle, WA
+      
+      We're looking for an enthusiastic Junior DevOps Engineer to join our infrastructure team. 
+      Great opportunity for recent graduates to grow their cloud and automation skills.
+      
+      Requirements:
+      - 0-2 years of DevOps or related experience
+      - Basic knowledge of AWS cloud services
+      - Understanding of Docker and containerization
+      - Familiarity with Linux systems
+      - Basic scripting skills (Python or Bash)
+      - Experience with version control (Git)
+      - Bachelor's degree in Computer Science or related field
+      
+      Nice to have:
+      - AWS certifications
+      - Kubernetes exposure
+      - Experience with CI/CD tools
+      - Configuration management tools (Ansible, Terraform)
+      - Monitoring tools experience
+    
+    expected_match_score: 93.0
+    expected_skills: ["AWS", "Docker", "Linux", "Python", "Bash", "Git", "Kubernetes"]
+    expected_technologies: ["AWS", "Docker", "Kubernetes", "Python", "Bash", "Git", "Jenkins", "Ansible", "Prometheus"]
+    
+    ground_truth:
+      match_rationale: "Excellent match for junior position. Has internship experience (fits 0-2 years requirement), AWS knowledge with certification, Docker experience, strong Linux background, Python/Bash scripting skills, Git experience, and CS degree. Has all nice-to-haves: AWS certification, Kubernetes exposure, CI/CD experience (Jenkins), configuration management (Ansible), and monitoring tools."
+      strength_areas: ["Recent relevant education", "DevOps internship experience", "AWS certification", "Strong project portfolio", "Has all nice-to-have skills"]
+      gap_areas: ["Limited professional experience", "Still learning some tools like Terraform"]
+
+  # Test Case 14: Poor Match - Hardware Engineer
+  - id: "test_014_poor_match_hardware"
+    name: "Poor Match - Hardware Engineer for Software Role"
+    description: "Hardware engineer with minimal software experience"
+    category: "technical"
+    difficulty: "easy"
+    tags: ["poor_match", "wrong_specialization", "hardware"]
+    
+    resume_content: |
+      Richard Brown
+      Hardware Design Engineer
+      Email: r.brown@email.com | Phone: (555) 345-6789
+      
+      SUMMARY
+      Hardware Design Engineer with 6 years of experience in embedded systems and circuit design. 
+      Specialized in FPGA development and PCB design for consumer electronics.
+      
+      EXPERIENCE
+      Senior Hardware Engineer | ElectroTech Corp | San Jose, CA | 2020-Present
+      - Designed digital circuits and PCB layouts for IoT devices
+      - Developed FPGA firmware using VHDL and Verilog
+      - Created hardware test plans and validation procedures
+      - Collaborated with software team on driver development
+      - Led hardware design for products generating $5M revenue
+      
+      Hardware Engineer | ChipDesign Inc | San Jose, CA | 2018-2020
+      - Designed mixed-signal circuits for audio applications
+      - Performed signal integrity analysis and EMC testing
+      - Used CAD tools for schematic capture and layout
+      - Wrote technical documentation and datasheets
+      
+      SKILLS
+      Hardware: FPGA, VHDL, Verilog, PCB Design, Embedded Systems
+      Tools: Altium Designer, Cadence, ModelSim, Oscilloscopes
+      Programming: C (embedded), Assembly, Python (scripting)
+      Protocols: I2C, SPI, UART, USB
+      
+      EDUCATION
+      M.S. Electrical Engineering | Stanford University | 2018
+      B.S. Electrical Engineering | UC San Diego | 2016
+    
+    job_description: |
+      Backend Software Engineer
+      WebTech Solutions - San Jose, CA
+      
+      We're seeking a Backend Software Engineer to develop scalable web services and APIs for 
+      our cloud-based platform.
+      
+      Requirements:
+      - 4+ years of backend software development experience
+      - Strong proficiency in Java or Python
+      - Experience with web frameworks (Spring, Django)
+      - Database design and optimization (SQL and NoSQL)
+      - RESTful API development
+      - Cloud platform experience (AWS, GCP, or Azure)
+      - Microservices architecture knowledge
+      - Bachelor's degree in Computer Science or equivalent
+      
+      Nice to have:
+      - Message queue systems (RabbitMQ, Kafka)
+      - Container orchestration (Kubernetes)
+      - GraphQL experience
+      - DevOps practices
+    
+    expected_match_score: 25.0
+    expected_skills: ["Python"]
+    expected_technologies: ["Python", "C"]
+    
+    ground_truth:
+      match_rationale: "Very poor match as candidate is specialized in hardware engineering with no backend software development experience. Only overlapping skill is basic Python for scripting. Lacks all core requirements: no web development, no frameworks, no database experience, no API development, no cloud platforms. Has wrong educational background (EE instead of CS)."
+      strength_areas: ["Technical background", "Python scripting experience", "6 years engineering experience"]
+      gap_areas: ["No backend development experience", "No web frameworks knowledge", "No database experience", "No cloud platform knowledge", "No API development", "Wrong engineering discipline"]
+
+  # Test Case 15: Excellent Match - Senior Data Scientist
+  - id: "test_015_excellent_match_senior_ds"
+    name: "Excellent Match - Senior Data Scientist"
+    description: "Experienced data scientist with strong ML and engineering skills"
+    category: "technical"
+    difficulty: "medium"
+    tags: ["excellent_match", "senior", "data_science"]
+    
+    resume_content: |
+      Dr. Rachel Green
+      Senior Data Scientist
+      Email: rachel.green@email.com | Phone: (555) 456-7890
+      LinkedIn: linkedin.com/in/rachelgreen | GitHub: github.com/rachelgreen
+      
+      SUMMARY
+      Senior Data Scientist with 7 years of experience building production ML systems. PhD in 
+      Machine Learning with expertise in NLP, computer vision, and MLOps. Published researcher 
+      with strong engineering skills.
+      
+      EXPERIENCE
+      Senior Data Scientist | AI Innovations Lab | New York, NY | 2020-Present
+      - Led team of 4 data scientists developing NLP models for customer service automation
+      - Built end-to-end ML pipelines using Kubeflow and MLflow
+      - Deployed models serving 10M+ predictions daily with 99.5% uptime
+      - Reduced model inference time by 60% through optimization
+      - Established MLOps best practices and model monitoring systems
+      - Published 3 papers on transformer architectures
+      
+      Data Scientist | TechGiant Corp | New York, NY | 2017-2020
+      - Developed computer vision models for product recommendation
+      - Built real-time feature engineering pipelines using Spark
+      - Created A/B testing framework for model evaluation
+      - Mentored junior data scientists and led technical interviews
+      
+      SKILLS
+      Languages: Python, R, SQL, Scala
+      ML/DL: TensorFlow, PyTorch, scikit-learn, XGBoost, Transformers
+      MLOps: MLflow, Kubeflow, Docker, Kubernetes, Airflow
+      Cloud: AWS (SageMaker, EMR, Lambda), GCP (Vertex AI)
+      Big Data: Spark, Hadoop, Kafka, Hive
+      Databases: PostgreSQL, MongoDB, Redis, Elasticsearch
+      
+      EDUCATION
+      Ph.D. Machine Learning | Carnegie Mellon University | 2017
+      B.S. Computer Science | MIT | 2013
+      
+      PUBLICATIONS
+      - "Efficient Transformers for Real-time NLP" - NeurIPS 2023
+      - "Scalable Feature Engineering for ML Systems" - KDD 2022
+    
+    job_description: |
+      Senior Data Scientist
+      ML Platform Company - New York, NY (Hybrid)
+      
+      We're looking for a Senior Data Scientist to help build our next-generation ML platform. 
+      You'll work on cutting-edge problems and deploy models at scale.
+      
+      Requirements:
+      - 5+ years of data science experience
+      - PhD or Master's in Computer Science, ML, or related field
+      - Expert knowledge of Python and ML frameworks (TensorFlow/PyTorch)
+      - Experience deploying ML models to production
+      - Strong software engineering skills
+      - Experience with cloud ML platforms (AWS/GCP)
+      - Knowledge of MLOps practices
+      - Experience with distributed computing (Spark)
+      
+      Nice to have:
+      - Published research in ML conferences
+      - Experience with NLP or computer vision
+      - Leadership experience
+      - Kubernetes knowledge
+      - Real-time ML systems experience
+    
+    expected_match_score: 98.0
+    expected_skills: ["Python", "TensorFlow", "PyTorch", "MLOps", "AWS", "Spark", "ML Deployment"]
+    expected_technologies: ["Python", "TensorFlow", "PyTorch", "Spark", "Kubernetes", "Docker", "AWS", "Kubeflow"]
+    
+    ground_truth:
+      match_rationale: "Nearly perfect match with 7 years experience (exceeds 5+ requirement), PhD in ML, expert Python and TensorFlow/PyTorch knowledge, extensive production ML deployment experience, strong engineering skills, AWS and GCP cloud experience, deep MLOps expertise, and Spark experience. Has all nice-to-haves: published research at top conferences, NLP and computer vision experience, team leadership, Kubernetes knowledge, and real-time ML systems."
+      strength_areas: ["Exceeds experience requirements", "PhD in ML", "Production ML expertise", "Published researcher", "All nice-to-have qualifications"]
+      gap_areas: ["None - exceeds all requirements"]
