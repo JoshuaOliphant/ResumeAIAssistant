@@ -90,7 +90,7 @@ class TestDatasetValidator:
         is_valid, dataset = validator.validate_dataset_file(invalid_file)
         
         assert is_valid is False
-        assert "Invalid file extension" in validator.errors[0]
+        assert "Unsupported file extension" in validator.errors[0]
     
     def test_validate_missing_required_fields(self, validator, tmp_path):
         """Test validation with missing required fields."""
@@ -201,9 +201,8 @@ class TestDatasetValidator:
         is_valid, dataset = validator.validate_dataset_file(dataset_file)
         
         assert is_valid is True  # Warnings don't make it invalid
-        assert any("Match rationale seems too short" in warning for warning in validator.warnings)
-        assert any("strength_areas" in warning for warning in validator.warnings)
-        assert any("gap_areas" in warning for warning in validator.warnings)
+        assert any("Match rationale is too short" in warning for warning in validator.warnings)
+        assert any("Missing required ground truth keys" in warning for warning in validator.warnings)
     
     def test_cross_validation_warnings(self, validator, tmp_path):
         """Test cross-validation generates appropriate warnings."""
@@ -232,9 +231,9 @@ class TestDatasetValidator:
         is_valid, dataset = validator.validate_dataset_file(dataset_file)
         
         assert is_valid is True
-        assert any("limited category diversity" in warning for warning in validator.warnings)
-        assert any("limited difficulty diversity" in warning for warning in validator.warnings)
-        assert any("score" in warning and "skewed" in warning for warning in validator.warnings)
+        assert any("only 1 category" in warning for warning in validator.warnings)
+        assert any("only 'easy' difficulty" in warning for warning in validator.warnings)
+        assert any("average score is high" in warning for warning in validator.warnings)
     
     def test_yaml_parsing_error(self, validator, tmp_path):
         """Test handling of YAML parsing errors."""

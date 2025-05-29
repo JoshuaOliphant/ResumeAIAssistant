@@ -1232,3 +1232,231 @@ test_cases:
       match_rationale: "Nearly perfect match with 7 years experience (exceeds 5+ requirement), PhD in ML, expert Python and TensorFlow/PyTorch knowledge, extensive production ML deployment experience, strong engineering skills, AWS and GCP cloud experience, deep MLOps expertise, and Spark experience. Has all nice-to-haves: published research at top conferences, NLP and computer vision experience, team leadership, Kubernetes knowledge, and real-time ML systems."
       strength_areas: ["Exceeds experience requirements", "PhD in ML", "Production ML expertise", "Published researcher", "All nice-to-have qualifications"]
       gap_areas: ["None - exceeds all requirements"]
+
+  # Test Case 16: Good Match - Product Manager
+  - id: "test_016_good_match_product_manager"
+    name: "Good Match - Product Manager"
+    description: "Experienced product manager with strong technical background"
+    category: "management"
+    difficulty: "medium"
+    tags: ["good_match", "product_management", "leadership"]
+    
+    resume_content: |
+      Alexandra Thompson
+      Senior Product Manager
+      Email: a.thompson@email.com | Phone: (555) 567-8901
+      LinkedIn: linkedin.com/in/alexandrathompson
+      
+      SUMMARY
+      Senior Product Manager with 6 years of experience leading cross-functional teams to deliver 
+      successful software products. Strong technical background with proven track record of launching 
+      features that drive user engagement and revenue growth.
+      
+      EXPERIENCE
+      Senior Product Manager | TechFlow Inc. | Austin, TX | 2020-Present
+      - Led product strategy for B2B SaaS platform serving 50K+ users
+      - Managed roadmap prioritization and feature development lifecycle
+      - Increased user engagement by 40% through data-driven product decisions
+      - Collaborated with engineering teams using Agile methodologies
+      - Conducted user research and A/B testing to validate product hypotheses
+      - Launched 3 major features that generated $2M additional revenue
+      
+      Product Manager | StartupGrow | Austin, TX | 2018-2020
+      - Owned product vision and strategy for mobile application
+      - Worked closely with UX designers and engineers on product development
+      - Analyzed user metrics and feedback to drive product improvements
+      - Managed product backlog and sprint planning
+      
+      Business Analyst | ConsultCorp | Austin, TX | 2016-2018
+      - Analyzed business requirements and translated them into technical specifications
+      - Created detailed product requirements documents
+      - Facilitated stakeholder meetings and gathered feedback
+      
+      SKILLS
+      Product Management: Roadmap Planning, User Research, A/B Testing, Analytics
+      Technical: SQL, Jira, Confluence, Figma, Google Analytics
+      Leadership: Cross-functional Team Management, Stakeholder Communication
+      Methodologies: Agile, Scrum, Design Thinking
+      
+      EDUCATION
+      MBA | University of Texas at Austin | 2016
+      B.S. Computer Science | University of Texas at Austin | 2014
+    
+    job_description: |
+      Senior Product Manager
+      TechInnovate - Austin, TX
+      
+      We're looking for an experienced Senior Product Manager to drive our product strategy 
+      and work with engineering teams to build innovative solutions.
+      
+      Requirements:
+      - 5+ years of product management experience
+      - Strong technical background and understanding of software development
+      - Experience with Agile development methodologies
+      - Proven track record of launching successful products
+      - Excellent analytical and data-driven decision making skills
+      - Experience with user research and A/B testing
+      - Strong communication and leadership skills
+      - Bachelor's degree required, MBA preferred
+      
+      Nice to have:
+      - B2B SaaS experience
+      - SQL knowledge
+      - Experience with analytics tools
+      - Background in computer science or engineering
+    
+    expected_match_score: 87.0
+    expected_skills: ["Product Management", "Agile", "SQL", "Analytics", "Leadership", "A/B Testing"]
+    expected_technologies: ["SQL", "Jira", "Confluence", "Google Analytics", "Figma"]
+    
+    ground_truth:
+      match_rationale: "Strong match with 6 years product management experience (exceeds 5+ requirement), strong technical background with CS degree, extensive Agile experience, proven track record of successful product launches, excellent analytical skills with A/B testing experience, demonstrated leadership, and MBA (preferred). Has all nice-to-haves: B2B SaaS experience, SQL knowledge, analytics tools experience, and CS background."
+      strength_areas: ["Years of experience match", "Technical background", "Successful product launches", "B2B SaaS experience", "Has all nice-to-haves"]
+      gap_areas: ["None significant"]
+
+  # Test Case 17: Poor Match - Marketing Specialist for Technical PM
+  - id: "test_017_poor_match_marketing_to_pm"
+    name: "Poor Match - Marketing Specialist for Technical Product Manager"
+    description: "Marketing professional applying for technical product manager role"
+    category: "management"
+    difficulty: "easy"
+    tags: ["poor_match", "wrong_background", "marketing"]
+    
+    resume_content: |
+      Jessica Martinez
+      Digital Marketing Specialist
+      Email: j.martinez@email.com | Phone: (555) 678-9012
+      
+      SUMMARY
+      Creative Digital Marketing Specialist with 4 years of experience developing marketing 
+      campaigns and managing social media presence. Passionate about brand building and 
+      customer engagement through digital channels.
+      
+      EXPERIENCE
+      Digital Marketing Specialist | BrandCo | Miami, FL | 2021-Present
+      - Developed and executed digital marketing campaigns across social media platforms
+      - Managed company's social media presence (Instagram, Twitter, LinkedIn)
+      - Created content calendars and marketing materials
+      - Analyzed campaign performance using Google Analytics
+      - Increased social media followers by 150% and engagement by 80%
+      
+      Marketing Coordinator | CreativeAgency | Miami, FL | 2020-2021
+      - Assisted in developing marketing strategies for client campaigns
+      - Coordinated events and promotional activities
+      - Managed email marketing campaigns with 25% open rates
+      - Created marketing collateral and presentations
+      
+      SKILLS
+      Marketing: Digital Marketing, Social Media Management, Content Creation
+      Tools: Google Analytics, Hootsuite, Canva, Mailchimp
+      Other: Adobe Creative Suite, WordPress, Basic HTML/CSS
+      
+      EDUCATION
+      B.A. Marketing | University of Miami | 2020
+    
+    job_description: |
+      Technical Product Manager
+      DevTools Inc. - San Francisco, CA
+      
+      We're seeking a Technical Product Manager to lead our developer tools product line. 
+      You'll work with engineering teams to build products for software developers.
+      
+      Requirements:
+      - 5+ years of product management experience
+      - Strong technical background in software development
+      - Experience building products for developers or technical audiences
+      - Understanding of software development lifecycle
+      - Ability to work closely with engineering teams
+      - Data-driven approach to product decisions
+      - Bachelor's degree in Computer Science or related technical field
+      
+      Nice to have:
+      - Developer tools or API experience
+      - Programming experience
+      - Technical writing skills
+    
+    expected_match_score: 30.0
+    expected_skills: ["Analytics"]
+    expected_technologies: ["Google Analytics"]
+    
+    ground_truth:
+      match_rationale: "Poor match as candidate has no product management experience (requires 5+ years), lacks technical software development background, has no experience building products for developers, doesn't understand software development lifecycle, has marketing degree instead of CS, and only analytical skill is basic Google Analytics usage."
+      strength_areas: ["Analytics experience", "Content creation skills"]
+      gap_areas: ["No product management experience", "No technical background", "No software development knowledge", "Wrong educational background", "No developer audience experience"]
+
+  # Test Case 18: Partial Match - Operations Manager Career Transition
+  - id: "test_018_partial_match_ops_to_management"
+    name: "Partial Match - Operations Manager to Tech Management"
+    description: "Operations manager transitioning to technology management role"
+    category: "management"
+    difficulty: "hard"
+    tags: ["partial_match", "career_transition", "operations"]
+    
+    resume_content: |
+      Robert Chen
+      Operations Manager
+      Email: r.chen@email.com | Phone: (555) 789-0123
+      
+      SUMMARY
+      Operations Manager with 8 years of experience optimizing business processes and leading 
+      teams. Strong analytical skills and growing interest in technology solutions. Seeking 
+      to transition into technology management role.
+      
+      EXPERIENCE
+      Senior Operations Manager | LogisticsCorp | Seattle, WA | 2019-Present
+      - Managed team of 15 operations specialists across multiple departments
+      - Implemented process improvements that reduced operational costs by 25%
+      - Led digital transformation initiative, implementing new software systems
+      - Analyzed operational data to identify inefficiencies and optimization opportunities
+      - Coordinated with IT department on system integrations and automation
+      
+      Operations Manager | SupplyChain Inc. | Seattle, WA | 2016-2019
+      - Supervised daily operations and managed vendor relationships
+      - Developed KPIs and reporting dashboards for operational metrics
+      - Led cross-functional projects to improve operational efficiency
+      - Trained and mentored junior operations staff
+      
+      SELF-DIRECTED LEARNING
+      Project Management Professional (PMP) Certification | 2023
+      Agile Project Management Course | Coursera | 2022
+      SQL for Data Analysis | Udemy | 2022
+      
+      SKILLS
+      Management: Team Leadership, Process Optimization, Project Management
+      Analytics: Data Analysis, KPI Development, Performance Metrics
+      Tools: Excel, SQL (basic), Tableau, Microsoft Project
+      Other: Process Improvement, Vendor Management, Budget Management
+      
+      EDUCATION
+      MBA Operations Management | University of Washington | 2016
+      B.S. Business Administration | University of Washington | 2014
+    
+    job_description: |
+      Engineering Manager
+      TechScale Solutions - Seattle, WA
+      
+      We're looking for an Engineering Manager to lead our backend development team and 
+      drive technical excellence while managing people and processes.
+      
+      Requirements:
+      - 5+ years of software engineering experience
+      - 3+ years of engineering management experience
+      - Strong technical background in software development
+      - Experience with Agile development methodologies
+      - Proven ability to lead and mentor engineering teams
+      - Understanding of software architecture and design patterns
+      - Bachelor's degree in Computer Science or related field
+      
+      Nice to have:
+      - Experience with cloud platforms (AWS, GCP)
+      - Background in backend systems and APIs
+      - PMP or similar project management certification
+    
+    expected_match_score: 55.0
+    expected_skills: ["Team Leadership", "Agile", "Project Management", "Process Improvement"]
+    expected_technologies: ["SQL"]
+    
+    ground_truth:
+      match_rationale: "Partial match due to strong management and leadership experience (8 years) but lacks software engineering background. Has team leadership skills, Agile knowledge, and PMP certification (nice-to-have), but missing core technical requirements: no software engineering experience, no CS degree, no software architecture knowledge. Management skills are transferable but technical gap is significant."
+      strength_areas: ["Strong management experience", "Team leadership", "Process improvement", "Agile methodology", "PMP certification"]
+      gap_areas: ["No software engineering experience", "No technical background", "No CS degree", "No software architecture knowledge", "No backend development experience"]

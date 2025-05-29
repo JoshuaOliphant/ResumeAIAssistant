@@ -16,7 +16,7 @@ The test datasets provide diverse resume-job pairs with ground truth annotations
 
 ### Main Dataset: `curated_test_dataset.yaml`
 
-The main curated dataset contains 15 test cases covering various scenarios:
+The main curated dataset contains 18 test cases covering various scenarios across multiple categories:
 
 #### Test Case Categories
 
@@ -38,15 +38,22 @@ The main curated dataset contains 15 test cases covering various scenarios:
 
 4. **Poor Matches (<50%)**
    - `test_004`: Mobile Developer for Backend position
-   - `test_006`: Data Scientist for Frontend role
+   - `test_006`: Data Scientist for Frontend role  
    - `test_014`: Hardware Engineer for Software role
+   - `test_017`: Marketing Specialist for Technical PM
+
+#### Categories
+
+1. **Technical (15 cases)**: Software engineering, data science, DevOps roles
+2. **Management (3 cases)**: Product management, engineering management roles
 
 #### Special Cases
 
 - **Career Transitions**: Test cases showing professionals switching domains
-- **Overqualified Candidates**: Senior professionals applying for junior roles
+- **Overqualified Candidates**: Senior professionals applying for junior roles  
 - **Skills Gaps**: Strong candidates missing specific requirements
 - **Wrong Specializations**: Candidates from different technical domains
+- **Cross-Domain Applications**: Non-technical professionals applying for technical roles
 
 ### YAML Schema
 
