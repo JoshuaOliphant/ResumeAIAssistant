@@ -53,7 +53,7 @@ def test_customize_resume_timeout_error(mock_schema, mock_get_executor, sample_r
 @patch("app.api.endpoints.claude_code.get_claude_code_executor")
 def test_customize_resume_async(mock_get_executor, sample_resume, sample_job_description):
     mock_exec = MagicMock()
-    mock_exec.start_async.return_value = {"task_id": "abc", "status": "processing"}
+    mock_exec.customize_resume_with_progress.return_value = {"task_id": "abc", "status": "processing"}
     mock_get_executor.return_value = mock_exec
 
     resp = client.post("/api/v1/customize-resume/async/", json=_build_request(sample_resume, sample_job_description))
