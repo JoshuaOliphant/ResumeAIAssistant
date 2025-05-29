@@ -10,7 +10,7 @@ used throughout the evaluation framework.
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Union
 from uuid import uuid4
-from pydantic import BaseModel, Field, field_validator, ConfigDict
+from pydantic import BaseModel, Field, field_validator, ConfigDict, field_serializer
 
 
 class TestCase(BaseModel):
@@ -48,11 +48,11 @@ class TestCase(BaseModel):
             raise ValueError('Match score must be between 0 and 100')
         return v
     
-    model_config = ConfigDict(
-        json_encoders={
-            datetime: lambda v: v.isoformat()
-        }
-    )
+    @field_serializer('created_at', 'updated_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        return value.isoformat()
+    
+    model_config = ConfigDict()
 
 
 class EvaluationResult(BaseModel):
@@ -87,11 +87,11 @@ class EvaluationResult(BaseModel):
     # Timestamps
     evaluated_at: datetime = Field(default_factory=datetime.now)
     
-    model_config = ConfigDict(
-        json_encoders={
-            datetime: lambda v: v.isoformat()
-        }
-    )
+    @field_serializer('evaluated_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        return value.isoformat()
+    
+    model_config = ConfigDict()
 
 
 class TestDataset(BaseModel):
@@ -142,8 +142,8 @@ class TestDataset(BaseModel):
         """Filter test cases by tags."""
         return [case for case in self.test_cases if any(tag in case.tags for tag in tags)]
     
-    model_config = ConfigDict(
-        json_encoders={
-            datetime: lambda v: v.isoformat()
-        }
-    )
+    @field_serializer('created_at', 'updated_at')
+    def serialize_datetime(self, value: datetime) -> str:
+        return value.isoformat()
+    
+    model_config = ConfigDict()

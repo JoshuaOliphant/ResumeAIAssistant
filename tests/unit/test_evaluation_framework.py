@@ -233,7 +233,10 @@ class TestEvaluators:
         assert isinstance(result, EvaluationResult)
         assert result.evaluator_name == "job_parsing_accuracy"
         assert 0 <= result.overall_score <= 1
-        assert "skill_extraction_accuracy" in result.detailed_scores
+        # Check for the actual detailed scores from JobParsingAccuracyEvaluator
+        assert "skill_precision" in result.detailed_scores
+        assert "skill_recall" in result.detailed_scores
+        assert "skill_f1" in result.detailed_scores
     
     @pytest.mark.asyncio
     async def test_match_score_evaluator(self):

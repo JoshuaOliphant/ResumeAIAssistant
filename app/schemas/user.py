@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, Field, validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 class UserBase(BaseModel):
@@ -17,7 +17,8 @@ class UserCreate(UserBase):
 
     password: str = Field(..., min_length=8)
 
-    @validator("password")
+    @field_validator("password")
+    @classmethod
     def password_strength(cls, v):
         """Validate password strength"""
         if len(v) < 8:
