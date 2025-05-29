@@ -2,7 +2,7 @@ import os
 import secrets
 from typing import List, Optional, Union
 
-from pydantic import field_validator
+from pydantic import field_validator, ConfigDict
 from pydantic_settings import BaseSettings
 
 
@@ -76,8 +76,7 @@ class Settings(BaseSettings):
     # WebSocket settings
     WS_PING_INTERVAL: int = int(os.getenv("WS_PING_INTERVAL", "30"))  # seconds
 
-    class Config:
-        case_sensitive = True
+    model_config = ConfigDict(case_sensitive=True)
 
 
 # Initialize settings

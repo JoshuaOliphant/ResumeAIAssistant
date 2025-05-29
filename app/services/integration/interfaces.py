@@ -14,7 +14,7 @@ from abc import ABC, abstractmethod
 from enum import Enum, auto
 from typing import Any, Dict, List, Optional, Union, Callable, Awaitable
 import asyncio
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class Priority(Enum):
@@ -40,8 +40,7 @@ class TaskResult(BaseModel):
     data: Optional[Dict[str, Any]] = None
     error: Optional[str] = None
     
-    class Config:
-        arbitrary_types_allowed = True
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
 
 class Task(ABC):
