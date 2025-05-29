@@ -81,6 +81,7 @@ class ClaudeCodeExecutor:
 
         command = [
             self.claude_cmd,
+            "--model", "sonnet",  # Use Sonnet model for better performance and cost efficiency
             "--print",
             "--output-format",
             "stream-json",
@@ -88,11 +89,9 @@ class ClaudeCodeExecutor:
             "Write,Read,Edit,Bash,Grep,Glob",
         ]
 
-        # Add system prompt file if created
-        system_prompt_path = prompt_manager.prepare_system_prompt(temp_dir)
-        if system_prompt_path:
-            command.extend(["--system-prompt-file", system_prompt_path])
-
+        # Note: System prompt is now included in the main prompt via build_prompt()
+        # The --system-prompt-file flag is not supported by the claude CLI
+        
         # Add MCP config file if created
         mcp_config_path = prompt_manager.prepare_mcp_config(temp_dir)
         if mcp_config_path:
@@ -148,10 +147,25 @@ class ClaudeCodeExecutor:
 
         result = output_parser.save_results(parsed_results, output_path)
         log_streamer.add_log(task_id, "Claude Code execution completed successfully")
+        
+        # Read the original resume content
+        original_resume_content = ""
+        try:
+            with open(resume_path, "r", encoding="utf-8") as file:
+                original_resume_content = file.read()
+        except Exception as e:
+            logger.warning(f"Could not read original resume: {e}")
 
         if task:
             task.update("completed", 100, "Customization complete")
-            task.result = result
+            # Store the actual content in the task result, not just file paths
+            task.result = {
+                "customized_resume": parsed_results.get("customized_resume", ""),
+                "customization_summary": parsed_results.get("customization_summary", ""),
+                "original_resume": original_resume_content,
+                "customized_resume_path": result.get("customized_resume_path"),
+                "customization_summary_path": result.get("customization_summary_path")
+            }
 
         shutil.rmtree(temp_dir, ignore_errors=True)
         return result
