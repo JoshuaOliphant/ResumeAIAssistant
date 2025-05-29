@@ -7,6 +7,7 @@ Evaluators that test the quality aspects of resume optimization including
 truthfulness verification, content quality, and relevance impact.
 """
 
+import time
 from typing import Any, Dict
 from .base import BaseEvaluator
 from ..test_data.models import TestCase, EvaluationResult
@@ -112,7 +113,6 @@ class RelevanceImpactEvaluator(BaseEvaluator):
         Returns:
             EvaluationResult with impact metrics
         """
-        import time
         start_time = time.time()
         
         self.validate_inputs(test_case, actual_output)
@@ -228,8 +228,9 @@ class RelevanceImpactEvaluator(BaseEvaluator):
         before_score = self._calculate_semantic_similarity(before_resume, job_description)
         after_score = self._calculate_semantic_similarity(after_resume, job_description)
         
-        if before_score == 0:
-            return 1.0 if after_score > 0 else 0.0
+        # Handle very small or zero before_score to avoid division issues
+        if before_score < 0.001:
+            return 1.0 if after_score > 0.001 else 0.0
         
         improvement = (after_score - before_score) / before_score
         # Normalize to 0-1 scale, with 0.5 being no improvement
@@ -407,9 +408,12 @@ class RelevanceImpactEvaluator(BaseEvaluator):
     def _is_change_relevant(self, change: dict, job_keywords: list) -> bool:
         """Determine if a change is relevant to the job requirements."""
         change_text = (change.get('after', '') + ' ' + change.get('before', '')).lower()
+        # Split into words to avoid false positives from substring matches
+        change_words = set(change_text.split())
         
         for keyword in job_keywords:
-            if keyword in change_text:
+            # Check both word boundary match and substring match for compound terms
+            if keyword in change_words or (len(keyword) > 3 and keyword in change_text):
                 return True
         
         return False
