@@ -239,12 +239,15 @@ class PydanticAIAdapter:
             }
         }
     
-    def enable_tracing(self, logfire_config: Optional[Dict[str, Any]] = None):
+    def enable_tracing(self, logfire_config: Optional[Dict[str, Any]] = None) -> bool:
         """
         Enable OpenTelemetry/Logfire tracing for evaluations.
         
         Args:
             logfire_config: Optional Logfire configuration
+            
+        Returns:
+            bool: True if tracing was successfully enabled, False otherwise
         """
         try:
             import logfire
@@ -256,9 +259,11 @@ class PydanticAIAdapter:
                 logfire.configure()
             
             self.logger.info("Logfire tracing enabled for evaluations")
+            return True
             
         except ImportError:
             self.logger.warning("Logfire not available, tracing disabled")
+            return False
     
     @staticmethod
     def create_pydantic_dataset(

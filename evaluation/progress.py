@@ -22,6 +22,8 @@ class EvaluationProgress:
     total_cases: int
     total_evaluators: int
     completed_evaluations: int = 0
+    successful_evaluations: int = 0
+    failed_evaluations: int = 0
     
     # Per-case progress
     cases_completed: Set[str] = field(default_factory=set)
@@ -144,6 +146,12 @@ class ProgressTracker:
             # Update progress
             self.progress.completed_evaluations += 1
             
+            # Track successful vs failed evaluations
+            if success:
+                self.progress.successful_evaluations += 1
+            else:
+                self.progress.failed_evaluations += 1
+            
             # Update evaluator-specific progress
             if evaluator_name not in self.progress.evaluator_progress:
                 self.progress.evaluator_progress[evaluator_name] = 0
@@ -173,8 +181,14 @@ class ProgressTracker:
             
             return {
                 "completed": self.progress.completed_evaluations,
+                "successful": self.progress.successful_evaluations,
+                "failed": self.progress.failed_evaluations,
                 "total": self.progress.total_evaluations,
                 "percentage": self.progress.progress_percentage,
+                "success_rate": (
+                    self.progress.successful_evaluations / self.progress.completed_evaluations
+                    if self.progress.completed_evaluations > 0 else 0
+                ),
                 "cases_completed": len(self.progress.cases_completed),
                 "total_cases": self.progress.total_cases,
                 "elapsed_time": self.progress.elapsed_time,

@@ -12,9 +12,15 @@ import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Set, Tuple, Union
+from typing import Any, Dict, List, Optional, Set, Tuple, Union, TypedDict
 import traceback
 from pathlib import Path
+
+
+class ActualOutput(TypedDict):
+    """Type definition for actual output from system being tested."""
+    resume: str
+    job: str
 
 from .evaluators.base import BaseEvaluator
 from .test_data.models import TestCase, TestDataset, EvaluationResult
@@ -192,7 +198,17 @@ class TestRunner:
             # Run evaluations based on parallelism strategy
             if self.config.parallelism_strategy == ParallelismStrategy.NONE:
                 await self._run_sequential(dataset, report)
+            elif self.config.parallelism_strategy in [
+                ParallelismStrategy.ASYNCIO, 
+                ParallelismStrategy.THREAD_POOL, 
+                ParallelismStrategy.ADAPTIVE
+            ]:
+                await self._run_parallel(dataset, report)
             else:
+                self.logger.warning(
+                    f"Unknown parallelism strategy: {self.config.parallelism_strategy}, "
+                    "defaulting to parallel execution"
+                )
                 await self._run_parallel(dataset, report)
             
             # Calculate aggregate metrics
@@ -243,7 +259,7 @@ class TestRunner:
                         raise
                 
                 if self.progress_tracker:
-                    self.progress_tracker.update(case.id, evaluator.name)
+                    self.progress_tracker.update(case.id, evaluator.name, success=True)
     
     async def _run_parallel(self, dataset: TestDataset, report: EvaluationReport):
         """Run evaluations in parallel."""
@@ -295,7 +311,7 @@ class TestRunner:
         
         # For now, use the test case content as the actual output
         # In real usage, this would come from the system being tested
-        actual_output = {
+        actual_output: ActualOutput = {
             "resume": test_case.resume_content,
             "job": test_case.job_description
         }
@@ -328,6 +344,7 @@ class TestRunner:
         report: EvaluationReport
     ):
         """Evaluate with progress tracking and error handling."""
+        success = False
         try:
             result = await self._evaluate_single(evaluator, test_case)
             report.results.append(result)
@@ -338,6 +355,8 @@ class TestRunner:
             report.total_tokens_used += result.tokens_used
             report.total_api_calls += result.api_calls_made
             
+            success = True
+            
         except Exception as e:
             self._handle_evaluation_error(evaluator, test_case, e, report)
             if self.config.fail_fast:
@@ -345,7 +364,7 @@ class TestRunner:
         
         finally:
             if self.progress_tracker:
-                self.progress_tracker.update(test_case.id, evaluator.name)
+                self.progress_tracker.update(test_case.id, evaluator.name, success=success)
     
     def _handle_evaluation_error(
         self,

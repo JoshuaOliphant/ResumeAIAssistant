@@ -181,7 +181,9 @@ wrapped_eval = adapter.create_evaluator_wrapper(
 )
 
 # Use in TestRunner alongside custom evaluators
-evaluators = [wrapped_eval, CustomEvaluator()]
+from evaluation.evaluators.accuracy import JobParsingAccuracyEvaluator
+
+evaluators = [wrapped_eval, JobParsingAccuracyEvaluator()]
 runner = TestRunner(evaluators)
 ```
 
