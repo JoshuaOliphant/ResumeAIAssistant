@@ -27,7 +27,7 @@ class JobParsingAccuracyEvaluator(BaseEvaluator):
             "react": ["react", "react.js", "reactjs", "react js"],
             "node": ["node", "node.js", "nodejs", "node js"],
             "postgresql": ["postgresql", "postgres", "psql", "postgre sql"],
-            "kubernetes": ["kubernetes", "k8s", "k8s", "kube"],
+            "kubernetes": ["kubernetes", "k8s", "kube"],
             "docker": ["docker", "containerization", "containers"],
             "aws": ["aws", "amazon web services", "amazon aws"],
             "git": ["git", "version control", "source control"],
@@ -57,16 +57,28 @@ class JobParsingAccuracyEvaluator(BaseEvaluator):
             "fullstack": ["fullstack", "full-stack", "full stack"],
         }
         
-        # Confidence score thresholds
-        self.confidence_thresholds = {
-            "required": 0.9,
-            "preferred": 0.7,
-            "nice_to_have": 0.5
-        }
-        
-        # Configure similarity threshold for fuzzy matching
-        self.similarity_threshold = float(config.get("similarity_threshold", 0.8)) if config else 0.8
-        self.confidence_tolerance = float(config.get("confidence_tolerance", 0.2)) if config else 0.2
+        # Configure all thresholds from config with sensible defaults
+        if config:
+            self.confidence_thresholds = {
+                "required": float(config.get("confidence_threshold_required", 0.9)),
+                "preferred": float(config.get("confidence_threshold_preferred", 0.7)),
+                "nice_to_have": float(config.get("confidence_threshold_nice_to_have", 0.5))
+            }
+            self.similarity_threshold = float(config.get("similarity_threshold", 0.8))
+            self.confidence_tolerance = float(config.get("confidence_tolerance", 0.2))
+            self.pass_threshold = float(config.get("pass_threshold", 0.7))
+            self.f1_threshold = float(config.get("f1_threshold", 0.6))
+        else:
+            # Default thresholds if no config provided
+            self.confidence_thresholds = {
+                "required": 0.9,
+                "preferred": 0.7,
+                "nice_to_have": 0.5
+            }
+            self.similarity_threshold = 0.8
+            self.confidence_tolerance = 0.2
+            self.pass_threshold = 0.7
+            self.f1_threshold = 0.6
     
     async def evaluate(self, test_case: TestCase, actual_output: Any) -> EvaluationResult:
         """
@@ -120,11 +132,11 @@ class JobParsingAccuracyEvaluator(BaseEvaluator):
             "accuracy": (skill_metrics["precision"] + tech_metrics["precision"]) / 2
         }
         
-        # Determine if evaluation passed
+        # Determine if evaluation passed using configurable thresholds
         passed = (
-            overall_score >= 0.7 and
-            skill_metrics["f1_score"] >= 0.6 and
-            tech_metrics["f1_score"] >= 0.6
+            overall_score >= self.pass_threshold and
+            skill_metrics["f1_score"] >= self.f1_threshold and
+            tech_metrics["f1_score"] >= self.f1_threshold
         )
         
         # Generate detailed notes
@@ -224,10 +236,29 @@ class JobParsingAccuracyEvaluator(BaseEvaluator):
         
         elif isinstance(actual_output, str):
             # Handle string output - try to extract skills
-            # This is a basic fallback for unstructured output
-            skills = re.findall(r'\b[A-Z][a-zA-Z]+(?:\.[a-zA-Z]+)?\b', actual_output)
-            normalized_skills = self._normalize_skills(skills)
+            # This is a fallback for unstructured output
+            self.logger.warning("Using string fallback parsing for actual_output")
+            
+            # Improved regex patterns for skill extraction
+            # Pattern 1: Capitalized words and common tech terms
+            capitalized_pattern = r'\b[A-Z][a-zA-Z]+(?:\.[a-zA-Z]+)?(?:\+\+)?\b'
+            # Pattern 2: Common lowercase tech terms
+            tech_terms_pattern = r'\b(?:python|java|javascript|react|node|docker|kubernetes|aws|git|sql|api|ci/cd|devops)\b'
+            # Pattern 3: Acronyms and abbreviations
+            acronym_pattern = r'\b[A-Z]{2,}(?:\.[A-Z]+)*\b'
+            
+            # Extract skills using all patterns
+            skills = []
+            skills.extend(re.findall(capitalized_pattern, actual_output, re.IGNORECASE))
+            skills.extend(re.findall(tech_terms_pattern, actual_output, re.IGNORECASE))
+            skills.extend(re.findall(acronym_pattern, actual_output))
+            
+            # Remove duplicates and normalize
+            unique_skills = list(set(skills))
+            normalized_skills = self._normalize_skills(unique_skills)
             actual_skills.update(normalized_skills)
+            
+            self.logger.info(f"String fallback extracted {len(normalized_skills)} skills")
         
         return actual_skills, actual_technologies, confidence_scores
     
@@ -434,11 +465,29 @@ class JobParsingAccuracyEvaluator(BaseEvaluator):
     
     def _find_skill_context(self, skill: str, job_description: str) -> str:
         """Find the context around a skill mention in job description."""
-        # Simple context extraction - look for sentences containing the skill
-        sentences = job_description.split('.')
+        # Improved sentence boundary detection using regex
+        # Handles periods, exclamation marks, question marks, and newlines
+        import re
+        
+        # Split on sentence boundaries but keep the delimiters
+        sentence_pattern = r'(?<=[.!?\n])\s+(?=[A-Z])|(?<=[.!?])\s*\n|\n\s*[-•]'
+        sentences = re.split(sentence_pattern, job_description)
+        
+        skill_lower = skill.lower()
         for sentence in sentences:
-            if skill in sentence.lower():
-                return sentence.strip()
+            if skill_lower in sentence.lower():
+                # Clean up the sentence
+                cleaned = sentence.strip()
+                # Ensure we have a complete sentence
+                if len(cleaned) > 10:  # Minimum sentence length
+                    return cleaned
+        
+        # Fallback: look for the skill in bullet points or shorter fragments
+        lines = job_description.split('\n')
+        for line in lines:
+            if skill_lower in line.lower() and len(line.strip()) > 5:
+                return line.strip()
+        
         return ""
     
     def _calculate_overall_score(self, skill_metrics: Dict[str, float], 
@@ -524,10 +573,15 @@ class JobParsingAccuracyEvaluator(BaseEvaluator):
     
     def _estimate_tokens_used(self, job_description: str, actual_output: Any) -> int:
         """Estimate tokens used based on input and output length."""
-        # Rough estimation: 1 token ≈ 4 characters
-        input_tokens = len(job_description) // 4
-        output_tokens = len(str(actual_output)) // 4
-        return input_tokens + output_tokens
+        # More accurate estimation: 1 token ≈ 3.3 characters for modern tokenizers
+        # This is closer to GPT-3/4 and Claude tokenization patterns
+        input_tokens = int(len(job_description) / 3.3)
+        output_tokens = int(len(str(actual_output)) / 3.3)
+        
+        # Add a buffer for system prompt and formatting tokens
+        system_overhead = 50  # Approximate tokens for system messages
+        
+        return input_tokens + output_tokens + system_overhead
     
     def get_description(self) -> str:
         """Get description of this evaluator."""
