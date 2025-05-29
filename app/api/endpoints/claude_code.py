@@ -275,11 +275,10 @@ async def customize_resume_async(
         executor = get_claude_code_executor()
         
         # Use the executor's built-in async support
-        result = executor.start_async(
+        result = executor.customize_resume_with_progress(
             resume_path=resume_path,
             job_description_path=job_description_path,
             output_path=output_path,
-            task_id=task_id,
             timeout=timeout_seconds
         )
         

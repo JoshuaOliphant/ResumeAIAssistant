@@ -28,12 +28,14 @@ class EvaluationReporter:
         passed = sum(1 for r in self.results if r.passed)
         average_score = sum(r.overall_score for r in self.results) / total_evaluations if total_evaluations > 0 else 0
         
+        pass_rate = (passed/total_evaluations*100) if total_evaluations > 0 else 0.0
+        
         report = f"""# Evaluation Summary Report
         
 ## Overview
 - Total Evaluations: {total_evaluations}
 - Passed: {passed}
-- Pass Rate: {passed/total_evaluations*100:.1f}%
+- Pass Rate: {pass_rate:.1f}%
 - Average Score: {average_score:.3f}
 
 ## Results by Evaluator

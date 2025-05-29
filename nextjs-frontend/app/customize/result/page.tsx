@@ -7,11 +7,14 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ChevronLeft, Download, FileText, Eye, Loader2 } from "lucide-react"
+import { ChevronLeft, Download, FileText, Eye, Loader2, GitCompare } from "lucide-react"
+import { EnhancedDiffView } from "@/components/enhanced-diff-view"
+import { MarkdownRenderer } from "@/components/markdown-renderer"
 
 interface TaskResult {
   customized_resume?: string;
   customization_summary?: string;
+  original_resume?: string;
   [key: string]: any;
 }
 
@@ -118,10 +121,14 @@ export default function CustomizationResultPage() {
       </div>
       
       <Tabs defaultValue="resume" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="resume">
             <FileText className="mr-2 h-4 w-4" />
             Customized Resume
+          </TabsTrigger>
+          <TabsTrigger value="diff">
+            <GitCompare className="mr-2 h-4 w-4" />
+            Compare Changes
           </TabsTrigger>
           <TabsTrigger value="summary">
             <Eye className="mr-2 h-4 w-4" />
@@ -150,13 +157,29 @@ export default function CustomizationResultPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <pre className="whitespace-pre-wrap font-sans text-sm">
-                  {result?.customized_resume || "No resume content available"}
-                </pre>
-              </div>
+              <MarkdownRenderer 
+                content={result?.customized_resume || "No resume content available"} 
+                className="p-6"
+              />
             </CardContent>
           </Card>
+        </TabsContent>
+        
+        <TabsContent value="diff" className="space-y-4">
+          {result?.original_resume && result?.customized_resume ? (
+            <EnhancedDiffView 
+              original={result.original_resume}
+              customized={result.customized_resume}
+              title="Resume Comparison"
+              jobTitle={jobId ? `Job ${jobId}` : undefined}
+            />
+          ) : (
+            <Alert>
+              <AlertDescription>
+                Original resume content not available for comparison.
+              </AlertDescription>
+            </Alert>
+          )}
         </TabsContent>
         
         <TabsContent value="summary" className="space-y-4">
@@ -180,11 +203,10 @@ export default function CustomizationResultPage() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="prose prose-sm dark:prose-invert max-w-none">
-                <pre className="whitespace-pre-wrap font-sans text-sm">
-                  {result?.customization_summary || "No summary available"}
-                </pre>
-              </div>
+              <MarkdownRenderer 
+                content={result?.customization_summary || "No summary available"} 
+                className="p-6"
+              />
             </CardContent>
           </Card>
         </TabsContent>

@@ -8,6 +8,7 @@ Handles environment variables, API keys, model settings, and runtime parameters.
 """
 
 import os
+import threading
 from pathlib import Path
 from typing import Dict, Any, Optional
 from dataclasses import dataclass, field
@@ -59,9 +60,9 @@ class EvaluationConfig:
         self.test_data_dir.mkdir(parents=True, exist_ok=True)
         self.results_dir.mkdir(parents=True, exist_ok=True)
         
-        # Validate API key
-        if not self.anthropic_api_key and not self.mock_api_calls:
-            raise ValueError("ANTHROPIC_API_KEY environment variable is required")
+        # Validate API key only in production mode
+        if not self.anthropic_api_key and not self.mock_api_calls and not self.test_mode:
+            self.logger.warning("ANTHROPIC_API_KEY not set - API calls will fail unless mock_api_calls or test_mode is enabled")
         
         # Convert relative paths to absolute
         if not self.project_root.is_absolute():
@@ -70,6 +71,17 @@ class EvaluationConfig:
             self.test_data_dir = self.project_root / self.test_data_dir
         if not self.results_dir.is_absolute():
             self.results_dir = self.project_root / self.results_dir
+            
+        # Validate paths are within project root (prevent path traversal)
+        try:
+            self.test_data_dir.resolve().relative_to(self.project_root.resolve())
+        except ValueError:
+            raise ValueError(f"Test data directory must be within project root: {self.test_data_dir}")
+            
+        try:
+            self.results_dir.resolve().relative_to(self.project_root.resolve())
+        except ValueError:
+            raise ValueError(f"Results directory must be within project root: {self.results_dir}")
     
     def get_model_id(self, model_name: str) -> str:
         """Get the full model ID for a given model name."""
@@ -108,33 +120,39 @@ class EvaluationConfig:
         return config_dict
 
 
-# Global configuration instance
+# Global configuration instance with thread lock
 _config: Optional[EvaluationConfig] = None
+_config_lock = threading.Lock()
 
 
 def get_config() -> EvaluationConfig:
-    """Get the global configuration instance."""
+    """Get the global configuration instance (thread-safe singleton)."""
     global _config
     if _config is None:
-        _config = EvaluationConfig()
-        _config.update_from_env()
+        with _config_lock:
+            # Double-check pattern for thread safety
+            if _config is None:
+                _config = EvaluationConfig()
+                _config.update_from_env()
     return _config
 
 
 def update_config(**kwargs) -> None:
-    """Update the global configuration with new values."""
+    """Update the global configuration with new values (thread-safe)."""
     global _config
-    if _config is None:
-        _config = EvaluationConfig()
-    
-    for key, value in kwargs.items():
-        if hasattr(_config, key):
-            setattr(_config, key, value)
-        else:
-            raise ValueError(f"Unknown configuration parameter: {key}")
+    with _config_lock:
+        if _config is None:
+            _config = EvaluationConfig()
+        
+        for key, value in kwargs.items():
+            if hasattr(_config, key):
+                setattr(_config, key, value)
+            else:
+                raise ValueError(f"Unknown configuration parameter: {key}")
 
 
 def reset_config() -> None:
-    """Reset configuration to default values."""
+    """Reset configuration to default values (thread-safe)."""
     global _config
-    _config = None
+    with _config_lock:
+        _config = None
