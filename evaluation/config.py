@@ -62,7 +62,10 @@ class EvaluationConfig:
         
         # Validate API key only in production mode
         if not self.anthropic_api_key and not self.mock_api_calls and not self.test_mode:
-            self.logger.warning("ANTHROPIC_API_KEY not set - API calls will fail unless mock_api_calls or test_mode is enabled")
+            # Use the logger module directly instead of instance attribute
+            from .utils.logger import get_evaluation_logger
+            logger = get_evaluation_logger()
+            logger.warning("ANTHROPIC_API_KEY not set - API calls will fail unless mock_api_calls or test_mode is enabled")
         
         # Convert relative paths to absolute
         if not self.project_root.is_absolute():
