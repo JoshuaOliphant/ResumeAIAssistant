@@ -56,16 +56,20 @@ class EvaluationConfig:
     
     def __post_init__(self):
         """Post-initialization validation and setup."""
-        # Ensure required directories exist
-        self.test_data_dir.mkdir(parents=True, exist_ok=True)
-        self.results_dir.mkdir(parents=True, exist_ok=True)
+        # Ensure required directories exist (but don't fail if we can't create them)
+        try:
+            self.test_data_dir.mkdir(parents=True, exist_ok=True)
+            self.results_dir.mkdir(parents=True, exist_ok=True)
+        except (OSError, PermissionError) as e:
+            # In CI or test environments, we might not have write permissions
+            import sys
+            print(f"WARNING: Could not create directories: {e}", file=sys.stderr)
         
         # Validate API key only in production mode
         if not self.anthropic_api_key and not self.mock_api_calls and not self.test_mode:
-            # Use the logger module directly instead of instance attribute
-            from .utils.logger import get_evaluation_logger
-            logger = get_evaluation_logger()
-            logger.warning("ANTHROPIC_API_KEY not set - API calls will fail unless mock_api_calls or test_mode is enabled")
+            # Print warning to stderr to avoid circular import with logger
+            import sys
+            print("WARNING: ANTHROPIC_API_KEY not set - API calls will fail unless mock_api_calls or test_mode is enabled", file=sys.stderr)
         
         # Convert relative paths to absolute
         if not self.project_root.is_absolute():
