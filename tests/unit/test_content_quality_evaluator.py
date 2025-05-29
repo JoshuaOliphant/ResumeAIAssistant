@@ -124,7 +124,7 @@ class TestContentQualityEvaluator:
         text = "# Test **Resume**\n\nThis is a *sample* resume."
         result = evaluator._extract_text_content(text)
         assert "Test Resume" in result
-        assert "sample resume" in result
+        assert "This is a sample resume" in result
         assert "#" not in result
         assert "*" not in result
     
@@ -238,6 +238,18 @@ class TestContentQualityEvaluator:
         # Should have poor ATS compatibility due to graphics
         assert result['ats_graphics_compatibility'] < 1.0
         assert result['ats_compatibility_score'] < 0.8
+    
+    def test_assess_ats_compatibility_empty(self, evaluator):
+        """Test ATS compatibility with empty text."""
+        result = evaluator._assess_ats_compatibility("")
+        
+        # Should return all zeros for empty text
+        assert result['ats_special_characters'] == 0.0
+        assert result['ats_graphics_compatibility'] == 0.0
+        assert result['ats_formatting_compatibility'] == 0.0
+        assert result['ats_header_standards'] == 0.0
+        assert result['ats_keyword_optimization'] == 0.0
+        assert result['ats_compatibility_score'] == 0.0
     
     def test_assess_formatting_consistency_good(self, evaluator, high_quality_resume):
         """Test formatting consistency with well-formatted content."""

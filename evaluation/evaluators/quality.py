@@ -160,9 +160,15 @@ class ContentQualityEvaluator(BaseEvaluator):
     def _extract_text_content(self, content: Any) -> str:
         """Extract plain text from various content formats."""
         if isinstance(content, str):
-            # Remove markdown formatting and HTML tags
-            text = re.sub(r'[#*_`\[\]()]', '', content)
-            text = re.sub(r'<[^>]+>', '', text)
+            # Remove HTML tags first
+            text = re.sub(r'<[^>]+>', '', content)
+            # Remove markdown formatting while preserving sentence structure
+            # Keep periods, commas, semicolons for readability analysis
+            text = re.sub(r'#+\s*', '', text)  # Remove headers
+            text = re.sub(r'\*{1,2}([^*]+)\*{1,2}', r'\1', text)  # Remove bold/italic
+            text = re.sub(r'_([^_]+)_', r'\1', text)  # Remove underscore emphasis
+            text = re.sub(r'`([^`]+)`', r'\1', text)  # Remove code blocks
+            text = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', text)  # Extract link text
             return text.strip()
         elif isinstance(content, dict):
             # Extract from structured content
@@ -222,25 +228,35 @@ class ContentQualityEvaluator(BaseEvaluator):
                 'professional_language_score': 0.0
             }
         
-        # Buzzword analysis
-        buzzword_count = sum(1 for word in words if word in self.BUZZWORDS)
+        # Single pass through words for performance
+        buzzword_count = 0
+        strong_verbs = 0
+        weak_verbs = 0
+        passive_count = 0
+        passive_indicators = {'was', 'were', 'been', 'being'}
+        
+        for word in words:
+            if word in self.BUZZWORDS:
+                buzzword_count += 1
+            if word in self.STRONG_ACTION_VERBS:
+                strong_verbs += 1
+            elif word in self.WEAK_VERBS:
+                weak_verbs += 1
+            if word in passive_indicators:
+                passive_count += 1
+        
+        # Calculate scores
         buzzword_density = buzzword_count / len(words)
         buzzword_score = max(0, 1 - (buzzword_density / self.thresholds['max_buzzword_density']))
         
-        # Action verb analysis
-        strong_verbs = sum(1 for word in words if word in self.STRONG_ACTION_VERBS)
-        weak_verbs = sum(1 for word in words if word in self.WEAK_VERBS)
         total_verbs = strong_verbs + weak_verbs
-        
         if total_verbs > 0:
             action_verb_ratio = strong_verbs / total_verbs
             action_verb_score = min(1, action_verb_ratio / self.thresholds['min_action_verb_ratio'])
         else:
-            action_verb_score = 0.0
+            # Use neutral score for sections without verbs (e.g., contact info)
+            action_verb_score = 0.5
         
-        # Passive voice detection (simplified)
-        passive_indicators = ['was', 'were', 'been', 'being']
-        passive_count = sum(1 for word in words if word in passive_indicators)
         passive_ratio = passive_count / len(words)
         passive_score = max(0, 1 - (passive_ratio / self.thresholds['max_passive_voice_ratio']))
         
@@ -270,6 +286,17 @@ class ContentQualityEvaluator(BaseEvaluator):
     
     def _assess_ats_compatibility(self, text: str) -> Dict[str, float]:
         """Assess ATS (Applicant Tracking System) compatibility."""
+        # Handle empty text
+        if not text:
+            return {
+                'ats_special_characters': 0.0,
+                'ats_graphics_compatibility': 0.0,
+                'ats_formatting_compatibility': 0.0,
+                'ats_header_standards': 0.0,
+                'ats_keyword_optimization': 0.0,
+                'ats_compatibility_score': 0.0
+            }
+        
         # Check for problematic special characters
         special_char_matches = len(re.findall(
             self.ATS_PROBLEMATIC_ELEMENTS['special_chars'], text
@@ -299,7 +326,6 @@ class ContentQualityEvaluator(BaseEvaluator):
         # Flag potential keyword stuffing
         if words:
             max_frequency = max(word_freq.values())
-            avg_frequency = sum(word_freq.values()) / len(word_freq)
             keyword_stuffing_ratio = max_frequency / len(words)
             
             # Penalize if any word appears more than 3% of total words
