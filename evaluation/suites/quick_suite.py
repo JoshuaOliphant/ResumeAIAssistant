@@ -9,7 +9,7 @@ only essential evaluators with optimized configurations.
 """
 
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Any, Dict, List, Optional
 
 from ..pipeline import EvaluationPipeline, PipelineConfiguration, PipelineMode
 from ..test_data.models import TestCase
@@ -62,7 +62,7 @@ class QuickEvaluationSuite:
         resume_content: str,
         job_description: str,
         test_case_id: Optional[str] = None
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Run quick evaluation on a single resume-job pair.
         
@@ -113,7 +113,7 @@ class QuickEvaluationSuite:
         self,
         resume_job_pairs: List[Dict[str, str]],
         batch_id: Optional[str] = None
-    ) -> Dict[str, any]:
+    ) -> Dict[str, Any]:
         """
         Run quick evaluation on a batch of resume-job pairs.
         
@@ -293,7 +293,7 @@ class QuickEvaluationSuite:
             "content_quality": "Assesses readability, professionalism, and ATS compatibility"
         }
     
-    def get_configuration_summary(self) -> Dict[str, any]:
+    def get_configuration_summary(self) -> Dict[str, Any]:
         """Get summary of quick suite configuration."""
         return {
             "mode": "Quick",

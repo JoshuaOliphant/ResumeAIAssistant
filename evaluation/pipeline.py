@@ -10,7 +10,7 @@ into cohesive pipelines with result aggregation, progress tracking, and error re
 
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union, Callable, Tuple
 from dataclasses import dataclass, field
@@ -636,8 +636,8 @@ class EvaluationPipeline:
         
         # Relevance recommendations
         if "relevance" in result.category_scores and result.category_scores["relevance"] < 0.7:
-            recommendations.append("Better align resume content with job requirements")
-            recommendations.append("Enhance keyword optimization and targeting")
+            recommendations.append("Improve relevance by better aligning resume content with job requirements")
+            recommendations.append("Enhance keyword optimization and targeting for better relevance")
         
         # Low confidence recommendations
         if result.confidence_score < self.config.confidence_threshold:
@@ -683,6 +683,3 @@ class EvaluationPipeline:
         }
 
 
-# Import required for type hints
-from datetime import timedelta
-import time

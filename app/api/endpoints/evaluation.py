@@ -436,11 +436,14 @@ async def health_check():
         
     except Exception as e:
         logger.error(f"Health check failed: {str(e)}")
-        return {
-            "status": "unhealthy",
-            "timestamp": str(datetime.now()),
-            "error": str(e)
-        }
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "unhealthy",
+                "timestamp": str(datetime.now()),
+                "error": str(e)
+            }
+        )
 
 
 # Import required for datetime
