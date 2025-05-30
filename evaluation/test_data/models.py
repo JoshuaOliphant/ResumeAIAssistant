@@ -91,7 +91,7 @@ class EvaluationResult(BaseModel):
     def serialize_datetime(self, value: datetime) -> str:
         return value.isoformat()
     
-    model_config = ConfigDict()
+    model_config = ConfigDict(extra='allow')
 
 
 class TestDataset(BaseModel):
