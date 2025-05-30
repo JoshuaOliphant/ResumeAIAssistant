@@ -178,7 +178,9 @@ class TestEvaluationPipeline:
         """Test pipeline evaluation with fail_fast enabled."""
         config = PipelineConfiguration(
             mode=PipelineMode.QUICK,
-            fail_fast=True
+            fail_fast=True,
+            parallel_execution=False,  # Use sequential for fail_fast to work properly
+            retry_failed_evaluators=False  # Disable retries for fast failure
         )
         pipeline = EvaluationPipeline(config)
         
