@@ -9,6 +9,7 @@ A powerful application that analyzes resumes against job descriptions and helps 
 - **Diff View**: Compare original and customized resumes with enhanced side-by-side visualization and section-level analysis
 - **Cover Letter Generation**: Generate tailored cover letters based on resume and job description
 - **Real-time Progress Updates**: Track long-running operations with WebSocket updates
+- **Evaluation History Management**: Limit in-memory history size to avoid excessive memory usage (configure with `EVALUATION_HISTORY_SIZE`)
 
 ## Setup and Installation
 

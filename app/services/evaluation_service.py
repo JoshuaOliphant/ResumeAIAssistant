@@ -9,6 +9,7 @@ resume optimization workflow, providing API endpoints and business logic.
 """
 
 import asyncio
+import os
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -104,16 +105,23 @@ class EvaluationService:
     Service for managing evaluation pipelines and integration with resume optimization.
     """
     
-    def __init__(self, output_directory: Optional[Path] = None):
+    def __init__(self, output_directory: Optional[Path] = None, max_history_size: Optional[int] = None):
         """
         Initialize evaluation service.
-        
+
         Args:
             output_directory: Directory to save evaluation results
+            max_history_size: Maximum number of results to keep in memory
         """
         self.logger = get_logger("EvaluationService")
         self.output_directory = output_directory or Path("evaluation_results")
         self.output_directory.mkdir(parents=True, exist_ok=True)
+
+        # Set history size limit
+        env_size = os.getenv("EVALUATION_HISTORY_SIZE")
+        self.max_history_size = (
+            max_history_size if max_history_size is not None else int(env_size) if env_size else 1000
+        )
         
         # Track active evaluations
         self.active_evaluations: Dict[str, ActiveEvaluation] = {}
@@ -474,9 +482,9 @@ class EvaluationService:
             "failed_evaluators": list(result.failed_evaluators.keys())
         })
         
-        # Keep only last 1000 evaluations in memory
-        if len(self.evaluation_history) > 1000:
-            self.evaluation_history = self.evaluation_history[-1000:]
+        # Keep only the most recent evaluations in memory
+        if len(self.evaluation_history) > self.max_history_size:
+            del self.evaluation_history[:-self.max_history_size]
     
     async def _cleanup_completed_evaluation(self, evaluation_id: str):
         """Clean up completed evaluation from active tracking."""
