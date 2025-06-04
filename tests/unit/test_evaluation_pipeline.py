@@ -618,7 +618,7 @@ class TestPipelineResult:
         )
         
         result_dict = result.to_dict()
-        
+
         assert result_dict["pipeline_id"] == "test_pipeline"
         assert result_dict["test_case_id"] == "test_001"
         assert result_dict["mode"] == "quick"
@@ -626,3 +626,60 @@ class TestPipelineResult:
         assert result_dict["aggregated_scores"]["confidence_score"] == 0.9
         assert "timing" in result_dict
         assert "resource_usage" in result_dict
+
+
+@pytest.fixture
+def sample_test_case():
+    return TestCase(
+        id="test_global",
+        name="Test Case",
+        resume_content="Software Engineer with Python experience",
+        job_description="Python developer position",
+    )
+
+
+@pytest.fixture
+def sample_actual_output():
+    return {
+        "resume_content": "Software Engineer with Python experience",
+        "job_description": "Python developer position",
+    }
+
+
+@pytest.fixture
+def mock_evaluator_result():
+    return EvaluationResult(
+        test_case_id="test_global",
+        evaluator_name="test_evaluator",
+        overall_score=0.8,
+        passed=True,
+        detailed_scores={"precision": 0.9, "recall": 0.7},
+        execution_time=1.5,
+        tokens_used=100,
+        api_calls_made=1,
+        notes="Test evaluation completed successfully",
+    )
+
+
+class TestPipelineCaching:
+    """Tests for pipeline caching functionality."""
+
+    @pytest.mark.asyncio
+    async def test_caching_enabled(self, sample_test_case, sample_actual_output, mock_evaluator_result):
+        config = PipelineConfiguration(mode=PipelineMode.QUICK, use_cache=True)
+        pipeline = EvaluationPipeline(config)
+
+        from contextlib import ExitStack
+
+        with ExitStack() as stack:
+            for ev in pipeline.evaluators.values():
+                stack.enter_context(patch.object(ev, 'evaluate', return_value=mock_evaluator_result))
+
+            result1 = await pipeline.evaluate(sample_test_case, sample_actual_output)
+            result2 = await pipeline.evaluate(sample_test_case, sample_actual_output)
+
+            for ev in pipeline.evaluators.values():
+                assert ev.evaluate.call_count == 1
+
+            assert result2.cache_hits >= len(pipeline.evaluators)
+            assert result1.overall_score == result2.overall_score
