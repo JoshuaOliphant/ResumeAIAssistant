@@ -11,7 +11,7 @@ quick and comprehensive evaluation suites with real-time progress tracking.
 from typing import List, Optional
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query, status
+from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query, status, Request
 from fastapi.responses import JSONResponse
 
 from app.services.evaluation_service import (
@@ -24,6 +24,7 @@ from evaluation.pipeline import PipelineMode
 from evaluation.suites.quick_suite import QuickEvaluationSuite
 from evaluation.suites.comprehensive_suite import ComprehensiveEvaluationSuite
 from app.core.logging import get_logger
+from app.core.resilience import evaluation_rate_limiter, RateLimitExceeded
 
 logger = get_logger("EvaluationAPI")
 
@@ -36,6 +37,12 @@ quick_suite = QuickEvaluationSuite()
 comprehensive_suite = ComprehensiveEvaluationSuite()
 
 
+async def rate_limit(request: Request) -> None:
+    client_ip = request.client.host if request.client else "anonymous"
+    if not await evaluation_rate_limiter.allow(client_ip):
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail="Rate limit exceeded")
+
+
 def get_evaluation_service() -> EvaluationService:
     """Dependency to get evaluation service."""
     return evaluation_service
@@ -45,7 +52,8 @@ def get_evaluation_service() -> EvaluationService:
 async def start_evaluation(
     request: EvaluationRequest,
     background_tasks: BackgroundTasks,
-    service: EvaluationService = Depends(get_evaluation_service)
+    service: EvaluationService = Depends(get_evaluation_service),
+    _: None = Depends(rate_limit),
 ):
     """
     Start a new evaluation pipeline.
@@ -57,7 +65,7 @@ async def start_evaluation(
         logger.info(f"Starting evaluation in {request.mode.value} mode")
         
         # Start evaluation (async by default)
-        evaluation_id = await service.start_evaluation(request, background_tasks)
+        evaluation_id = await service.start_evaluation(request, background_tasks, http_request=request)
         
         # Return immediate response with evaluation ID
         return JSONResponse(
@@ -138,7 +146,8 @@ async def get_evaluation_result(
 async def quick_evaluation(
     resume_content: str,
     job_description: str,
-    test_case_id: Optional[str] = None
+    test_case_id: Optional[str] = None,
+    _: None = Depends(rate_limit)
 ):
     """
     Run a quick evaluation for rapid feedback.
@@ -168,7 +177,8 @@ async def quick_evaluation(
 @router.post("/quick/batch", response_model=dict)
 async def quick_batch_evaluation(
     resume_job_pairs: List[dict],
-    batch_id: Optional[str] = None
+    batch_id: Optional[str] = None,
+    _: None = Depends(rate_limit)
 ):
     """
     Run quick evaluation on a batch of resume-job pairs.
@@ -209,7 +219,8 @@ async def comprehensive_evaluation(
     resume_content: str,
     job_description: str,
     test_case_id: Optional[str] = None,
-    include_detailed_analysis: bool = Query(True, description="Include detailed analysis")
+    include_detailed_analysis: bool = Query(True, description="Include detailed analysis"),
+    _: None = Depends(rate_limit)
 ):
     """
     Run a comprehensive evaluation with detailed analysis.
@@ -242,7 +253,8 @@ async def evaluate_optimization_impact(
     original_resume: str,
     optimized_resume: str,
     job_description: str,
-    optimization_metadata: Optional[dict] = None
+    optimization_metadata: Optional[dict] = None,
+    _: None = Depends(rate_limit)
 ):
     """
     Evaluate the impact of resume optimization.
@@ -275,7 +287,8 @@ async def evaluate_with_haiku_optimizer(
     original_resume: str,
     optimized_resume: str,
     job_description: str,
-    mode: PipelineMode = PipelineMode.COMPREHENSIVE
+    mode: PipelineMode = PipelineMode.COMPREHENSIVE,
+    _: None = Depends(rate_limit)
 ):
     """
     Integration endpoint for HaikuResumeOptimizer evaluation.

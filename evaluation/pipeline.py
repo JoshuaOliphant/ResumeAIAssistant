@@ -24,8 +24,9 @@ from .test_data.models import TestCase, EvaluationResult
 from .results.aggregator import ResultAggregator
 from .results.analyzer import PerformanceAnalyzer
 from .results.reporter import EvaluationReporter
-from .utils.logger import get_evaluation_logger
 # from .config import EvaluationConfig  # Will be used when config is needed
+from .utils.logger import get_evaluation_logger
+from app.core.resilience import evaluation_circuit_breaker
 
 
 class PipelineMode(Enum):
@@ -448,9 +449,17 @@ class EvaluationPipeline:
     ) -> EvaluationResult:
         """Run a single evaluator with error handling."""
         self.logger.debug(f"Running evaluator: {name}")
-        
+
+        if await evaluation_circuit_breaker.is_open(name):
+            raise RuntimeError(f"Circuit open for {name}")
+
         start_time = time.time()
-        eval_result = await evaluator.evaluate(test_case, actual_output)
+        try:
+            eval_result = await evaluator.evaluate(test_case, actual_output)
+            await evaluation_circuit_breaker.record_success(name)
+        except Exception:
+            await evaluation_circuit_breaker.record_failure(name)
+            raise
         execution_time = time.time() - start_time
         
         # Update execution time if not set
@@ -470,15 +479,16 @@ class EvaluationPipeline:
         """Retry a failed evaluator."""
         for attempt in range(self.config.max_retries):
             self.logger.info(f"Retrying evaluator {name}, attempt {attempt + 1}/{self.config.max_retries}")
-            
+
             try:
-                await asyncio.sleep(self.config.retry_delay * (attempt + 1))
+                await asyncio.sleep(self.config.retry_delay * (2 ** attempt))
                 return await self._run_single_evaluator(name, evaluator, test_case, actual_output)
                 
             except Exception as e:
                 self.logger.warning(f"Retry {attempt + 1} failed for {name}: {str(e)}")
                 if attempt == self.config.max_retries - 1:
                     self.logger.error(f"All retries exhausted for evaluator {name}")
+                    await evaluation_circuit_breaker.record_failure(name)
         
         return None
     
