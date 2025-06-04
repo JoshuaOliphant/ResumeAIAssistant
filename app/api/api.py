@@ -4,6 +4,8 @@ from pathlib import Path
 import logfire
 from fastapi import APIRouter, FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.middleware.security import ApiKeyMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -59,6 +61,10 @@ app = FastAPI(
     default_response_class=JSONResponse,
     # Add more parameters for timeout handling
 )
+
+# Add optional API key authentication
+if settings.API_AUTH_KEY:
+    app.add_middleware(ApiKeyMiddleware)
 
 # Set up templates
 templates = Jinja2Templates(directory="templates")
