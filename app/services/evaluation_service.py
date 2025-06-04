@@ -15,12 +15,15 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 from dataclasses import dataclass
 
-from fastapi import HTTPException, BackgroundTasks
+from fastapi import HTTPException, BackgroundTasks, Request
 from pydantic import BaseModel, Field
 
 from evaluation.pipeline import EvaluationPipeline, PipelineConfiguration, PipelineMode, PipelineResult
 from evaluation.test_data.models import TestCase
 from app.core.logging import get_logger
+from app.core.config import settings
+from app.core.resilience import evaluation_rate_limiter
+import psutil
 
 
 class EvaluationRequest(BaseModel):
@@ -117,14 +120,16 @@ class EvaluationService:
         
         # Track active evaluations
         self.active_evaluations: Dict[str, ActiveEvaluation] = {}
-        
+        self.max_concurrent = settings.MAX_CONCURRENT_EVALUATIONS
+
         # Performance tracking
         self.evaluation_history: List[Dict[str, Any]] = []
     
     async def start_evaluation(
         self,
         request: EvaluationRequest,
-        background_tasks: Optional[BackgroundTasks] = None
+        background_tasks: Optional[BackgroundTasks] = None,
+        http_request: Optional[Request] = None,
     ) -> str:
         """
         Start an evaluation pipeline.
@@ -137,6 +142,16 @@ class EvaluationService:
             Evaluation ID for tracking
         """
         evaluation_id = str(uuid.uuid4())
+
+        # Rate limiting per client IP
+        if http_request is not None:
+            client_ip = http_request.client.host if http_request.client else "anonymous"
+            allowed = await evaluation_rate_limiter.allow(client_ip)
+            if not allowed:
+                raise HTTPException(status_code=429, detail="Rate limit exceeded")
+
+        if len(self.active_evaluations) >= self.max_concurrent:
+            raise HTTPException(status_code=503, detail="Too many concurrent evaluations")
         
         self.logger.info(f"Starting evaluation {evaluation_id} in {request.mode.value} mode")
         
@@ -516,4 +531,12 @@ class EvaluationService:
             "average_duration_seconds": avg_duration,
             "mode_distribution": mode_distribution,
             "active_evaluations": len(self.active_evaluations)
+        }
+
+    def get_resource_usage(self) -> Dict[str, Any]:
+        """Get current CPU and memory usage."""
+        return {
+            "cpu_percent": psutil.cpu_percent(interval=None),
+            "memory_percent": psutil.virtual_memory().percent,
+            "active_evaluations": len(self.active_evaluations),
         }

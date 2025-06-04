@@ -76,6 +76,14 @@ class Settings(BaseSettings):
     # WebSocket settings
     WS_PING_INTERVAL: int = int(os.getenv("WS_PING_INTERVAL", "30"))  # seconds
 
+    # Resilience settings
+    RATE_LIMIT_REQUESTS: int = int(os.getenv("RATE_LIMIT_REQUESTS", "20"))
+    RATE_LIMIT_WINDOW: int = int(os.getenv("RATE_LIMIT_WINDOW", "60"))
+    RATE_LIMIT_BURST: int = int(os.getenv("RATE_LIMIT_BURST", "5"))
+    CB_FAILURE_THRESHOLD: int = int(os.getenv("CB_FAILURE_THRESHOLD", "5"))
+    CB_RECOVERY_TIME: int = int(os.getenv("CB_RECOVERY_TIME", "60"))
+    MAX_CONCURRENT_EVALUATIONS: int = int(os.getenv("MAX_CONCURRENT_EVALUATIONS", "3"))
+
     model_config = ConfigDict(case_sensitive=True)
 
 
