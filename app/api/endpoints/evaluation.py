@@ -11,7 +11,15 @@ quick and comprehensive evaluation suites with real-time progress tracking.
 from typing import List, Optional
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, BackgroundTasks, Depends, Query, status
+from fastapi import (
+    APIRouter,
+    HTTPException,
+    BackgroundTasks,
+    Depends,
+    Query,
+    status,
+    Body,
+)
 from fastapi.responses import JSONResponse
 
 from app.services.evaluation_service import (
@@ -136,9 +144,9 @@ async def get_evaluation_result(
 
 @router.post("/quick", response_model=dict)
 async def quick_evaluation(
-    resume_content: str,
-    job_description: str,
-    test_case_id: Optional[str] = None
+    resume_content: str = Body(..., min_length=1, max_length=10000),
+    job_description: str = Body(..., min_length=1, max_length=10000),
+    test_case_id: Optional[str] = None,
 ):
     """
     Run a quick evaluation for rapid feedback.
@@ -148,10 +156,20 @@ async def quick_evaluation(
     """
     try:
         logger.info("Starting quick evaluation")
-        
+
+        from app.services.content_security import (
+            detect_malicious_content,
+            validate_content_size,
+            sanitize_text,
+        )
+
+        for text in (resume_content, job_description):
+            detect_malicious_content(text)
+            validate_content_size(text)
+
         result = await quick_suite.evaluate_single(
-            resume_content=resume_content,
-            job_description=job_description,
+            resume_content=sanitize_text(resume_content),
+            job_description=sanitize_text(job_description),
             test_case_id=test_case_id
         )
         
@@ -167,7 +185,7 @@ async def quick_evaluation(
 
 @router.post("/quick/batch", response_model=dict)
 async def quick_batch_evaluation(
-    resume_job_pairs: List[dict],
+    resume_job_pairs: List[dict] = Body(...),
     batch_id: Optional[str] = None
 ):
     """
@@ -179,6 +197,12 @@ async def quick_batch_evaluation(
     try:
         logger.info(f"Starting quick batch evaluation with {len(resume_job_pairs)} pairs")
         
+        from app.services.content_security import (
+            detect_malicious_content,
+            validate_content_size,
+            sanitize_text,
+        )
+
         # Validate input format
         for i, pair in enumerate(resume_job_pairs):
             if "resume" not in pair or "job" not in pair:
@@ -186,6 +210,13 @@ async def quick_batch_evaluation(
                     status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                     detail=f"Pair {i+1} missing required 'resume' or 'job' fields"
                 )
+
+            detect_malicious_content(pair["resume"])
+            detect_malicious_content(pair["job"])
+            validate_content_size(pair["resume"])
+            validate_content_size(pair["job"])
+            pair["resume"] = sanitize_text(pair["resume"])
+            pair["job"] = sanitize_text(pair["job"])
         
         result = await quick_suite.evaluate_batch(
             resume_job_pairs=resume_job_pairs,
@@ -206,8 +237,8 @@ async def quick_batch_evaluation(
 
 @router.post("/comprehensive", response_model=dict)
 async def comprehensive_evaluation(
-    resume_content: str,
-    job_description: str,
+    resume_content: str = Body(..., min_length=1, max_length=10000),
+    job_description: str = Body(..., min_length=1, max_length=10000),
     test_case_id: Optional[str] = None,
     include_detailed_analysis: bool = Query(True, description="Include detailed analysis")
 ):
@@ -219,10 +250,20 @@ async def comprehensive_evaluation(
     """
     try:
         logger.info("Starting comprehensive evaluation")
-        
+
+        from app.services.content_security import (
+            detect_malicious_content,
+            validate_content_size,
+            sanitize_text,
+        )
+
+        for text in (resume_content, job_description):
+            detect_malicious_content(text)
+            validate_content_size(text)
+
         result = await comprehensive_suite.evaluate_comprehensive(
-            resume_content=resume_content,
-            job_description=job_description,
+            resume_content=sanitize_text(resume_content),
+            job_description=sanitize_text(job_description),
             test_case_id=test_case_id,
             include_detailed_analysis=include_detailed_analysis
         )
@@ -239,9 +280,9 @@ async def comprehensive_evaluation(
 
 @router.post("/optimization-impact", response_model=dict)
 async def evaluate_optimization_impact(
-    original_resume: str,
-    optimized_resume: str,
-    job_description: str,
+    original_resume: str = Body(..., min_length=1, max_length=10000),
+    optimized_resume: str = Body(..., min_length=1, max_length=10000),
+    job_description: str = Body(..., min_length=1, max_length=10000),
     optimization_metadata: Optional[dict] = None
 ):
     """
@@ -252,12 +293,22 @@ async def evaluate_optimization_impact(
     """
     try:
         logger.info("Starting optimization impact evaluation")
-        
+
+        from app.services.content_security import (
+            detect_malicious_content,
+            validate_content_size,
+            sanitize_text,
+        )
+
+        for text in (original_resume, optimized_resume, job_description):
+            detect_malicious_content(text)
+            validate_content_size(text)
+
         result = await comprehensive_suite.evaluate_optimization_impact(
-            original_resume=original_resume,
-            optimized_resume=optimized_resume,
-            job_description=job_description,
-            optimization_metadata=optimization_metadata
+            original_resume=sanitize_text(original_resume),
+            optimized_resume=sanitize_text(optimized_resume),
+            job_description=sanitize_text(job_description),
+            optimization_metadata=optimization_metadata,
         )
         
         return result
@@ -272,9 +323,9 @@ async def evaluate_optimization_impact(
 
 @router.post("/haiku-integration/evaluate")
 async def evaluate_with_haiku_optimizer(
-    original_resume: str,
-    optimized_resume: str,
-    job_description: str,
+    original_resume: str = Body(..., min_length=1, max_length=10000),
+    optimized_resume: str = Body(..., min_length=1, max_length=10000),
+    job_description: str = Body(..., min_length=1, max_length=10000),
     mode: PipelineMode = PipelineMode.COMPREHENSIVE
 ):
     """
@@ -285,11 +336,21 @@ async def evaluate_with_haiku_optimizer(
     """
     try:
         logger.info("Starting HaikuResumeOptimizer integration evaluation")
-        
+
+        from app.services.content_security import (
+            detect_malicious_content,
+            validate_content_size,
+            sanitize_text,
+        )
+
+        for text in (original_resume, optimized_resume, job_description):
+            detect_malicious_content(text)
+            validate_content_size(text)
+
         result = await evaluation_service.evaluate_optimization_result(
-            original_resume=original_resume,
-            optimized_resume=optimized_resume,
-            job_description=job_description,
+            original_resume=sanitize_text(original_resume),
+            optimized_resume=sanitize_text(optimized_resume),
+            job_description=sanitize_text(job_description),
             mode=mode
         )
         

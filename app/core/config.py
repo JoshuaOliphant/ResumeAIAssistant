@@ -73,6 +73,9 @@ class Settings(BaseSettings):
     # File size limits
     MAX_UPLOAD_SIZE: int = 5 * 1024 * 1024  # 5MB
 
+    # Optional API key for simple auth
+    API_AUTH_KEY: Optional[str] = os.getenv("API_AUTH_KEY")
+
     # WebSocket settings
     WS_PING_INTERVAL: int = int(os.getenv("WS_PING_INTERVAL", "30"))  # seconds
 

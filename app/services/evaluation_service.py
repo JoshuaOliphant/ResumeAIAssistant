@@ -17,6 +17,7 @@ from dataclasses import dataclass
 
 from fastapi import HTTPException, BackgroundTasks
 from pydantic import BaseModel, Field
+from pydantic import field_validator
 
 from evaluation.pipeline import EvaluationPipeline, PipelineConfiguration, PipelineMode, PipelineResult
 from evaluation.test_data.models import TestCase
@@ -24,10 +25,20 @@ from app.core.logging import get_logger
 
 
 class EvaluationRequest(BaseModel):
-    """Request model for evaluation."""
-    
-    resume_content: str = Field(..., description="Resume content to evaluate")
-    job_description: str = Field(..., description="Job description to match against")
+    """Request model for evaluation with basic security validation."""
+
+    resume_content: str = Field(
+        ...,
+        description="Resume content to evaluate",
+        min_length=1,
+        max_length=10000,
+    )
+    job_description: str = Field(
+        ...,
+        description="Job description to match against",
+        min_length=1,
+        max_length=10000,
+    )
     mode: PipelineMode = Field(PipelineMode.COMPREHENSIVE, description="Evaluation mode")
     custom_evaluators: Optional[List[str]] = Field(None, description="Custom evaluator list for CUSTOM mode")
     
@@ -40,6 +51,14 @@ class EvaluationRequest(BaseModel):
     save_results: bool = Field(True, description="Save results to disk")
     include_detailed_scores: bool = Field(True, description="Include detailed evaluator scores")
     include_recommendations: bool = Field(True, description="Include analysis and recommendations")
+
+    @field_validator("resume_content", "job_description")
+    @classmethod
+    def sanitize_inputs(cls, v: str) -> str:
+        from app.services.content_security import detect_malicious_content, sanitize_text
+
+        detect_malicious_content(v)
+        return sanitize_text(v)
 
 
 class EvaluationResponse(BaseModel):
