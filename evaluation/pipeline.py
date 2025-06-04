@@ -9,13 +9,14 @@ into cohesive pipelines with result aggregation, progress tracking, and error re
 """
 
 import asyncio
+import hashlib
+import json
 import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Union, Callable, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
-import json
 
 from .evaluators.base import BaseEvaluator
 from .evaluators.accuracy import JobParsingAccuracyEvaluator, MatchScoreEvaluator
@@ -25,6 +26,7 @@ from .results.aggregator import ResultAggregator
 from .results.analyzer import PerformanceAnalyzer
 from .results.reporter import EvaluationReporter
 from .utils.logger import get_evaluation_logger
+from .utils import EvaluationCache, PerformanceMonitor, monitor
 # from .config import EvaluationConfig  # Will be used when config is needed
 
 
@@ -116,6 +118,11 @@ class PipelineConfiguration:
     save_intermediate_results: bool = True
     output_directory: Optional[Path] = None
     progress_callback: Optional[Callable[[PipelineProgress], None]] = None
+
+    # Caching settings
+    use_cache: bool = True
+    cache_ttl: float = 3600.0
+    cache_max_size: int = 1000
     
     # Result aggregation settings
     weight_accuracy: float = 0.3
@@ -127,6 +134,41 @@ class PipelineConfiguration:
     retry_failed_evaluators: bool = True
     max_retries: int = 2
     retry_delay: float = 1.0
+
+    def __post_init__(self):
+        """Validate configuration parameters."""
+        # Validate concurrency settings
+        if self.max_concurrent_evaluators < 1:
+            raise ValueError("max_concurrent_evaluators must be positive")
+        
+        # Validate caching settings
+        if self.cache_ttl < 0:
+            raise ValueError("cache_ttl must be non-negative")
+        if self.cache_max_size < 1:
+            raise ValueError("cache_max_size must be positive")
+        
+        # Validate weight settings
+        if not (0 <= self.weight_accuracy <= 1):
+            raise ValueError("weight_accuracy must be between 0 and 1")
+        if not (0 <= self.weight_quality <= 1):
+            raise ValueError("weight_quality must be between 0 and 1")
+        if not (0 <= self.weight_relevance <= 1):
+            raise ValueError("weight_relevance must be between 0 and 1")
+        
+        # Check that weights sum to approximately 1.0 (allow for small floating point errors)
+        total_weight = self.weight_accuracy + self.weight_quality + self.weight_relevance
+        if not (0.99 <= total_weight <= 1.01):
+            raise ValueError(f"Weights must sum to 1.0, got {total_weight:.3f}")
+        
+        # Validate confidence threshold
+        if not (0 <= self.confidence_threshold <= 1):
+            raise ValueError("confidence_threshold must be between 0 and 1")
+        
+        # Validate retry settings
+        if self.max_retries < 0:
+            raise ValueError("max_retries must be non-negative")
+        if self.retry_delay < 0:
+            raise ValueError("retry_delay must be non-negative")
 
 
 @dataclass
@@ -158,6 +200,13 @@ class PipelineResult:
     total_tokens_used: int = 0
     total_api_calls: int = 0
     total_execution_time: float = 0.0
+
+    # Caching metrics
+    cache_hits: int = 0
+    cache_misses: int = 0
+
+    # Performance summary
+    performance_summary: Dict[str, Any] = field(default_factory=dict)
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert result to dictionary."""
@@ -188,7 +237,9 @@ class PipelineResult:
                 "total_tokens": self.total_tokens_used,
                 "total_api_calls": self.total_api_calls,
                 "total_execution_time": self.total_execution_time
-            }
+            },
+            "cache": {"hits": self.cache_hits, "misses": self.cache_misses},
+            "performance": self.performance_summary
         }
 
 
@@ -209,10 +260,16 @@ class EvaluationPipeline:
         """
         self.config = config or PipelineConfiguration()
         self.logger = get_evaluation_logger("EvaluationPipeline")
-        
+
         # Initialize evaluators based on mode
         self.evaluators = self._initialize_evaluators()
-        
+
+        # Caching and performance monitoring
+        self.cache = EvaluationCache(self.config.cache_ttl, self.config.cache_max_size) if self.config.use_cache else None
+        self.performance_monitor = PerformanceMonitor()
+        self.cache_hits = 0
+        self.cache_misses = 0
+
         # Initialize result processing components
         self.aggregator = ResultAggregator()
         self.analyzer = PerformanceAnalyzer([])
@@ -332,7 +389,12 @@ class EvaluationPipeline:
             # Finalize result
             result.end_time = datetime.now()
             result.total_duration = (result.end_time - result.start_time).total_seconds()
-            
+
+            # Cache and performance metrics
+            result.cache_hits = self.cache_hits
+            result.cache_misses = self.cache_misses
+            result.performance_summary = self.performance_monitor.summary()
+
             # Update progress callback if provided
             if self.config.progress_callback:
                 self.config.progress_callback(self.progress)
@@ -439,6 +501,27 @@ class EvaluationPipeline:
             
             self.progress.complete_evaluator(name)
     
+    def _generate_cache_key(self, name: str, test_case: TestCase, actual_output: Any) -> str:
+        """Generate a reliable cache key using consistent hashing."""
+        try:
+            # Create a content dict for consistent serialization
+            content = {
+                "evaluator": name,
+                "test_case_id": test_case.id,
+                "output": actual_output
+            }
+            
+            # Use JSON serialization with sorted keys for consistency
+            content_str = json.dumps(content, sort_keys=True, default=str)
+            
+            # Generate MD5 hash for consistent, shorter keys
+            output_hash = hashlib.md5(content_str.encode('utf-8')).hexdigest()
+            
+            return f"{name}:{test_case.id}:{output_hash}"
+        except Exception:
+            # Fallback to simpler key generation if JSON serialization fails
+            return f"{name}:{test_case.id}:{hash(str(actual_output))}"
+    
     async def _run_single_evaluator(
         self,
         name: str,
@@ -448,15 +531,27 @@ class EvaluationPipeline:
     ) -> EvaluationResult:
         """Run a single evaluator with error handling."""
         self.logger.debug(f"Running evaluator: {name}")
-        
-        start_time = time.time()
-        eval_result = await evaluator.evaluate(test_case, actual_output)
-        execution_time = time.time() - start_time
-        
-        # Update execution time if not set
+
+        cache_key = self._generate_cache_key(name, test_case, actual_output)
+        if self.cache:
+            cached = self.cache.get(cache_key)
+            if cached:
+                self.cache_hits += 1
+                self.logger.debug(f"Cache hit for {name}")
+                return cached
+            self.cache_misses += 1
+
+        with monitor(name, self.performance_monitor):
+            start_time = time.time()
+            eval_result = await evaluator.evaluate(test_case, actual_output)
+            execution_time = time.time() - start_time
+
         if eval_result.execution_time == 0:
             eval_result.execution_time = execution_time
-        
+
+        if self.cache:
+            self.cache.set(cache_key, eval_result)
+
         self.logger.debug(f"Evaluator {name} completed in {execution_time:.2f}s")
         return eval_result
     

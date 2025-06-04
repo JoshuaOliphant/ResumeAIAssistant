@@ -618,7 +618,7 @@ class TestPipelineResult:
         )
         
         result_dict = result.to_dict()
-        
+
         assert result_dict["pipeline_id"] == "test_pipeline"
         assert result_dict["test_case_id"] == "test_001"
         assert result_dict["mode"] == "quick"
@@ -626,3 +626,316 @@ class TestPipelineResult:
         assert result_dict["aggregated_scores"]["confidence_score"] == 0.9
         assert "timing" in result_dict
         assert "resource_usage" in result_dict
+
+
+@pytest.fixture
+def sample_test_case():
+    return TestCase(
+        id="test_global",
+        name="Test Case",
+        resume_content="Software Engineer with Python experience",
+        job_description="Python developer position",
+    )
+
+
+@pytest.fixture
+def sample_actual_output():
+    return {
+        "resume_content": "Software Engineer with Python experience",
+        "job_description": "Python developer position",
+    }
+
+
+@pytest.fixture
+def mock_evaluator_result():
+    return EvaluationResult(
+        test_case_id="test_global",
+        evaluator_name="test_evaluator",
+        overall_score=0.8,
+        passed=True,
+        detailed_scores={"precision": 0.9, "recall": 0.7},
+        execution_time=1.5,
+        tokens_used=100,
+        api_calls_made=1,
+        notes="Test evaluation completed successfully",
+    )
+
+
+class TestPipelineCaching:
+    """Tests for pipeline caching functionality."""
+
+    @pytest.mark.asyncio
+    async def test_caching_enabled(self, sample_test_case, sample_actual_output, mock_evaluator_result):
+        config = PipelineConfiguration(mode=PipelineMode.QUICK, use_cache=True)
+        pipeline = EvaluationPipeline(config)
+
+        from contextlib import ExitStack
+
+        with ExitStack() as stack:
+            for ev in pipeline.evaluators.values():
+                stack.enter_context(patch.object(ev, 'evaluate', return_value=mock_evaluator_result))
+
+            result1 = await pipeline.evaluate(sample_test_case, sample_actual_output)
+            result2 = await pipeline.evaluate(sample_test_case, sample_actual_output)
+
+            for ev in pipeline.evaluators.values():
+                assert ev.evaluate.call_count == 1
+
+            assert result2.cache_hits >= len(pipeline.evaluators)
+            assert result1.overall_score == result2.overall_score
+
+    @pytest.mark.asyncio
+    async def test_cache_with_custom_size_limit(self, sample_test_case, sample_actual_output, mock_evaluator_result):
+        """Test cache with custom size limit."""
+        config = PipelineConfiguration(
+            mode=PipelineMode.QUICK, 
+            use_cache=True, 
+            cache_max_size=2  # Small size for testing
+        )
+        pipeline = EvaluationPipeline(config)
+        
+        # Verify cache was initialized with custom size
+        assert pipeline.cache.max_size == 2
+        
+        # Add more items than cache size to test eviction
+        pipeline.cache.set("key1", "value1")
+        pipeline.cache.set("key2", "value2")
+        pipeline.cache.set("key3", "value3")  # Should evict key1
+        
+        # key1 should be evicted, key2 and key3 should remain
+        assert pipeline.cache.get("key1") is None
+        assert pipeline.cache.get("key2") == "value2"
+        assert pipeline.cache.get("key3") == "value3"
+
+    @pytest.mark.asyncio
+    async def test_cache_key_generation_consistency(self, sample_test_case, sample_actual_output):
+        """Test that cache key generation is consistent."""
+        config = PipelineConfiguration(mode=PipelineMode.QUICK, use_cache=True)
+        pipeline = EvaluationPipeline(config)
+        
+        # Generate cache keys for same inputs multiple times
+        key1 = pipeline._generate_cache_key("evaluator1", sample_test_case, sample_actual_output)
+        key2 = pipeline._generate_cache_key("evaluator1", sample_test_case, sample_actual_output)
+        
+        # Keys should be identical
+        assert key1 == key2
+        
+        # Different evaluator name should generate different key
+        key3 = pipeline._generate_cache_key("evaluator2", sample_test_case, sample_actual_output)
+        assert key1 != key3
+
+    @pytest.mark.asyncio 
+    async def test_cache_error_handling(self, sample_test_case):
+        """Test cache error handling with problematic data."""
+        config = PipelineConfiguration(mode=PipelineMode.QUICK, use_cache=True)
+        pipeline = EvaluationPipeline(config)
+        
+        # Test cache key generation with non-serializable data
+        class NonSerializable:
+            def __str__(self):
+                raise Exception("Cannot serialize")
+        
+        problematic_output = {"data": NonSerializable()}
+        
+        # Should not crash, should fallback to basic hash
+        cache_key = pipeline._generate_cache_key("evaluator1", sample_test_case, problematic_output)
+        assert isinstance(cache_key, str)
+        assert len(cache_key) > 0
+
+    def test_cache_thread_safety(self):
+        """Test cache thread safety."""
+        import threading
+        import time
+        
+        config = PipelineConfiguration(mode=PipelineMode.QUICK, use_cache=True)
+        pipeline = EvaluationPipeline(config)
+        cache = pipeline.cache
+        
+        results = []
+        errors = []
+        
+        def cache_worker(worker_id):
+            try:
+                for i in range(100):
+                    key = f"worker_{worker_id}_key_{i}"
+                    value = f"worker_{worker_id}_value_{i}"
+                    cache.set(key, value)
+                    retrieved = cache.get(key)
+                    if retrieved != value:
+                        errors.append(f"Worker {worker_id}: Expected {value}, got {retrieved}")
+                    results.append((worker_id, i, retrieved == value))
+            except Exception as e:
+                errors.append(f"Worker {worker_id}: Exception {e}")
+        
+        # Start multiple threads accessing cache concurrently
+        threads = []
+        for i in range(5):
+            thread = threading.Thread(target=cache_worker, args=(i,))
+            threads.append(thread)
+            thread.start()
+        
+        # Wait for all threads to complete
+        for thread in threads:
+            thread.join()
+        
+        # Check that there were no errors
+        assert len(errors) == 0, f"Thread safety errors: {errors}"
+        assert len(results) == 500  # 5 workers * 100 operations each
+
+    def test_cache_stats_tracking(self):
+        """Test cache statistics tracking."""
+        config = PipelineConfiguration(mode=PipelineMode.QUICK, use_cache=True)
+        pipeline = EvaluationPipeline(config)
+        cache = pipeline.cache
+        
+        # Initial stats
+        initial_stats = cache.stats()
+        assert initial_stats["hits"] == 0
+        assert initial_stats["misses"] == 0
+        assert initial_stats["size"] == 0
+        
+        # Add some data and test hits/misses
+        cache.set("key1", "value1")
+        
+        # Should be a miss first time
+        result1 = cache.get("key1")
+        assert result1 == "value1"
+        
+        # Should be a hit second time
+        result2 = cache.get("key1")
+        assert result2 == "value1"
+        
+        # Test miss
+        result3 = cache.get("nonexistent")
+        assert result3 is None
+        
+        # Check final stats
+        final_stats = cache.stats()
+        assert final_stats["hits"] == 2
+        assert final_stats["misses"] == 1
+        assert final_stats["size"] == 1
+        assert final_stats["max_size"] == 1000  # Default max size
+
+
+class TestPipelineConfigurationValidation:
+    """Tests for pipeline configuration validation."""
+
+    def test_valid_configuration(self):
+        """Test that valid configuration passes validation."""
+        config = PipelineConfiguration(
+            max_concurrent_evaluators=5,
+            cache_ttl=1800.0,
+            cache_max_size=500,
+            weight_accuracy=0.4,
+            weight_quality=0.3,
+            weight_relevance=0.3,
+            confidence_threshold=0.8,
+            max_retries=3,
+            retry_delay=2.0
+        )
+        # Should not raise any exceptions
+        assert config.max_concurrent_evaluators == 5
+
+    def test_invalid_concurrent_evaluators(self):
+        """Test validation of max_concurrent_evaluators."""
+        with pytest.raises(ValueError, match="max_concurrent_evaluators must be positive"):
+            PipelineConfiguration(max_concurrent_evaluators=0)
+        
+        with pytest.raises(ValueError, match="max_concurrent_evaluators must be positive"):
+            PipelineConfiguration(max_concurrent_evaluators=-1)
+
+    def test_invalid_cache_settings(self):
+        """Test validation of cache settings."""
+        with pytest.raises(ValueError, match="cache_ttl must be non-negative"):
+            PipelineConfiguration(cache_ttl=-1.0)
+        
+        with pytest.raises(ValueError, match="cache_max_size must be positive"):
+            PipelineConfiguration(cache_max_size=0)
+
+    def test_invalid_weights(self):
+        """Test validation of weight settings."""
+        with pytest.raises(ValueError, match="weight_accuracy must be between 0 and 1"):
+            PipelineConfiguration(weight_accuracy=-0.1)
+        
+        with pytest.raises(ValueError, match="weight_accuracy must be between 0 and 1"):
+            PipelineConfiguration(weight_accuracy=1.1)
+        
+        with pytest.raises(ValueError, match="weight_quality must be between 0 and 1"):
+            PipelineConfiguration(weight_quality=2.0)
+        
+        with pytest.raises(ValueError, match="weight_relevance must be between 0 and 1"):
+            PipelineConfiguration(weight_relevance=-0.5)
+
+    def test_weights_sum_validation(self):
+        """Test that weights must sum to approximately 1.0."""
+        # Weights sum to 0.5 (too low)
+        with pytest.raises(ValueError, match="Weights must sum to 1.0"):
+            PipelineConfiguration(
+                weight_accuracy=0.1,
+                weight_quality=0.2,
+                weight_relevance=0.2
+            )
+        
+        # Weights sum to 1.5 (too high) 
+        with pytest.raises(ValueError, match="Weights must sum to 1.0"):
+            PipelineConfiguration(
+                weight_accuracy=0.5,
+                weight_quality=0.5,
+                weight_relevance=0.5
+            )
+
+    def test_confidence_threshold_validation(self):
+        """Test validation of confidence threshold."""
+        with pytest.raises(ValueError, match="confidence_threshold must be between 0 and 1"):
+            PipelineConfiguration(confidence_threshold=-0.1)
+        
+        with pytest.raises(ValueError, match="confidence_threshold must be between 0 and 1"):
+            PipelineConfiguration(confidence_threshold=1.1)
+
+    def test_retry_settings_validation(self):
+        """Test validation of retry settings."""
+        with pytest.raises(ValueError, match="max_retries must be non-negative"):
+            PipelineConfiguration(max_retries=-1)
+        
+        with pytest.raises(ValueError, match="retry_delay must be non-negative"):
+            PipelineConfiguration(retry_delay=-1.0)
+
+    def test_weights_sum_tolerance(self):
+        """Test that small floating point errors in weight sums are tolerated."""
+        # This should pass (sum is 1.001, within tolerance)
+        config = PipelineConfiguration(
+            weight_accuracy=0.334,
+            weight_quality=0.333,
+            weight_relevance=0.334  # Sum: 1.001
+        )
+        assert config.weight_accuracy == 0.334
+
+
+class TestPerformanceMonitoringIntegration:
+    """Tests for performance monitoring integration."""
+
+    @pytest.mark.asyncio
+    async def test_performance_monitoring_enabled(self, sample_test_case, sample_actual_output, mock_evaluator_result):
+        """Test that performance monitoring works correctly."""
+        config = PipelineConfiguration(mode=PipelineMode.QUICK)
+        pipeline = EvaluationPipeline(config)
+        
+        with patch.object(pipeline.evaluators['match_score'], 'evaluate', return_value=mock_evaluator_result):
+            result = await pipeline.evaluate(sample_test_case, sample_actual_output)
+            
+            # Check that performance summary is present
+            assert "performance_summary" in result.metadata
+            perf_summary = result.metadata["performance_summary"]
+            
+            # Verify performance metrics structure
+            assert "count" in perf_summary
+            assert "average_time" in perf_summary
+            assert "average_memory" in perf_summary
+            assert "total_time" in perf_summary
+            assert "max_time" in perf_summary
+            assert "min_time" in perf_summary
+            assert "errors" in perf_summary
+            
+            # Performance count should match number of evaluators
+            assert perf_summary["count"] >= 1
+            assert perf_summary["errors"] == 0
