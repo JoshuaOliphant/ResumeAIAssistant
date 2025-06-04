@@ -20,7 +20,6 @@ from datetime import datetime
 from evaluation.pipeline import EvaluationPipeline, PipelineConfiguration, PipelineMode
 from evaluation.test_data.models import TestCase
 from evaluation.suites.quick_suite import QuickEvaluationSuite
-from evaluation.suites.comprehensive_suite import ComprehensiveEvaluationSuite
 from app.services.evaluation_service import EvaluationService, EvaluationRequest
 
 
@@ -277,66 +276,6 @@ class TestQuickSuiteIntegration:
         assert "evaluators" in config_summary
         assert "best_for" in config_summary
 
-
-class TestComprehensiveSuiteIntegration:
-    """Test ComprehensiveEvaluationSuite integration."""
-    
-    @pytest.fixture
-    def comprehensive_suite(self, tmp_path):
-        """Create ComprehensiveEvaluationSuite instance."""
-        return ComprehensiveEvaluationSuite(output_directory=tmp_path)
-    
-    @pytest.mark.asyncio
-    async def test_comprehensive_suite_evaluation(self, comprehensive_suite):
-        """Test comprehensive suite evaluation."""
-        resume = """
-        Senior Software Engineer with 8 years experience.
-        Expert in Python, JavaScript, and cloud technologies.
-        Led multiple teams and delivered scalable solutions.
-        """
-        
-        job = """
-        Senior Software Engineer position requiring:
-        - 5+ years Python experience
-        - Leadership experience
-        - Cloud platform knowledge
-        """
-        
-        result = await comprehensive_suite.evaluate_comprehensive(resume, job)
-        
-        assert "evaluation_metadata" in result
-        assert "overall_assessment" in result
-        assert "evaluator_breakdown" in result
-        assert "analysis_summary" in result
-        assert "quality_assurance" in result
-        assert "resource_utilization" in result
-        
-        # Check metadata
-        metadata = result["evaluation_metadata"]
-        assert "evaluation_id" in metadata
-        assert "evaluation_type" == "comprehensive"
-        assert "duration_seconds" in metadata
-        
-        # Check overall assessment
-        assessment = result["overall_assessment"]
-        assert 0.0 <= assessment["overall_score"] <= 1.0
-        assert 0.0 <= assessment["confidence_score"] <= 1.0
-        assert "quality_grade" in assessment
-        
-        # Check evaluator breakdown
-        breakdown = result["evaluator_breakdown"]
-        assert isinstance(breakdown, dict)
-        assert len(breakdown) > 0
-    
-    def test_comprehensive_suite_capabilities(self, comprehensive_suite):
-        """Test comprehensive suite capabilities info."""
-        capabilities = comprehensive_suite.get_suite_capabilities()
-        
-        assert "evaluators" in capabilities
-        assert len(capabilities["evaluators"]) == 5
-        assert "analysis_depth" in capabilities
-        assert capabilities["analysis_depth"] == "Comprehensive"
-        assert "best_for" in capabilities
 
 
 class TestEvaluationServiceIntegration:

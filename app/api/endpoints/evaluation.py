@@ -22,7 +22,6 @@ from app.services.evaluation_service import (
 )
 from evaluation.pipeline import PipelineMode
 from evaluation.suites.quick_suite import QuickEvaluationSuite
-from evaluation.suites.comprehensive_suite import ComprehensiveEvaluationSuite
 from app.core.logging import get_logger
 
 logger = get_logger("EvaluationAPI")
@@ -33,7 +32,6 @@ router = APIRouter(prefix="/evaluation", tags=["evaluation"])
 # Initialize services
 evaluation_service = EvaluationService()
 quick_suite = QuickEvaluationSuite()
-comprehensive_suite = ComprehensiveEvaluationSuite()
 
 
 def get_evaluation_service() -> EvaluationService:
@@ -218,16 +216,35 @@ async def comprehensive_evaluation(
     extensive analysis, quality assurance, and detailed reporting.
     """
     try:
-        logger.info("Starting comprehensive evaluation")
-        
-        result = await comprehensive_suite.evaluate_comprehensive(
+        logger.info("Starting comprehensive evaluation via pipeline")
+
+        config = PipelineConfiguration(mode=PipelineMode.COMPREHENSIVE)
+        pipeline = EvaluationPipeline(config)
+
+        import time
+        test_case_id = test_case_id or f"api_comprehensive_{int(time.time())}"
+
+        test_case = TestCase(
+            id=test_case_id,
+            name=f"Comprehensive Evaluation {test_case_id}",
             resume_content=resume_content,
             job_description=job_description,
-            test_case_id=test_case_id,
-            include_detailed_analysis=include_detailed_analysis
         )
-        
-        return result
+
+        actual_output = {
+            "resume_content": resume_content,
+            "job_description": job_description,
+            "optimization_applied": False,
+        }
+
+        result = await pipeline.evaluate(test_case, actual_output, test_case_id)
+
+        report = result.to_dict()
+        if not include_detailed_analysis:
+            report.pop("evaluator_results", None)
+            report.pop("failed_evaluators", None)
+
+        return report
         
     except Exception as e:
         logger.error(f"Comprehensive evaluation failed: {str(e)}")
@@ -251,16 +268,32 @@ async def evaluate_optimization_impact(
     before and after versions with comprehensive impact metrics.
     """
     try:
-        logger.info("Starting optimization impact evaluation")
-        
-        result = await comprehensive_suite.evaluate_optimization_impact(
-            original_resume=original_resume,
-            optimized_resume=optimized_resume,
+        logger.info("Starting optimization impact evaluation via pipeline")
+
+        config = PipelineConfiguration(mode=PipelineMode.COMPREHENSIVE)
+        pipeline = EvaluationPipeline(config)
+
+        import time
+        evaluation_id = f"optimization_impact_{int(time.time())}"
+
+        test_case = TestCase(
+            id=evaluation_id,
+            name=f"Optimization Impact {evaluation_id}",
+            resume_content=original_resume,
             job_description=job_description,
-            optimization_metadata=optimization_metadata
         )
-        
-        return result
+
+        actual_output = {
+            "resume_before": original_resume,
+            "resume_after": optimized_resume,
+            "job_description": job_description,
+            "optimization_applied": True,
+            "optimization_metadata": optimization_metadata or {},
+        }
+
+        result = await pipeline.evaluate(test_case, actual_output, evaluation_id)
+
+        return result.to_dict()
         
     except Exception as e:
         logger.error(f"Optimization impact evaluation failed: {str(e)}")
@@ -312,10 +345,10 @@ async def get_available_evaluators():
     descriptions, capabilities, and typical use cases.
     """
     try:
-        # Get evaluator information from different sources
-        pipeline_evaluators = evaluation_service.active_evaluations  # Example - would get from pipeline
+        # Get evaluator information from pipeline and quick suite
         quick_evaluators = quick_suite.get_evaluator_info()
-        comprehensive_capabilities = comprehensive_suite.get_suite_capabilities()
+        info_pipeline = EvaluationPipeline(PipelineConfiguration(mode=PipelineMode.COMPREHENSIVE))
+        comprehensive_evaluators = info_pipeline.get_available_evaluators()
         
         return {
             "available_evaluators": {
@@ -332,7 +365,7 @@ async def get_available_evaluators():
                     "typical_duration": "5-15 seconds"
                 },
                 "comprehensive": {
-                    "evaluators": comprehensive_capabilities["evaluators"],
+                    "evaluators": comprehensive_evaluators,
                     "description": "Thorough evaluation for production assessment",
                     "typical_duration": "30-120 seconds"
                 },
@@ -349,7 +382,17 @@ async def get_available_evaluators():
             },
             "suite_capabilities": {
                 "quick_suite": quick_suite.get_configuration_summary(),
-                "comprehensive_suite": comprehensive_capabilities
+                "comprehensive_pipeline": {
+                    "evaluators": comprehensive_evaluators,
+                    "analysis_depth": "Comprehensive",
+                    "typical_duration": "30-120 seconds",
+                    "best_for": [
+                        "Production evaluation",
+                        "Quality assurance",
+                        "Detailed analysis",
+                        "Optimization impact assessment",
+                    ],
+                },
             }
         }
         
@@ -426,7 +469,6 @@ async def health_check():
             "components": {
                 "evaluation_service": "operational",
                 "quick_suite": "operational",
-                "comprehensive_suite": "operational",
                 "evaluators": "operational"
             },
             "version": "1.0.0"
